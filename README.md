@@ -35,3 +35,16 @@ The help is also included in every release.
 ## Attribution
 
 I use a number of the Silk Icons by Mark James at famfamfam.com.
+
+## Running From Source
+See: https://hydrusnetwork.github.io/hydrus/running_from_source.html
+
+```bash
+# make sure all 3 show expected output
+python --version
+python -m pip --version
+python -m venv --help
+```
+```bash
+python setup_venv.py 
+```
