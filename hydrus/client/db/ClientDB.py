@@ -62,6 +62,7 @@ from hydrus.client.db import ClientDBMappingsCountsUpdate
 from hydrus.client.db import ClientDBMappingsStorage
 from hydrus.client.db import ClientDBMaster
 from hydrus.client.db import ClientDBMediaResults
+from hydrus.client.db import ClientDBPlaylists
 from hydrus.client.db import ClientDBNotesMap
 from hydrus.client.db import ClientDBRatings
 from hydrus.client.db import ClientDBRepositories
@@ -3937,6 +3938,9 @@ class DB( HydrusDB.HydrusDB ):
                 'file_counters' : self.modules_files_counters.GetCounts,
                 'file_virtual_paths' : self.modules_files_virtual_paths.GetPaths,
                 'all_file_virtual_paths' : self.modules_files_virtual_paths.GetAllPaths,
+                'playlist_items' : self.modules_playlists.GetPlaylistItems,
+                'playlists' : self.modules_playlists.GetPlaylists,
+                'playlists_containing_file' : self.modules_playlists.GetPlaylistsContainingFile,
                 'file_duplicate_info' : self.modules_files_duplicates_storage.GetFileDuplicateInfo,
                 'file_hashes' : self.modules_hashes.GetFileHashes,
                 'file_info_managers' : self.modules_media_results.GetFileInfoManagersFromHashes,
@@ -4080,6 +4084,9 @@ class DB( HydrusDB.HydrusDB ):
                 'file_counter_increment' : self.modules_files_counters.IncrementCount,
                 'file_counter_set' : self.modules_files_counters.SetCount,
                 'file_virtual_paths' : self.modules_files_virtual_paths.SetPaths,
+                'playlist_add_item' : self.modules_playlists.AddPlaylistItem,
+                'playlist_remove_file' : self.modules_playlists.RemoveFileFromPlaylist,
+                'playlists' : self.modules_playlists.SetPlaylists,
                 'file_maintenance_add_jobs' : self.modules_files_maintenance_queue.AddJobs,
                 'file_maintenance_add_jobs_hashes' : self.modules_files_maintenance_queue.AddJobsHashes,
                 'file_maintenance_cancel_jobs' : self.modules_files_maintenance_queue.CancelJobs,
@@ -4263,6 +4270,10 @@ class DB( HydrusDB.HydrusDB ):
         self.modules_files_virtual_paths = ClientDBFilesVirtualPaths.ClientDBFilesVirtualPaths( self._c, self.modules_hashes_local_cache )
         
         self._modules.append( self.modules_files_virtual_paths )
+        
+        self.modules_playlists = ClientDBPlaylists.ClientDBPlaylists( self._c, self.modules_hashes_local_cache )
+        
+        self._modules.append( self.modules_playlists )
         
         #
         

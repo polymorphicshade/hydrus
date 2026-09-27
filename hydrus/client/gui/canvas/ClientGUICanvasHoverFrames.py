@@ -1741,6 +1741,9 @@ class CanvasHoverFrameTopNavigableList( CanvasHoverFrameTopNavigable ):
         self._slideshow_button.setToolTip( 'slideshow' )
         self._slideshow_button.setFocusPolicy( QC.Qt.FocusPolicy.TabFocus )
         
+        # a playlist moves itself along, so it has no slideshow
+        self._slideshow_button.setVisible( self._my_canvas.SupportsSlideshow() )
+        
         QP.AddToLayout( self._top_left_hbox, self._slideshow_button, CC.FLAGS_CENTER_PERPENDICULAR )
         
     

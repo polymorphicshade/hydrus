@@ -28,6 +28,7 @@ from hydrus.client.importing import ClientImportFiles
 from hydrus.client.importing.options import ImportOptionsConstants as IOC
 from hydrus.client.importing.options import ImportOptionsContainer
 from hydrus.client.importing.options import ImportOptionsManager
+from hydrus.client.media import ClientMediaPlaylists
 from hydrus.client.metadata import ClientContentUpdates
 from hydrus.client.metadata import ClientTags
 from hydrus.client.metadata import ClientVirtualPaths
@@ -512,6 +513,129 @@ class TestClientDB( unittest.TestCase ):
         self._write( 'file_virtual_paths', { hash_a : [] } )
         
         self.assertEqual( self._read( 'file_virtual_paths', ( hash_a, hash_b ) ), { hash_a : [], hash_b : [ 'collections/movies/action' ] } )
+        
+    
+    def test_playlists( self ):
+        
+        hash_a = os.urandom( 32 )
+        hash_b = os.urandom( 32 )
+        
+        self.assertEqual( self._read( 'playlists' ), [] )
+        
+        # making, renaming, deleting
+        
+        self._write( 'playlists', [ ( None, 'Road  Trip ' ), ( None, 'chill' ) ] )
+        
+        playlists = self._read( 'playlists' )
+        
+        self.assertEqual( [ ( name, num_items ) for ( playlist_id, name, num_items ) in playlists ], [ ( 'chill', 0 ), ( 'Road Trip', 0 ) ] )
+        
+        ( ( chill_id, chill_name, chill_count ), ( road_trip_id, road_trip_name, road_trip_count ) ) = playlists
+        
+        # swapping names is fine
+        self._write( 'playlists', [ ( chill_id, 'Road Trip' ), ( road_trip_id, 'chill' ) ] )
+        
+        self.assertEqual( sorted( self._read( 'playlists' ) ), sorted( [ ( chill_id, 'Road Trip', 0 ), ( road_trip_id, 'chill', 0 ) ] ) )
+        
+        self._write( 'playlists', [ ( chill_id, 'chill' ), ( road_trip_id, 'road trip' ) ] )
+        
+        # items
+        
+        self._write( 'playlist_add_item', chill_id, hash_a, None, None )
+        self._write( 'playlist_add_item', chill_id, hash_b, 1000, 5000 )
+        self._write( 'playlist_add_item', chill_id, hash_a, 20000, 25000 )
+        self._write( 'playlist_add_item', road_trip_id, hash_a, None, None )
+        
+        self.assertEqual( self._read( 'playlist_items', chill_id ), [ ( hash_a, None, None ), ( hash_b, 1000, 5000 ), ( hash_a, 20000, 25000 ) ] )
+        self.assertEqual( self._read( 'playlist_items', road_trip_id ), [ ( hash_a, None, None ) ] )
+        
+        self.assertEqual( self._read( 'playlists' ), [ ( chill_id, 'chill', 3 ), ( road_trip_id, 'road trip', 1 ) ] )
+        
+        self.assertEqual( self._read( 'playlists_containing_file', hash_a ), [ ( chill_id, 'chill', 2 ), ( road_trip_id, 'road trip', 1 ) ] )
+        self.assertEqual( self._read( 'playlists_containing_file', hash_b ), [ ( chill_id, 'chill', 1 ) ] )
+        
+        # removing a file takes all its spans
+        
+        self._write( 'playlist_remove_file', chill_id, hash_a )
+        
+        self.assertEqual( self._read( 'playlist_items', chill_id ), [ ( hash_b, 1000, 5000 ) ] )
+        self.assertEqual( self._read( 'playlist_items', road_trip_id ), [ ( hash_a, None, None ) ] )
+        
+        # new items still go on the end
+        
+        self._write( 'playlist_add_item', chill_id, hash_a, None, None )
+        
+        self.assertEqual( self._read( 'playlist_items', chill_id ), [ ( hash_b, 1000, 5000 ), ( hash_a, None, None ) ] )
+        
+        # deleting a playlist takes its items
+        
+        self._write( 'playlists', [ ( road_trip_id, 'road trip' ) ] )
+        
+        self.assertEqual( self._read( 'playlists' ), [ ( road_trip_id, 'road trip', 1 ) ] )
+        self.assertEqual( self._read( 'playlist_items', chill_id ), [] )
+        self.assertEqual( self._read( 'playlists_containing_file', hash_b ), [] )
+        
+        self._write( 'playlists', [] )
+        
+        self.assertEqual( self._read( 'playlists' ), [] )
+        
+    
+    def test_playlist_helpers( self ):
+        
+        playlists = [ ( 1, 'Road Trip', 3 ), ( 2, 'chill', 0 ), ( 3, 'TRIPPY', 1 ) ]
+        
+        self.assertEqual( ClientMediaPlaylists.FilterPlaylistsByName( playlists, '' ), playlists )
+        self.assertEqual( ClientMediaPlaylists.FilterPlaylistsByName( playlists, 'trip' ), [ ( 1, 'Road Trip', 3 ), ( 3, 'TRIPPY', 1 ) ] )
+        self.assertEqual( ClientMediaPlaylists.FilterPlaylistsByName( playlists, ' CHILL ' ), [ ( 2, 'chill', 0 ) ] )
+        self.assertEqual( ClientMediaPlaylists.FilterPlaylistsByName( playlists, 'nope' ), [] )
+        
+        self.assertEqual( ClientMediaPlaylists.GetNextPlaylistIndex( 0, 3, 1, False ), 1 )
+        self.assertEqual( ClientMediaPlaylists.GetNextPlaylistIndex( 2, 3, 1, False ), None )
+        self.assertEqual( ClientMediaPlaylists.GetNextPlaylistIndex( 2, 3, 1, True ), 0 )
+        self.assertEqual( ClientMediaPlaylists.GetNextPlaylistIndex( 0, 3, -1, False ), None )
+        self.assertEqual( ClientMediaPlaylists.GetNextPlaylistIndex( 0, 3, -1, True ), 2 )
+        self.assertEqual( ClientMediaPlaylists.GetNextPlaylistIndex( 0, 1, 1, True ), 0 )
+        self.assertEqual( ClientMediaPlaylists.GetNextPlaylistIndex( 0, 0, 1, True ), None )
+        
+        self.assertEqual( ClientMediaPlaylists.GetPlaylistItemSpanFromABLoop( None, None ), ( None, None ) )
+        self.assertEqual( ClientMediaPlaylists.GetPlaylistItemSpanFromABLoop( 1000, None ), ( None, None ) )
+        self.assertEqual( ClientMediaPlaylists.GetPlaylistItemSpanFromABLoop( None, 5000 ), ( 0, 5000 ) )
+        self.assertEqual( ClientMediaPlaylists.GetPlaylistItemSpanFromABLoop( 1000, 5000 ), ( 1000, 5000 ) )
+        self.assertEqual( ClientMediaPlaylists.GetPlaylistItemSpanFromABLoop( 5000, 1000 ), ( None, None ) )
+        
+        self.assertEqual( ClientMediaPlaylists.NormalisePlaylistName( '  road   trip ' ), 'road trip' )
+        
+        # a fresh file sitting at the start has not reached a span that starts later
+        self.assertFalse( ClientMediaPlaylists.PlaylistSeekHasLanded( 0, 1000 ) )
+        self.assertTrue( ClientMediaPlaylists.PlaylistSeekHasLanded( 0, 0 ) )
+        self.assertTrue( ClientMediaPlaylists.PlaylistSeekHasLanded( 990, 1000 ) )
+        self.assertTrue( ClientMediaPlaylists.PlaylistSeekHasLanded( 1600, 1000 ) )
+        self.assertFalse( ClientMediaPlaylists.PlaylistSeekHasLanded( 59000, 0 ) )
+        
+        # when an item is done: ( end_ms, duration_ms, current_timestamp_ms, last_timestamp_ms, had_played_once_at_start, has_played_once_through )
+        
+        for ( args, result ) in [
+            # a span, part way through, then over its end
+            ( ( 5000, 60000, 3000, 2990, False, False ), False ),
+            ( ( 5000, 60000, 5000, 4990, False, False ), True ),
+            # a whole file, playing, then played through
+            ( ( None, 60000, 30000, 29990, False, False ), False ),
+            ( ( None, 60000, 10, 59990, False, True ), True ),
+            # the same file again in a row: the played-through flag was already up, so we watch for the loop instead
+            ( ( None, 60000, 30000, 29990, True, True ), False ),
+            ( ( None, 60000, 10, 59900, True, True ), True ),
+            # a span running to the end of the file, looping round
+            ( ( 60000, 60000, 10, 59950, True, True ), True ),
+            # a user seeking back from the middle is not the end
+            ( ( None, 60000, 1000, 30000, True, True ), False ),
+            # no duration to go on
+            ( ( None, None, 10, 59900, True, True ), False ),
+            # no last timestamp yet
+            ( ( None, 60000, 10, None, True, True ), False )
+        ]:
+            
+            self.assertEqual( ClientMediaPlaylists.PlaylistItemIsDone( *args ), result, args )
+            
         
     
     def test_file_query_ids( self ):

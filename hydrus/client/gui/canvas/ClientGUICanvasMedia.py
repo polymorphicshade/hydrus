@@ -2859,6 +2859,12 @@ class MediaContainer( QW.QWidget ):
         return self._GetCurrentPlaybackTimestampMS()
         
     
+    def GetMedia( self ) -> ClientMediaSingle.MediaSingle | None:
+        
+        # this can be behind the canvas's media for a moment, while a switch waits for the old media to be ready to go
+        return self._media
+        
+    
     def GetPlaybackSkips( self ) -> list[ tuple[ int, int ] ]:
         
         return list( self._playback_skips )
@@ -3166,6 +3172,24 @@ class MediaContainer( QW.QWidget ):
                 
                 self._media_window.SeekDelta( direction, duration_ms )
                 
+            
+        
+    
+    def SeekTo( self, timestamp_ms: int ):
+        
+        if self._media is None:
+            
+            return
+            
+        
+        if isinstance( self._media_window, Animation ):
+            
+            # this goes to the frame and keeps playing, which is just what we want here too
+            self._media_window.SeekPastPlaybackSkip( timestamp_ms )
+            
+        elif isinstance( self._media_window, ( ClientGUIMPV.MPVWidget, ClientGUIQtMediaPlayer.QtMediaPlayer ) ):
+            
+            self._media_window.Seek( timestamp_ms )
             
         
     

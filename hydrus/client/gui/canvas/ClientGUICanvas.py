@@ -1,5 +1,6 @@
 import collections.abc
 import os
+import random
 import typing
 
 from qtpy import QtCore as QC
@@ -29,6 +30,7 @@ from hydrus.client.gui import ClientGUIDialogsQuick
 from hydrus.client.gui import ClientGUIExceptionHandling
 from hydrus.client.gui import ClientGUIFunctions
 from hydrus.client.gui import ClientGUIMenus
+from hydrus.client.gui import ClientGUIPlaylists
 from hydrus.client.gui import ClientGUIRatings
 from hydrus.client.gui import ClientGUIShortcuts
 from hydrus.client.gui import ClientGUITopLevelWindowsPanels
@@ -48,6 +50,7 @@ from hydrus.client.gui.panels import ClientGUIScrolledPanelsEdit
 from hydrus.client.gui.widgets import ClientGUIPainterShapes
 from hydrus.client.media import ClientMedia
 from hydrus.client.media import ClientMediaList
+from hydrus.client.media import ClientMediaPlaylists
 from hydrus.client.media import ClientMediaResult
 from hydrus.client.media import ClientMediaResultPrettyInfo
 from hydrus.client.media import ClientMediaSingle
@@ -4497,6 +4500,54 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
         self.userChangedMedia.connect( self.NotifyUserChangedMedia )
         
     
+    def _AddCurrentMediaToPlaylist( self ):
+        
+        if self._current_media is None:
+            
+            return
+            
+        
+        playlists = CG.client_controller.Read( 'playlists' )
+        
+        if len( playlists ) == 0:
+            
+            ClientGUIDialogsMessage.ShowInformation( self, 'You do not have any playlists yet! Make one under playlists->editor in the main window.' )
+            
+            return
+            
+        
+        ( start_ms, end_ms ) = self._GetPlaylistItemSpan()
+        
+        if start_ms is None:
+            
+            title = 'add to playlist'
+            
+        else:
+            
+            title = f'add {ClientGUICanvasMedia.ConvertPlaybackTimestampToString( start_ms )} - {ClientGUICanvasMedia.ConvertPlaybackTimestampToString( end_ms )} to playlist'
+            
+        
+        try:
+            
+            playlist_id = ClientGUIPlaylists.SelectPlaylist( self, title, playlists )
+            
+        except HydrusExceptions.CancelledException:
+            
+            return
+            
+        
+        CG.client_controller.Write( 'playlist_add_item', playlist_id, self._current_media.GetHash(), start_ms, end_ms )
+        
+    
+    def _AppendPlaylistMenu( self, menu: QW.QMenu ):
+        
+        playlist_menu = ClientGUIMenus.GenerateMenu( menu )
+        
+        self._PopulatePlaylistMenu( playlist_menu )
+        
+        ClientGUIMenus.AppendMenu( menu, playlist_menu, 'playlist' )
+        
+    
     def _CalculateAnySpecialSlideshowPeriodForCurrentMedia( self ):
         
         if self._media_container.CurrentlyPresentingMediaWithDuration():
@@ -4663,6 +4714,19 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
             
         
     
+    def _GetPlaylistItemSpan( self ) -> tuple[ int | None, int | None ]:
+        
+        # when A-B repeat is on, the playlist gets just that part of the file
+        if self._current_media is None or not ClientGUICanvasMedia.MediaHasPlayback( self._current_media ):
+            
+            return ( None, None )
+            
+        
+        ( a_ms, b_ms ) = self._media_container.GetABLoop()
+        
+        return ClientMediaPlaylists.GetPlaylistItemSpanFromABLoop( a_ms, b_ms )
+        
+    
     def _PausePlaySlideshow( self ):
         
         if self._slideshow_is_running:
@@ -4693,6 +4757,23 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
             
         
     
+    def _PopulatePlaylistMenu( self, playlist_menu: QW.QMenu ):
+        
+        ( start_ms, end_ms ) = self._GetPlaylistItemSpan()
+        
+        if start_ms is None:
+            
+            add_label = 'add'
+            
+        else:
+            
+            add_label = f'add {ClientGUICanvasMedia.ConvertPlaybackTimestampToString( start_ms )} - {ClientGUICanvasMedia.ConvertPlaybackTimestampToString( end_ms )}'
+            
+        
+        ClientGUIMenus.AppendMenuItem( playlist_menu, add_label + HC.UNICODE_ELLIPSIS, 'Add this file to a playlist. If the A-B repeat points are set, only that part of it goes in.', self._AddCurrentMediaToPlaylist )
+        ClientGUIMenus.AppendMenuItem( playlist_menu, 'remove' + HC.UNICODE_ELLIPSIS, 'Remove this file from a playlist. Every part of it in that playlist goes.', self._RemoveCurrentMediaFromPlaylist )
+        
+    
     def _RegisterNextSlideshowPresentation( self ):
         
         if self._slideshow_is_running:
@@ -4706,6 +4787,37 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
             
             self._CalculateAnySpecialSlideshowPeriodForCurrentMedia()
             
+        
+    
+    def _RemoveCurrentMediaFromPlaylist( self ):
+        
+        if self._current_media is None:
+            
+            return
+            
+        
+        hash = self._current_media.GetHash()
+        
+        # the counts here are how many times this file is in each playlist
+        playlists = CG.client_controller.Read( 'playlists_containing_file', hash )
+        
+        if len( playlists ) == 0:
+            
+            ClientGUIDialogsMessage.ShowInformation( self, 'This file is not in any playlists.' )
+            
+            return
+            
+        
+        try:
+            
+            playlist_id = ClientGUIPlaylists.SelectPlaylist( self, 'remove from playlist', playlists )
+            
+        except HydrusExceptions.CancelledException:
+            
+            return
+            
+        
+        CG.client_controller.Write( 'playlist_remove_file', playlist_id, hash )
         
     
     def _StartSlideshow( self, period: float ):
@@ -4952,14 +5064,17 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
                 ClientGUIMenus.AppendMenuItem( menu, 'go fullscreen', 'Make this media viewer a fullscreen window without borders.', self.ProcessApplicationCommand, CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_SWITCH_BETWEEN_FULLSCREEN_BORDERLESS_AND_REGULAR_FRAMED_WINDOW ) )
                 
             
-            ClientGUICanvasMenus.AppendSlideshowMenu(
-                self,
-                menu,
-                self._slideshow_is_running,
-                slideshow_duration = self._normal_slideshow_period,
-                slideshow_is_shuffling = self._slideshow_is_shuffling,
-                slideshow_is_playing_once_through = self._slideshow_is_playing_once_through
-            )
+            if self.SupportsSlideshow():
+                
+                ClientGUICanvasMenus.AppendSlideshowMenu(
+                    self,
+                    menu,
+                    self._slideshow_is_running,
+                    slideshow_duration = self._normal_slideshow_period,
+                    slideshow_is_shuffling = self._slideshow_is_shuffling,
+                    slideshow_is_playing_once_through = self._slideshow_is_playing_once_through
+                )
+                
             
             ClientGUIMenus.AppendSeparator( menu )
             
@@ -5040,6 +5155,8 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
                 
             
             ClientGUIMenus.AppendMenu( menu, counters_menu, 'counters' )
+            
+            self._AppendPlaylistMenu( menu )
             
             ClientGUIMenus.AppendSeparator( menu )
             
@@ -5173,5 +5290,417 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
             
             self._DoSlideshowWork()
             
+        
+    
+
+# players take a moment to land a seek, so after we send a playlist item to its start we give them this long before checking it got there
+PLAYLIST_SEEK_GRACE_PERIOD_S = 0.5
+# a player that is still loading can drop a seek, so we try a few times
+PLAYLIST_SEEK_MAX_ATTEMPTS = 5
+# how long a file with no duration, like an image, stays up if there is no slideshow duration in the options to use
+PLAYLIST_DEFAULT_STILL_PERIOD_S = 5.0
+
+class CanvasPlaylist( CanvasMediaListBrowser ):
+    
+    def __init__( self, parent, page_key, location_context: ClientLocation.LocationContext, playlist_id: int, playlist_name: str, playlist_items: list[ tuple[ ClientMediaResult.MediaResult, int | None, int | None ] ] ):
+        
+        # the media list holds each file once, but a playlist can have a file many times over, so we step through the playlist with our own index
+        hashes_to_media_results = { media_result.GetHash() : media_result for ( media_result, start_ms, end_ms ) in playlist_items }
+        
+        ( first_media_result, first_start_ms, first_end_ms ) = playlist_items[0]
+        
+        super().__init__( parent, page_key, location_context, list( hashes_to_media_results.values() ), first_media_result.GetHash() )
+        
+        self._playlist_id = playlist_id
+        self._playlist_name = playlist_name
+        
+        hashes_to_medias = { media.GetHash() : media for media in self._media_list.GetFlatMedia() }
+        
+        # ( media, start_ms, end_ms ). the span is None, None for the whole file
+        self._playlist_items = [ ( hashes_to_medias[ media_result.GetHash() ], start_ms, end_ms ) for ( media_result, start_ms, end_ms ) in playlist_items if media_result.GetHash() in hashes_to_medias ]
+        
+        self._playlist_loop = CG.client_controller.new_options.GetBoolean( 'playlists_loop' )
+        
+        self._playlist_index = 0
+        
+        # when we reach the end and are not looping, we hold on the last item
+        self._playlist_finished = False
+        
+        self._ResetPlaylistItemState()
+        
+        CG.client_controller.CallAfterQtSafe( self, self._ShowPlaylistItem, 0 )
+        
+        CG.client_controller.gui.RegisterAnimationUpdateWindow( self )
+        
+    
+    def _AdvancePlaylist( self ):
+        
+        next_index = ClientMediaPlaylists.GetNextPlaylistIndex( self._playlist_index, len( self._playlist_items ), 1, self._playlist_loop )
+        
+        if next_index is None:
+            
+            self._playlist_finished = True
+            
+            self._media_container.Pause()
+            
+            return
+            
+        
+        self._ShowPlaylistItem( next_index )
+        
+    
+    def _DoPlaylistWork( self ):
+        
+        now = HydrusTime.GetNowPrecise()
+        
+        tick_s = now - self._playlist_last_tick_time
+        
+        self._playlist_last_tick_time = now
+        
+        if self._playlist_finished or self._current_media is None or len( self._playlist_items ) == 0:
+            
+            return
+            
+        
+        ( media, start_ms, end_ms ) = self._playlist_items[ self._playlist_index ]
+        
+        # the media container can be a moment behind while it finishes up with the previous file
+        if self._current_media != media or self._media_container.GetMedia() != media:
+            
+            return
+            
+        
+        if not self._media_container.CurrentlyPresentingMediaWithDuration():
+            
+            if self._PlaylistIsHeld():
+                
+                return
+                
+            
+            # an image or similar stays up for a while
+            self._playlist_item_still_time_s += tick_s
+            
+            if self._playlist_item_still_time_s >= self._GetPlaylistStillPeriod():
+                
+                self._AdvancePlaylist()
+                
+            
+            return
+            
+        
+        current_timestamp_ms = self._media_container.GetCurrentPlaybackTimestampMS()
+        
+        if current_timestamp_ms is None:
+            
+            # still loading
+            return
+            
+        
+        if not self._playlist_item_ready:
+            
+            self._playlist_item_ready = True
+            
+            # a file that already played through (the same file again in a row) cannot tell us when it plays through this time
+            self._playlist_item_had_played_once_at_start = self._media_container.HasPlayedOnceThrough()
+            
+            # a playlist plays, whatever the 'start paused' options say
+            if self._media_container.IsPaused():
+                
+                self._media_container.PausePlay()
+                
+            
+        
+        if not self._playlist_item_seek_confirmed:
+            
+            if not HydrusTime.TimeHasPassedFloat( self._playlist_item_seek_time + PLAYLIST_SEEK_GRACE_PERIOD_S ):
+                
+                return
+                
+            
+            target_ms = 0 if start_ms is None else start_ms
+            
+            if ClientMediaPlaylists.PlaylistSeekHasLanded( current_timestamp_ms, target_ms ) or self._playlist_item_seek_attempts >= PLAYLIST_SEEK_MAX_ATTEMPTS:
+                
+                self._playlist_item_seek_confirmed = True
+                
+                self._playlist_item_last_timestamp_ms = current_timestamp_ms
+                
+            else:
+                
+                self._media_container.SeekTo( target_ms )
+                
+                self._playlist_item_seek_attempts += 1
+                self._playlist_item_seek_time = now
+                
+            
+            return
+            
+        
+        last_timestamp_ms = self._playlist_item_last_timestamp_ms
+        
+        self._playlist_item_last_timestamp_ms = current_timestamp_ms
+        
+        if self._media_container.IsPaused():
+            
+            return
+            
+        
+        # an A-B repeat is the user focusing on one part of the file, so we stay on this item until they clear it
+        ( a_ms, b_ms ) = self._media_container.GetABLoop()
+        
+        if b_ms is not None:
+            
+            return
+            
+        
+        item_is_done = ClientMediaPlaylists.PlaylistItemIsDone(
+            end_ms,
+            self._current_media.GetDurationMS(),
+            current_timestamp_ms,
+            last_timestamp_ms,
+            self._playlist_item_had_played_once_at_start,
+            self._media_container.HasPlayedOnceThrough()
+        )
+        
+        if item_is_done and not self._PlaylistIsHeld():
+            
+            self._AdvancePlaylist()
+            
+        
+    
+    def _FlipPlaylistLoop( self ):
+        
+        self._playlist_loop = CG.client_controller.new_options.FlipBoolean( 'playlists_loop' )
+        
+    
+    def _GetIndexString( self ):
+        
+        return f'{self._playlist_name}: {HydrusNumbers.ValueRangeToPrettyString( self._playlist_index + 1, len( self._playlist_items ) )}'
+        
+    
+    def _GetPlaylistStillPeriod( self ) -> float:
+        
+        slideshow_durations = CG.client_controller.new_options.GetSlideshowDurations()
+        
+        if len( slideshow_durations ) > 0:
+            
+            return slideshow_durations[0]
+            
+        
+        return PLAYLIST_DEFAULT_STILL_PERIOD_S
+        
+    
+    def _GetPrefetchNeighboursInPreferenceOrder( self ) -> list[ ClientMediaResult.MediaResult ]:
+        
+        num_items = len( self._playlist_items )
+        
+        if num_items == 0 or self._current_media is None:
+            
+            return []
+            
+        
+        num_to_go_back = CG.client_controller.new_options.GetInteger( 'media_viewer_prefetch_num_previous' )
+        num_to_go_forward = CG.client_controller.new_options.GetInteger( 'media_viewer_prefetch_num_next' )
+        
+        # upcoming items first, since that is where we are going
+        offsets = list( range( 1, num_to_go_forward + 1 ) ) + [ - offset for offset in range( 1, num_to_go_back + 1 ) ]
+        
+        media_looked_at = { self._current_media }
+        
+        to_render = []
+        
+        for offset in offsets:
+            
+            ( media, start_ms, end_ms ) = self._playlist_items[ ( self._playlist_index + offset ) % num_items ]
+            
+            if media not in media_looked_at:
+                
+                to_render.append( media.GetMediaResult() )
+                
+                media_looked_at.add( media )
+                
+            
+        
+        return to_render
+        
+    
+    def _PausePlaySlideshow( self ):
+        
+        pass
+        
+    
+    def _PlaylistIsHeld( self ) -> bool:
+        
+        # the user is doing something, so we hold still, like a slideshow does
+        return CGC.core().MenuIsOpen() or self._SubWindowIsOpen()
+        
+    
+    def _PopulatePlaylistMenu( self, playlist_menu: QW.QMenu ):
+        
+        ClientGUIMenus.AppendMenuLabel( playlist_menu, f'playing {self._GetIndexString()}' )
+        
+        ClientGUIMenus.AppendMenuCheckItem( playlist_menu, 'loop playlist', 'When the playlist ends, start it again from the top.', self._playlist_loop, self._FlipPlaylistLoop )
+        
+        ClientGUIMenus.AppendSeparator( playlist_menu )
+        
+        super()._PopulatePlaylistMenu( playlist_menu )
+        
+    
+    def _Remove( self ):
+        
+        if self._current_media is None:
+            
+            return
+            
+        
+        # this is just what we are playing--the saved playlist is not touched
+        self._RemovePlaylistItemsForMedias( { self._current_media } )
+        
+    
+    def _RemovePlaylistItemsForMedias( self, medias: collections.abc.Collection[ ClientMediaSingle.MediaSingle ] ):
+        
+        ( current_media, current_start_ms, current_end_ms ) = self._playlist_items[ self._playlist_index ]
+        
+        num_removed_before_current = len( [ media for ( media, start_ms, end_ms ) in self._playlist_items[ : self._playlist_index ] if media in medias ] )
+        
+        self._playlist_items = [ ( media, start_ms, end_ms ) for ( media, start_ms, end_ms ) in self._playlist_items if media not in medias ]
+        
+        if len( self._playlist_items ) == 0:
+            
+            self._TryToCloseWindow()
+            
+            return
+            
+        
+        new_index = self._playlist_index - num_removed_before_current
+        
+        if current_media in medias:
+            
+            # we go on to whatever came after it
+            self._ShowPlaylistItem( new_index % len( self._playlist_items ) )
+            
+        else:
+            
+            self._playlist_index = new_index
+            
+            CG.client_controller.pub( 'canvas_new_index_string', self._canvas_key, self._GetIndexString() )
+            
+        
+    
+    def _ResetPlaylistItemState( self ):
+        
+        self._playlist_item_ready = False
+        self._playlist_item_had_played_once_at_start = False
+        
+        self._playlist_item_seek_confirmed = False
+        self._playlist_item_seek_attempts = 0
+        self._playlist_item_seek_time = 0.0
+        
+        self._playlist_item_last_timestamp_ms: int | None = None
+        
+        self._playlist_item_still_time_s = 0.0
+        
+        self._playlist_last_tick_time = HydrusTime.GetNowPrecise()
+        
+    
+    def _ShowFirst( self ):
+        
+        self._ShowPlaylistItem( 0 )
+        
+    
+    def _ShowLast( self ):
+        
+        self._ShowPlaylistItem( len( self._playlist_items ) - 1 )
+        
+    
+    def _ShowNext( self ):
+        
+        # like the normal media viewer, the user can always step round the ends
+        self._ShowPlaylistItem( ClientMediaPlaylists.GetNextPlaylistIndex( self._playlist_index, len( self._playlist_items ), 1, True ) )
+        
+    
+    def _ShowPlaylistItem( self, index: int | None ):
+        
+        if index is None or len( self._playlist_items ) == 0:
+            
+            return
+            
+        
+        index = max( 0, min( index, len( self._playlist_items ) - 1 ) )
+        
+        self._playlist_index = index
+        self._playlist_finished = False
+        
+        ( media, start_ms, end_ms ) = self._playlist_items[ index ]
+        
+        if media == self._current_media:
+            
+            # A-B repeat points belong to the file, but the same file again is a fresh start
+            self._media_container.ClearABLoopPoints()
+            
+        
+        self._ResetPlaylistItemState()
+        
+        self.SetMedia( media, start_paused = False )
+        
+        CG.client_controller.pub( 'canvas_new_index_string', self._canvas_key, self._GetIndexString() )
+        
+    
+    def _ShowPrevious( self ):
+        
+        self._ShowPlaylistItem( ClientMediaPlaylists.GetNextPlaylistIndex( self._playlist_index, len( self._playlist_items ), -1, True ) )
+        
+    
+    def _ShowRandom( self ):
+        
+        self._ShowPlaylistItem( random.randrange( len( self._playlist_items ) ) )
+        
+    
+    def _StartSlideshow( self, period: float ):
+        
+        pass
+        
+    
+    def _UndoRandom( self ):
+        
+        self._ShowPrevious()
+        
+    
+    def NotifyWeAreClosing( self ):
+        
+        CG.client_controller.gui.UnregisterAnimationUpdateWindow( self )
+        
+        super().NotifyWeAreClosing()
+        
+    
+    def ProcessContentUpdatePackage( self, content_update_package: ClientContentUpdates.ContentUpdatePackage ):
+        
+        if self._current_media is None:
+            
+            return
+            
+        
+        self._media_list.ProcessContentUpdatePackage( content_update_package )
+        
+        # a file that was deleted drops out of the media list, and so out of what we play
+        gone_medias = { media for ( media, start_ms, end_ms ) in self._playlist_items if not self._media_list.HasMedia( media ) }
+        
+        if len( gone_medias ) > 0:
+            
+            self._RemovePlaylistItemsForMedias( gone_medias )
+            
+        
+        self.update()
+        
+    
+    def SupportsSlideshow( self ) -> bool:
+        
+        # the playlist moves itself along
+        return False
+        
+    
+    def TIMERAnimationUpdate( self ):
+        
+        self._DoPlaylistWork()
         
     

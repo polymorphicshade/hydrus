@@ -300,6 +300,7 @@ class ClientOptions( HydrusSerialisable.SerialisableBase ):
             'allow_blurhash_fallback' : True,
             'fade_thumbnails' : True,
             'slideshow_always_play_duration_media_once_through' : False,
+            'playlists_loop' : True,
             'enable_truncated_images_pil' : True,
             'do_icc_profile_normalisation' : True,
             'mpv_available_at_start' : ClientGUIMPV.MPV_IS_AVAILABLE,

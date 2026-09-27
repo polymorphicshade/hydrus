@@ -46,6 +46,7 @@ from hydrus.client.gui import ClientGUIDragDrop
 from hydrus.client.gui import ClientGUIFrames
 from hydrus.client.gui import ClientGUIFunctions
 from hydrus.client.gui import ClientGUIMenus
+from hydrus.client.gui import ClientGUIPlaylists
 from hydrus.client.gui import ClientGUIPopupMessages
 from hydrus.client.gui import ClientGUIShortcuts
 from hydrus.client.gui import ClientGUISplash
@@ -57,6 +58,7 @@ from hydrus.client.gui import ClientGUITopLevelWindowsPanels
 from hydrus.client.gui import QLocator
 from hydrus.client.gui import ClientGUILocatorSearchProviders
 from hydrus.client.gui import QtPorting as QP
+from hydrus.client.gui.canvas import ClientGUICanvas
 from hydrus.client.gui.canvas import ClientGUICanvasFrame
 from hydrus.client.gui.canvas import ClientGUIMPV
 from hydrus.client.gui.canvas import ClientGUIQtMediaPlayer
@@ -96,6 +98,7 @@ from hydrus.client.gui.services import ClientGUIServersideServices
 from hydrus.client.gui.widgets import ClientGUICommon
 from hydrus.client.importing.options import ImportOptionsConstants as IOC
 from hydrus.client.importing.options import ImportOptionsContainer
+from hydrus.client.media import ClientMedia
 from hydrus.client.media import ClientMediaResult
 from hydrus.client.media import ClientMediaResultAPI
 from hydrus.client.metadata import ClientContentUpdates
@@ -103,7 +106,7 @@ from hydrus.client.metadata import ClientTags
 from hydrus.client.networking import ClientNetworkingFunctions
 from hydrus.client.parsing import ClientParsing
 
-MENU_ORDER = [ 'file', 'undo', 'pages', 'database', 'network', 'services', 'tags', 'pending', 'help' ]
+MENU_ORDER = [ 'file', 'undo', 'pages', 'database', 'playlists', 'network', 'services', 'tags', 'pending', 'help' ]
 
 def CrashTheProgram( win: QW.QWidget ):
     
@@ -2461,6 +2464,12 @@ ATTACH "client.mappings.db" as external_mappings;'''
                 
                 self._menu_updater_pending.update()
                 
+            elif name == 'playlists':
+                
+                ( menu, label ) = self._InitialiseMenuInfoPlaylists()
+                
+                self.ReplaceMenu( name, menu, label )
+                
             elif name == 'services':
                 
                 ( menu, label ) = self._InitialiseMenuInfoServices()
@@ -3985,6 +3994,16 @@ ATTACH "client.mappings.db" as external_mappings;'''
         return ( menu, '&pages' )
         
     
+    def _InitialiseMenuInfoPlaylists( self ):
+        
+        menu = ClientGUIMenus.GenerateMenu( self )
+        
+        ClientGUIMenus.AppendMenuItem( menu, 'editor' + HC.UNICODE_ELLIPSIS, 'Add, rename, and delete your playlists.', ClientGUIPlaylists.EditPlaylists, self )
+        ClientGUIMenus.AppendMenuItem( menu, 'open' + HC.UNICODE_ELLIPSIS, 'Pick a playlist and play it in a media viewer.', self._OpenPlaylist )
+        
+        return ( menu, 'p&laylists' )
+        
+    
     def _InitialiseMenuInfoServices( self ):
         
         menu = ClientGUIMenus.GenerateMenu( self )
@@ -5365,6 +5384,63 @@ ATTACH "client.mappings.db" as external_mappings;'''
     def _OpenInstallFolder( self ):
         
         HydrusPaths.LaunchDirectory( HC.BASE_DIR )
+        
+    
+    def _OpenPlaylist( self ):
+        
+        playlists = CG.client_controller.Read( 'playlists' )
+        
+        if len( playlists ) == 0:
+            
+            ClientGUIDialogsMessage.ShowInformation( self, 'You do not have any playlists yet! Make one under playlists->editor, and then add files to it from the media viewer with right-click->playlist->add.' )
+            
+            return
+            
+        
+        try:
+            
+            playlist_id = ClientGUIPlaylists.SelectPlaylist( self, 'open playlist', playlists )
+            
+        except HydrusExceptions.CancelledException:
+            
+            return
+            
+        
+        playlist_name = { playlist_id : name for ( playlist_id, name, num_items ) in playlists }[ playlist_id ]
+        
+        items = CG.client_controller.Read( 'playlist_items', playlist_id )
+        
+        if len( items ) == 0:
+            
+            ClientGUIDialogsMessage.ShowInformation( self, f'"{playlist_name}" is empty! Add files to it from the media viewer with right-click->playlist->add.' )
+            
+            return
+            
+        
+        media_results = CG.client_controller.Read( 'media_results', { hash for ( hash, start_ms, end_ms ) in items } )
+        
+        # a file that was deleted, or that the media viewer cannot show, is skipped
+        hashes_to_media_results = { media_result.GetHash() : media_result for media_result in media_results if media_result.GetLocationsManager().IsLocal() and ClientMedia.CanDisplayMediaResult( media_result ) }
+        
+        playlist_items = [ ( hashes_to_media_results[ hash ], start_ms, end_ms ) for ( hash, start_ms, end_ms ) in items if hash in hashes_to_media_results ]
+        
+        if len( playlist_items ) == 0:
+            
+            ClientGUIDialogsMessage.ShowWarning( self, f'None of the files in "{playlist_name}" can be shown--they were probably deleted.' )
+            
+            return
+            
+        
+        canvas_frame = ClientGUICanvasFrame.CanvasFrame( self )
+        
+        page_key = HydrusData.GenerateKey()
+        location_context = ClientLocation.LocationContext.STATICCreateSimple( CC.COMBINED_LOCAL_FILE_DOMAINS_SERVICE_KEY )
+        
+        canvas_window = ClientGUICanvas.CanvasPlaylist( canvas_frame, page_key, location_context, playlist_id, playlist_name, playlist_items )
+        
+        canvas_window.canvasWithHoversExiting.connect( self.NotifyMediaViewerExiting )
+        
+        canvas_frame.SetCanvas( canvas_window )
         
     
     def _PausePlaySync( self, sync_type ):
