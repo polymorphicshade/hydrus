@@ -45,6 +45,7 @@ from hydrus.client.db import ClientDBFilesMaintenanceQueue
 from hydrus.client.db import ClientDBFilesMetadataBasic
 from hydrus.client.db import ClientDBFilesMetadataRich
 from hydrus.client.db import ClientDBFilesPhysicalStorage
+from hydrus.client.db import ClientDBFilesPlaybackSkips
 from hydrus.client.db import ClientDBFilesSearch
 from hydrus.client.db import ClientDBFilesStorage
 from hydrus.client.db import ClientDBFilesTimestamps
@@ -3927,6 +3928,7 @@ class DB( HydrusDB.HydrusDB ):
                 'file_info_managers_from_ids' : self.modules_media_results.GetFileInfoManagers,
                 'file_maintenance_get_job_counts' : self.modules_files_maintenance_queue.GetJobCounts,
                 'file_maintenance_get_jobs' : self.modules_files_maintenance_queue.GetJobs,
+                'file_playback_skips' : self.modules_files_playback_skips.GetPlaybackSkips,
                 'file_query_ids' : self.modules_files_query.GetHashIdsFromQuery,
                 'file_relationships_for_api' : self.modules_files_duplicates_storage.GetFileRelationshipsForAPI,
                 'filter_existing_tags' : self.modules_mappings_counts_update.FilterExistingTags,
@@ -4063,6 +4065,7 @@ class DB( HydrusDB.HydrusDB ):
                 'file_maintenance_add_jobs_hashes' : self.modules_files_maintenance_queue.AddJobsHashes,
                 'file_maintenance_cancel_jobs' : self.modules_files_maintenance_queue.CancelJobs,
                 'file_maintenance_clear_jobs' : self.modules_files_maintenance.ClearJobs,
+                'file_playback_skips' : self.modules_files_playback_skips.SetPlaybackSkips,
                 'granularise' : self.modules_files_physical_storage.Granularise,
                 'ideal_client_files_locations' : self.modules_files_physical_storage.SetIdealClientFilesLocations,
                 'maintain_hashed_serialisables' : self.modules_serialisable.MaintainHashedStorage,
@@ -4229,6 +4232,10 @@ class DB( HydrusDB.HydrusDB ):
         self.modules_hashes_local_cache = ClientDBDefinitionsCache.ClientDBCacheLocalHashes( self._c, self.modules_hashes, self.modules_services, self.modules_files_storage )
         
         self._modules.append( self.modules_hashes_local_cache )
+        
+        self.modules_files_playback_skips = ClientDBFilesPlaybackSkips.ClientDBFilesPlaybackSkips( self._c, self.modules_hashes_local_cache )
+        
+        self._modules.append( self.modules_files_playback_skips )
         
         #
         

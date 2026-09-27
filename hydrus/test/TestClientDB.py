@@ -259,6 +259,25 @@ class TestClientDB( unittest.TestCase ):
         self.assertEqual( result.GetName(), export_folder.GetName() )
         
     
+    def test_file_playback_skips( self ):
+        
+        hash_a = os.urandom( 32 )
+        hash_b = os.urandom( 32 )
+        
+        self.assertEqual( self._read( 'file_playback_skips', hash_a ), [] )
+        
+        self._write( 'file_playback_skips', hash_a, [ ( 1000, 2000 ), ( 5000, 6000 ) ] )
+        self._write( 'file_playback_skips', hash_b, [ ( 0, 500 ) ] )
+        
+        self.assertEqual( self._read( 'file_playback_skips', hash_a ), [ ( 1000, 2000 ), ( 5000, 6000 ) ] )
+        self.assertEqual( self._read( 'file_playback_skips', hash_b ), [ ( 0, 500 ) ] )
+        
+        self._write( 'file_playback_skips', hash_a, [] )
+        
+        self.assertEqual( self._read( 'file_playback_skips', hash_a ), [] )
+        self.assertEqual( self._read( 'file_playback_skips', hash_b ), [ ( 0, 500 ) ] )
+        
+    
     def test_file_query_ids( self ):
         
         TestClientDB._clear_db()

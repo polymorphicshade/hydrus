@@ -2446,6 +2446,56 @@ class CanvasWithHovers( Canvas ):
         self._RestartCursorHideWait()
         
     
+    def _AddPlaybackSkipFromABLoop( self ):
+        
+        if self._current_media is None:
+            
+            return
+            
+        
+        ( a_ms, b_ms ) = self._media_container.GetABLoop()
+        
+        if a_ms is None or b_ms is None:
+            
+            message = 'A skip is made from the A-B repeat points, and they are not both set yet. To add a skip:'
+            message += '\n' * 2
+            message += '1. Go to where the skip should start and hit the A button at the top of the media viewer (or its shortcut).'
+            message += '\n'
+            message += '2. Go to where the skip should end and hit B.'
+            message += '\n'
+            message += '3. Hit skips->add again.'
+            message += '\n' * 2
+            message += 'To add another skip after that, hit C to clear A and B, and then mark the next one.'
+            
+            ClientGUIDialogsMessage.ShowWarning( self, message )
+            
+            return
+            
+        
+        new_skips = ClientGUICanvasMedia.MergePlaybackSkips( self._media_container.GetPlaybackSkips() + [ ( a_ms, b_ms ) ] )
+        
+        duration_ms = self._current_media.GetDurationMS()
+        
+        if duration_ms is not None:
+            
+            tolerance_ms = ClientGUICanvasMedia.MIN_AB_LOOP_DURATION_MS
+            
+            if True in ( start_ms < tolerance_ms and end_ms > duration_ms - tolerance_ms for ( start_ms, end_ms ) in new_skips ):
+                
+                ClientGUIDialogsMessage.ShowWarning( self, 'With this skip, the whole file would be skipped and there would be nothing left to play! Move A or B in a little and try again.' )
+                
+                return
+                
+            
+        
+        self._media_container.AddPlaybackSkip( a_ms, b_ms )
+        
+    
+    def _ClearPlaybackSkips( self ):
+        
+        self._media_container.ClearPlaybackSkips()
+        
+    
     def _DoShowHideWindowFrame( self ):
         
         window_real_geom = self.window().geometry()
@@ -4789,6 +4839,28 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
             AddAudioVolumeMenu( menu, self.CANVAS_TYPE, self._media_container )
             
             ClientGUIMenus.AppendMenuItem( menu, 'audio effects', 'Apply audio effects, like a low pass filter or reverb, to what this media viewer plays.', self._ShowAudioEffects )
+            
+            if ClientGUICanvasMedia.MediaHasPlayback( self._current_media ):
+                
+                skips_menu = ClientGUIMenus.GenerateMenu( menu )
+                
+                ClientGUIMenus.AppendMenuItem( skips_menu, 'add', 'Save the span between the A-B repeat points as a part of this file that playback jumps over. Skipping starts once A-B repeat is cleared.', self._AddPlaybackSkipFromABLoop )
+                ClientGUIMenus.AppendMenuItem( skips_menu, 'clear', 'Remove all of this file\'s skips.', self._ClearPlaybackSkips )
+                
+                playback_skips = self._media_container.GetPlaybackSkips()
+                
+                if len( playback_skips ) > 0:
+                    
+                    ClientGUIMenus.AppendSeparator( skips_menu )
+                    
+                    for ( start_ms, end_ms ) in playback_skips:
+                        
+                        ClientGUIMenus.AppendMenuLabel( skips_menu, f'{ClientGUICanvasMedia.ConvertPlaybackTimestampToString( start_ms )} - {ClientGUICanvasMedia.ConvertPlaybackTimestampToString( end_ms )}' )
+                        
+                    
+                
+                ClientGUIMenus.AppendMenu( menu, skips_menu, f'skips ({len( playback_skips )})' if len( playback_skips ) > 0 else 'skips' )
+                
             
             ClientGUIMenus.AppendSeparator( menu )
             

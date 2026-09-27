@@ -19,6 +19,7 @@ from hydrus.client import ClientConstants as CC
 from hydrus.client import ClientGlobals as CG
 from hydrus.client import ClientRendering
 from hydrus.client import ClientUgoiraHandling
+from hydrus.client.gui import ClientGUIAsync
 from hydrus.client.gui import ClientGUIExceptionHandling
 from hydrus.client.gui import ClientGUIFunctions
 from hydrus.client.gui import ClientGUIMenus
@@ -92,6 +93,51 @@ OPEN_EXTERNALLY_MAX_THUMBNAIL_SIZE = ( 200, 200 )
 
 # anything shorter than this is not a useful loop, and mpv's 'rewind loop' damaged-file detection gets twitchy if we restart near 0 many times a second
 MIN_AB_LOOP_DURATION_MS = 100
+
+# players take a moment to land a seek, so after we jump over a skip we give them this long before trying again
+PLAYBACK_SKIP_SEEK_GRACE_PERIOD_S = 0.5
+
+def ConvertPlaybackTimestampToString( timestamp_ms: int ) -> str:
+    
+    ( hours, remainder_ms ) = divmod( int( timestamp_ms ), 3600000 )
+    ( minutes, remainder_ms ) = divmod( remainder_ms, 60000 )
+    ( seconds, milliseconds ) = divmod( remainder_ms, 1000 )
+    
+    if hours > 0:
+        
+        return f'{hours}:{minutes:0>2}:{seconds:0>2}.{milliseconds:0>3}'
+        
+    
+    return f'{minutes}:{seconds:0>2}.{milliseconds:0>3}'
+    
+
+def MediaHasPlayback( media: ClientMediaSingle.MediaSingle ):
+    
+    return media.HasDuration() or media.GetMime() == HC.ANIMATION_UGOIRA
+    
+
+def MergePlaybackSkips( skips: list[ tuple[ int, int ] ] ) -> list[ tuple[ int, int ] ]:
+    
+    # overlapping or touching skips become one, so a jump never lands inside another skip
+    
+    merged_skips = []
+    
+    for ( start_ms, end_ms ) in sorted( skips ):
+        
+        if len( merged_skips ) > 0 and start_ms <= merged_skips[-1][1]:
+            
+            ( previous_start_ms, previous_end_ms ) = merged_skips.pop()
+            
+            merged_skips.append( ( previous_start_ms, max( previous_end_ms, end_ms ) ) )
+            
+        else:
+            
+            merged_skips.append( ( start_ms, end_ms ) )
+            
+        
+    
+    return merged_skips
+    
 
 def CalculateCanvasMediaSize( media, canvas_size: QC.QSize, show_action ):
     
@@ -806,6 +852,19 @@ class Animation( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
             
         
     
+    def SeekPastPlaybackSkip( self, timestamp_ms: int ):
+        
+        if self._video_container is not None and self._video_container.IsInitialised():
+            
+            frame_index = int( self._video_container.GetFrameIndex( timestamp_ms ) )
+            
+            # a skip that runs off the end lands on the last frame, so the normal wrap-around to the start still counts the playthrough
+            frame_index = max( 0, min( frame_index, self._num_frames - 1 ) )
+            
+            self.GotoFrame( frame_index, pause_afterwards = False )
+            
+        
+    
     def SetABLoop( self, a_ms: int | None, b_ms: int | None ):
         
         self._ab_loop_a_ms = a_ms
@@ -1510,6 +1569,11 @@ class MediaContainer( QW.QWidget ):
         self._ab_loop_a_ms: int | None = None
         self._ab_loop_b_ms: int | None = None
         
+        # spans of the current file that playback jumps over. each file has its own, saved in the db
+        self._playback_skips: list[ tuple[ int, int ] ] = []
+        self._playback_skips_load_id = 0
+        self._last_playback_skip_seek: tuple[ tuple[ int, int ], float ] | None = None
+        
         self._zoom_types_to_zooms = {
             MEDIA_VIEWER_ZOOM_TYPE_DEFAULT_FOR_FILETYPE : 1.0,
             MEDIA_VIEWER_ZOOM_TYPE_CANVAS : 1.0,
@@ -1596,6 +1660,60 @@ class MediaContainer( QW.QWidget ):
         CG.client_controller.sub( self, 'NotifyAudioMuteOptionsChanged', 'notify_new_audio_mute_options' )
         CG.client_controller.sub( self, 'NotifyAudioVolumeOptionsChanged', 'new_audio_volume' )
         CG.client_controller.sub( self, 'Pause', 'pause_all_media' )
+        CG.client_controller.sub( self, 'NotifyNewPlaybackSkips', 'new_file_playback_skips' )
+        
+    
+    def _CheckPlaybackSkips( self ):
+        
+        if len( self._playback_skips ) == 0 or self._media is None or not self.CurrentlyPresentingMediaWithDuration():
+            
+            return
+            
+        
+        # an a-b loop is the user focusing on one part of the file, so it wins. this also lets them watch a skip they just added from it
+        if self._ab_loop_b_ms is not None:
+            
+            return
+            
+        
+        animation_bar_status = self._media_window.GetAnimationBarStatus()
+        
+        if animation_bar_status is None:
+            
+            return
+            
+        
+        ( current_frame_index, current_timestamp_ms, paused, buffer_indices ) = animation_bar_status
+        
+        # while paused, the user can scan through a skip to look at it
+        if paused or current_timestamp_ms is None:
+            
+            return
+            
+        
+        for skip in self._playback_skips:
+            
+            ( start_ms, end_ms ) = skip
+            
+            if start_ms <= current_timestamp_ms < end_ms:
+                
+                if self._last_playback_skip_seek is not None:
+                    
+                    ( last_skip, last_seek_time ) = self._last_playback_skip_seek
+                    
+                    if last_skip == skip and not HydrusTime.TimeHasPassedFloat( last_seek_time + PLAYBACK_SKIP_SEEK_GRACE_PERIOD_S ):
+                        
+                        return
+                        
+                    
+                
+                self._last_playback_skip_seek = ( skip, HydrusTime.GetNowPrecise() )
+                
+                self._SeekPastPlaybackSkip( end_ms )
+                
+                return
+                
+            
         
     
     def _CheckClosingWidgets( self ):
@@ -1784,6 +1902,42 @@ class MediaContainer( QW.QWidget ):
             
         
     
+    def _LoadPlaybackSkips( self ):
+        
+        self._playback_skips_load_id += 1
+        
+        load_id = self._playback_skips_load_id
+        
+        self._SetPlaybackSkips( [] )
+        
+        if self._media is None or not MediaHasPlayback( self._media ):
+            
+            return
+            
+        
+        hash = self._media.GetHash()
+        
+        def work_callable():
+            
+            return CG.client_controller.Read( 'file_playback_skips', hash )
+            
+        
+        def publish_callable( skips ):
+            
+            # the media changed, or the skips were edited, while we were waiting
+            if load_id != self._playback_skips_load_id:
+                
+                return
+                
+            
+            self._SetPlaybackSkips( skips )
+            
+        
+        job = ClientGUIAsync.AsyncQtJob( self, work_callable, publish_callable )
+        
+        job.start()
+        
+    
     def _MakeMediaWindow( self ):
         
         old_media_window = self._media_window
@@ -1959,6 +2113,62 @@ class MediaContainer( QW.QWidget ):
             
         
         self.abLoopChanged.emit( a_ms, b_ms )
+        
+    
+    def _SavePlaybackSkips( self, skips: list[ tuple[ int, int ] ] ):
+        
+        if self._media is None:
+            
+            return
+            
+        
+        hash = self._media.GetHash()
+        
+        # anything we are still loading is now out of date
+        self._playback_skips_load_id += 1
+        
+        self._SetPlaybackSkips( skips )
+        
+        CG.client_controller.Write( 'file_playback_skips', hash, skips )
+        
+        # other viewers, like the preview, may be showing this file too
+        CG.client_controller.pub( 'new_file_playback_skips', hash, skips )
+        
+    
+    def _SeekPastPlaybackSkip( self, end_ms: int ):
+        
+        if isinstance( self._media_window, Animation ):
+            
+            self._media_window.SeekPastPlaybackSkip( end_ms )
+            
+        elif isinstance( self._media_window, ( ClientGUIMPV.MPVWidget, ClientGUIQtMediaPlayer.QtMediaPlayer ) ):
+            
+            duration_ms = self._media.GetDurationMS()
+            
+            # a skip that runs off the end goes back to the start. the players count that as a playthrough, so slideshows and 'play x times' still work
+            if duration_ms is not None and end_ms >= duration_ms:
+                
+                end_ms = 0
+                
+            
+            self._media_window.Seek( end_ms )
+            
+        
+    
+    def _SetPlaybackSkips( self, skips: list[ tuple[ int, int ] ] ):
+        
+        self._playback_skips = [ tuple( skip ) for skip in skips ]
+        self._last_playback_skip_seek = None
+        
+        # we only need to watch playback when there is something to skip
+        if len( self._playback_skips ) > 0:
+            
+            CG.client_controller.gui.RegisterAnimationUpdateWindow( self )
+            
+        else:
+            
+            CG.client_controller.gui.UnregisterAnimationUpdateWindow( self )
+            
         
     
     def _SetZoom( self, zoom: float, move_delta = None ):
@@ -2333,6 +2543,11 @@ class MediaContainer( QW.QWidget ):
         return self.ReadyToSwitchMedia()
         
     
+    def AddPlaybackSkip( self, start_ms: int, end_ms: int ):
+        
+        self._SavePlaybackSkips( MergePlaybackSkips( self._playback_skips + [ ( start_ms, end_ms ) ] ) )
+        
+    
     def ClearABLoopPoints( self ):
         
         self._SetABLoop( None, None )
@@ -2343,6 +2558,8 @@ class MediaContainer( QW.QWidget ):
         self._media = None
         
         self._SetABLoop( None, None )
+        
+        self._LoadPlaybackSkips()
         
         self._animation_bar.ClearMedia()
         
@@ -2357,6 +2574,11 @@ class MediaContainer( QW.QWidget ):
         CG.client_controller.gui.UnregisterUIUpdateWindow( self )
         
         self.hide()
+        
+    
+    def ClearPlaybackSkips( self ):
+        
+        self._SavePlaybackSkips( [] )
         
     
     def CurrentlyPresentingMediaWithDuration( self ):
@@ -2508,6 +2730,11 @@ class MediaContainer( QW.QWidget ):
         )
         
     
+    def GetABLoop( self ) -> tuple[ int | None, int | None ]:
+        
+        return ( self._ab_loop_a_ms, self._ab_loop_b_ms )
+        
+    
     def GetAudioEffects( self ) -> ClientGUIMediaAudioEffects.AudioEffects:
         
         return self._audio_effects
@@ -2526,6 +2753,11 @@ class MediaContainer( QW.QWidget ):
     def GetPerPlayerMuteState( self ):
         
         return self._per_player_mute_state
+        
+    
+    def GetPlaybackSkips( self ) -> list[ tuple[ int, int ] ]:
+        
+        return list( self._playback_skips )
         
     
     def GetTieMediaWindowOnTopToPausePlayState( self ):
@@ -2697,6 +2929,16 @@ class MediaContainer( QW.QWidget ):
             self._UpdateMediaWindowVolume()
             
             self.volumeChanged.emit()
+            
+        
+    
+    def NotifyNewPlaybackSkips( self, hash: bytes, skips: list[ tuple[ int, int ] ] ):
+        
+        if self._media is not None and self._media.GetHash() == hash:
+            
+            self._playback_skips_load_id += 1
+            
+            self._SetPlaybackSkips( skips )
             
         
     
@@ -2927,6 +3169,8 @@ class MediaContainer( QW.QWidget ):
         
         # loop points belong to the file they were marked on
         self._SetABLoop( None, None )
+        
+        self._LoadPlaybackSkips()
         
         if maintain_zoom and previous_media is not None:
             
@@ -3644,6 +3888,11 @@ class MediaContainer( QW.QWidget ):
         self._current_zoom_type = zoom_type
         
         self._SetZoom( self._zoom_types_to_zooms[ self._current_zoom_type ] )
+        
+    
+    def TIMERAnimationUpdate( self ):
+        
+        self._CheckPlaybackSkips()
         
     
     def TIMERUIUpdate( self ):
