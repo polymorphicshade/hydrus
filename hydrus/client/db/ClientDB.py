@@ -50,6 +50,7 @@ from hydrus.client.db import ClientDBFilesPlaybackSkips
 from hydrus.client.db import ClientDBFilesSearch
 from hydrus.client.db import ClientDBFilesStorage
 from hydrus.client.db import ClientDBFilesTimestamps
+from hydrus.client.db import ClientDBFilesViewerZooms
 from hydrus.client.db import ClientDBFilesVirtualPaths
 from hydrus.client.db import ClientDBFilesViewingStats
 from hydrus.client.db import ClientDBMaintenance
@@ -3955,6 +3956,7 @@ class DB( HydrusDB.HydrusDB ):
                 'file_playback_skips' : self.modules_files_playback_skips.GetPlaybackSkips,
                 'file_query_ids' : self.modules_files_query.GetHashIdsFromQuery,
                 'file_relationships_for_api' : self.modules_files_duplicates_storage.GetFileRelationshipsForAPI,
+                'file_viewer_zoom' : self.modules_files_viewer_zooms.GetViewerZoom,
                 'filter_existing_tags' : self.modules_mappings_counts_update.FilterExistingTags,
                 'filter_hashes' : self.modules_files_metadata_rich.FilterHashesByService,
                 'force_refresh_tags_managers' : self.modules_media_results.GetForceRefreshTagsManagers,
@@ -4097,6 +4099,7 @@ class DB( HydrusDB.HydrusDB ):
                 'file_maintenance_cancel_jobs' : self.modules_files_maintenance_queue.CancelJobs,
                 'file_maintenance_clear_jobs' : self.modules_files_maintenance.ClearJobs,
                 'file_playback_skips' : self.modules_files_playback_skips.SetPlaybackSkips,
+                'file_viewer_zoom' : self.modules_files_viewer_zooms.SetViewerZoom,
                 'granularise' : self.modules_files_physical_storage.Granularise,
                 'ideal_client_files_locations' : self.modules_files_physical_storage.SetIdealClientFilesLocations,
                 'maintain_hashed_serialisables' : self.modules_serialisable.MaintainHashedStorage,
@@ -4267,6 +4270,10 @@ class DB( HydrusDB.HydrusDB ):
         self.modules_files_playback_skips = ClientDBFilesPlaybackSkips.ClientDBFilesPlaybackSkips( self._c, self.modules_hashes_local_cache )
         
         self._modules.append( self.modules_files_playback_skips )
+        
+        self.modules_files_viewer_zooms = ClientDBFilesViewerZooms.ClientDBFilesViewerZooms( self._c, self.modules_hashes_local_cache )
+        
+        self._modules.append( self.modules_files_viewer_zooms )
         
         self.modules_files_counters = ClientDBFilesCounters.ClientDBFilesCounters( self._c, self.modules_hashes_local_cache )
         

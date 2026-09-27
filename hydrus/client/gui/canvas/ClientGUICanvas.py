@@ -5067,6 +5067,13 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
                     ClientGUIMenus.AppendMenuItem( zoom_menu, 'zoom to max', 'Set the zoom to the maximum possible.', self._media_container.ZoomMax )
                     
                 
+                if self._media_container.HasSavedZoom():
+                    
+                    ClientGUIMenus.AppendSeparator( zoom_menu )
+                    
+                    ClientGUIMenus.AppendMenuItem( zoom_menu, "forget this file's zoom", 'This file opens at the zoom you last set on it. Go back to the normal default zoom, and open at that from now on.', self._media_container.ForgetSavedZoom )
+                    
+                
                 ClientGUIMenus.AppendMenu( menu, zoom_menu, 'zoom: {}'.format( ClientData.ConvertZoomToPercentage( self._media_container.GetCurrentZoom() ) ) )
                 
             

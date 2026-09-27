@@ -638,6 +638,29 @@ class TestClientDB( unittest.TestCase ):
             
         
     
+    def test_file_viewer_zoom( self ):
+        
+        hash_a = os.urandom( 32 )
+        hash_b = os.urandom( 32 )
+        
+        self.assertIsNone( self._read( 'file_viewer_zoom', hash_a ) )
+        
+        self._write( 'file_viewer_zoom', hash_a, 1.5 )
+        self._write( 'file_viewer_zoom', hash_b, 0.25 )
+        
+        self.assertEqual( self._read( 'file_viewer_zoom', hash_a ), 1.5 )
+        self.assertEqual( self._read( 'file_viewer_zoom', hash_b ), 0.25 )
+        
+        self._write( 'file_viewer_zoom', hash_a, 2.0 )
+        
+        self.assertEqual( self._read( 'file_viewer_zoom', hash_a ), 2.0 )
+        
+        self._write( 'file_viewer_zoom', hash_a, None )
+        
+        self.assertIsNone( self._read( 'file_viewer_zoom', hash_a ) )
+        self.assertEqual( self._read( 'file_viewer_zoom', hash_b ), 0.25 )
+        
+    
     def test_file_query_ids( self ):
         
         TestClientDB._clear_db()

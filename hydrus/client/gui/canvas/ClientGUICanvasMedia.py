@@ -1663,6 +1663,12 @@ class MediaContainer( QW.QWidget ):
         self._playback_skips_load_id = 0
         self._last_playback_skip_seek: tuple[ tuple[ int, int ], float ] | None = None
         
+        # the zoom the user last set on the current file, which the media viewer opens it at next time. each file has its own, saved in the db
+        # the duplicate filter is left out, since it wants to keep the zoom the same between the files it compares
+        self._remembers_file_zooms = self._canvas_type in ( CC.CANVAS_MEDIA_VIEWER, CC.CANVAS_MEDIA_VIEWER_ARCHIVE_DELETE )
+        self._saved_zoom: float | None = None
+        self._saved_zoom_load_id = 0
+        
         self._zoom_types_to_zooms = {
             MEDIA_VIEWER_ZOOM_TYPE_DEFAULT_FOR_FILETYPE : 1.0,
             MEDIA_VIEWER_ZOOM_TYPE_CANVAS : 1.0,
@@ -2012,6 +2018,24 @@ class MediaContainer( QW.QWidget ):
             
         
     
+    def _GetZoomWithinMaxDimension( self, zoom: float ) -> float:
+        
+        my_dpr = self.devicePixelRatio()
+        
+        media_window_size = CalculateMediaContainerSize( self._media, my_dpr, zoom, CC.MEDIA_VIEWER_ACTION_SHOW_WITH_NATIVE )
+        
+        max_zoom_dimension = self._GetMaxZoomDimension()
+        
+        if media_window_size.width() > max_zoom_dimension or media_window_size.height() > max_zoom_dimension:
+            
+            limit_max_zoom_types_to_zooms = CalculateCanvasZooms( QC.QSize( max_zoom_dimension, max_zoom_dimension ), self._canvas_type, my_dpr, self._media, CC.MEDIA_VIEWER_ACTION_SHOW_WITH_NATIVE )
+            
+            zoom = limit_max_zoom_types_to_zooms[ MEDIA_VIEWER_ZOOM_TYPE_CANVAS ]
+            
+        
+        return zoom
+        
+    
     def _LoadPlaybackSkips( self ):
         
         self._playback_skips_load_id += 1
@@ -2041,6 +2065,49 @@ class MediaContainer( QW.QWidget ):
                 
             
             self._SetPlaybackSkips( skips )
+            
+        
+        job = ClientGUIAsync.AsyncQtJob( self, work_callable, publish_callable )
+        
+        job.start()
+        
+    
+    def _LoadSavedZoom( self ):
+        
+        self._saved_zoom_load_id += 1
+        
+        load_id = self._saved_zoom_load_id
+        
+        self._saved_zoom = None
+        
+        if self._media is None or not self._remembers_file_zooms:
+            
+            return
+            
+        
+        hash = self._media.GetHash()
+        
+        def work_callable():
+            
+            return CG.client_controller.Read( 'file_viewer_zoom', hash )
+            
+        
+        def publish_callable( zoom ):
+            
+            # the media changed, or the user zoomed, while we were waiting
+            if load_id != self._saved_zoom_load_id:
+                
+                return
+                
+            
+            self._saved_zoom = zoom
+            
+            if self._saved_zoom is not None and self.IsZoomable():
+                
+                self._SetZoom( self._GetZoomWithinMaxDimension( self._saved_zoom ) )
+                
+                self.ResetCenterPosition()
+                
             
         
         job = ClientGUIAsync.AsyncQtJob( self, work_callable, publish_callable )
@@ -2243,6 +2310,33 @@ class MediaContainer( QW.QWidget ):
         
         # other viewers, like the preview, may be showing this file too
         CG.client_controller.pub( 'new_file_playback_skips', hash, skips )
+        
+    
+    def _SaveZoom( self ):
+        
+        if self._media is None or not self._remembers_file_zooms:
+            
+            return
+            
+        
+        # zooming back to where the file would start anyway means it does not need its own any more
+        default_zoom = self._zoom_types_to_zooms[ self._GetDefaultZoomType() ]
+        
+        if self._current_zoom == default_zoom:
+            
+            zoom = None
+            
+        else:
+            
+            zoom = self._current_zoom
+            
+        
+        # anything we are still loading is now out of date
+        self._saved_zoom_load_id += 1
+        
+        self._saved_zoom = zoom
+        
+        CG.client_controller.Write( 'file_viewer_zoom', self._media.GetHash(), zoom )
         
     
     def _SeekPastPlaybackSkip( self, end_ms: int ):
@@ -2554,6 +2648,9 @@ class MediaContainer( QW.QWidget ):
         
         self.RescueIfOffScreen()
         
+        # everything that comes through here is the user zooming
+        self._SaveZoom()
+        
         # due to the foolish 'giganto window' system for large zooms, some auto-update stuff doesn't work right if the convas rect is contained by the media rect, so do a refresh here
         if new_zoom > self._zoom_types_to_zooms[ MEDIA_VIEWER_ZOOM_TYPE_CANVAS ]:
             
@@ -2670,6 +2767,8 @@ class MediaContainer( QW.QWidget ):
         self._SetABLoop( None, None )
         
         self._LoadPlaybackSkips()
+        
+        self._LoadSavedZoom()
         
         self._animation_bar.ClearMedia()
         
@@ -2813,6 +2912,24 @@ class MediaContainer( QW.QWidget ):
         return 'Unknown Media Player - let hydev know please'
         
     
+    def ForgetSavedZoom( self ):
+        
+        if self._media is None or not self._remembers_file_zooms:
+            
+            return
+            
+        
+        self._saved_zoom_load_id += 1
+        
+        self._saved_zoom = None
+        
+        CG.client_controller.Write( 'file_viewer_zoom', self._media.GetHash(), None )
+        
+        self.ZoomReinit()
+        
+        self.ResetCenterPosition()
+        
+    
     def GetCanvasZoom( self ) -> float:
         
         return self._zoom_types_to_zooms[ MEDIA_VIEWER_ZOOM_TYPE_CANVAS ]
@@ -2954,6 +3071,11 @@ class MediaContainer( QW.QWidget ):
             
         
         return True
+        
+    
+    def HasSavedZoom( self ):
+        
+        return self._saved_zoom is not None
         
     
     def IsAtMaxZoom( self ):
@@ -3320,6 +3442,9 @@ class MediaContainer( QW.QWidget ):
         self._SetABLoop( None, None )
         
         self._LoadPlaybackSkips()
+        
+        # this clears the last file's zoom before we set up the new one, and then the new file's zoom comes in a moment later
+        self._LoadSavedZoom()
         
         if maintain_zoom and previous_media is not None:
             
@@ -3899,7 +4024,15 @@ class MediaContainer( QW.QWidget ):
         
         self._current_zoom_type = self._GetDefaultZoomType()
         
-        self._SetZoom( self._zoom_types_to_zooms [ self._current_zoom_type ] )
+        zoom = self._zoom_types_to_zooms[ self._current_zoom_type ]
+        
+        # a file with its own zoom keeps it, e.g. when the media viewer window is resized
+        if self._saved_zoom is not None:
+            
+            zoom = self._GetZoomWithinMaxDimension( self._saved_zoom )
+            
+        
+        self._SetZoom( zoom )
         
     
     def ZoomSwitch( self, zoom_center_type_override = None ):
