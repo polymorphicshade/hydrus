@@ -935,6 +935,7 @@ class ClientOptions( HydrusSerialisable.SerialisableBase ):
         self._dictionary[ 'frame_locations' ][ 'quick_select_dialog' ] = ( False, False, None, None, ( -1, -1 ), 'center', False, False )
         self._dictionary[ 'frame_locations' ][ 'quick_yesno_dialog' ] = ( False, False, None, None, ( -1, -1 ), 'center', False, False )
         self._dictionary[ 'frame_locations' ][ 'quick_entry_dialog' ] = ( False, False, None, None, ( -1, -1 ), 'center', False, False )
+        self._dictionary[ 'frame_locations' ][ 'audio_effects_frame' ] = ( True, True, None, None, ( -1, -1 ), 'topleft', False, False )
         
         #
         

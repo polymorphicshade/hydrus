@@ -48,3 +48,16 @@ python -m venv --help
 ```bash
 python setup_venv.py 
 ```
+
+### mpv
+Video and audio playback, including the media viewer's audio effects, use mpv. It is not included in this repo.
+
+**Windows:** download [mpv-dev-x86_64-20240818-git-a3baf94.7z](https://sourceforge.net/projects/mpv-player-windows/files/libmpv/mpv-dev-x86_64-20240818-git-a3baf94.7z) (the same build the official Windows release ships), open it, and put `libmpv-2.dll` next to `hydrus_client.py`. Git ignores it there. If you already ran hydrus without it, hydrus switches video, animation, and audio playback over to mpv the next time it starts.
+
+The archive's SHA-256 is `1a7eb75247e06f4acf8e81a0d0bb1e8cacf8fc1a00de402d3cb4f22d19818ce8`. To check it:
+
+```bat
+certutil -hashfile mpv-dev-x86_64-20240818-git-a3baf94.7z SHA256
+```
+
+**Linux:** install libmpv from your package manager, e.g. `sudo apt install libmpv2`.

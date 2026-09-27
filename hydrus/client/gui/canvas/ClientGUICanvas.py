@@ -37,6 +37,7 @@ from hydrus.client.gui.duplicates import ClientGUIDuplicateActions
 from hydrus.client.gui.executables import ClientGUIExecutableActions
 from hydrus.client.gui.media import ClientGUIMediaSimpleActions
 from hydrus.client.gui.media import ClientGUIMediaModalActions
+from hydrus.client.gui.media import ClientGUIMediaAudioEffects
 from hydrus.client.gui.media import ClientGUIMediaControls
 from hydrus.client.gui.media import ClientGUIMediaMenus
 from hydrus.client.gui.metadata import ClientGUIManageTags
@@ -3165,6 +3166,31 @@ class CanvasWithHovers( Canvas ):
         self._cursor_autohide_timer.start( 100 )
         
     
+    def _ShowAudioEffects( self ):
+        
+        for child in self.window().children():
+            
+            if isinstance( child, ClientGUITopLevelWindowsPanels.FrameThatTakesScrollablePanel ) and isinstance( child.GetPanel(), ClientGUIMediaAudioEffects.AudioEffectsPanel ):
+                
+                child.activateWindow()
+                
+                return
+                
+            
+        
+        title = 'audio effects'
+        frame_key = 'audio_effects_frame'
+        
+        frame = ClientGUITopLevelWindowsPanels.FrameThatTakesScrollablePanel( self.window(), title, frame_key )
+        
+        panel = ClientGUIMediaAudioEffects.AudioEffectsPanel( frame, self._media_container )
+        
+        frame.SetPanel( panel )
+        
+        # the effects end with this media viewer, so this window should go with it. the viewer frame may hang around hidden for a bit while it cleans up, so we can't rely on it deleting us
+        self.canvasWithHoversExiting.connect( frame.close )
+        
+    
     def _TryToCloseWindow( self ):
         
         self.window().close()
@@ -4761,6 +4787,8 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
             ClientGUIMenus.AppendSeparator( menu )
             
             AddAudioVolumeMenu( menu, self.CANVAS_TYPE, self._media_container )
+            
+            ClientGUIMenus.AppendMenuItem( menu, 'audio effects', 'Apply audio effects, like a low pass filter or reverb, to what this media viewer plays.', self._ShowAudioEffects )
             
             ClientGUIMenus.AppendSeparator( menu )
             

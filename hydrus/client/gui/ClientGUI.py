@@ -741,6 +741,9 @@ class FrameGUI( CAC.ApplicationCommandProcessorMixin, ClientGUITopLevelWindows.M
                 
                 we_done_it = False
                 
+                # without mpv, new clients default to the Qt Media Player (older ones used the native viewer), and the options dialog does not even offer mpv, so these were never a real choice
+                mpv_fallback_actions = ( CC.MEDIA_VIEWER_ACTION_SHOW_WITH_NATIVE, CC.MEDIA_VIEWER_ACTION_SHOW_WITH_QTMEDIAPLAYER )
+                
                 for general_mime in ( HC.GENERAL_VIDEO, HC.GENERAL_ANIMATION, HC.GENERAL_AUDIO ):
                     
                     if general_mime in original_mimes_to_view_options:
@@ -749,10 +752,18 @@ class FrameGUI( CAC.ApplicationCommandProcessorMixin, ClientGUITopLevelWindows.M
                         
                         ( media_show_action, media_start_paused, media_start_with_embed, preview_show_action, preview_start_paused, preview_start_with_embed, zoom_info ) = view_options
                         
-                        if media_show_action == CC.MEDIA_VIEWER_ACTION_SHOW_WITH_NATIVE:
+                        if media_show_action in mpv_fallback_actions or preview_show_action in mpv_fallback_actions:
                             
-                            media_show_action = CC.MEDIA_VIEWER_ACTION_SHOW_WITH_MPV
-                            preview_show_action = CC.MEDIA_VIEWER_ACTION_SHOW_WITH_MPV
+                            # leave anything else, like 'do not show', alone
+                            if media_show_action in mpv_fallback_actions:
+                                
+                                media_show_action = CC.MEDIA_VIEWER_ACTION_SHOW_WITH_MPV
+                                
+                            
+                            if preview_show_action in mpv_fallback_actions:
+                                
+                                preview_show_action = CC.MEDIA_VIEWER_ACTION_SHOW_WITH_MPV
+                                
                             
                             view_options = ( media_show_action, media_start_paused, media_start_with_embed, preview_show_action, preview_start_paused, preview_start_with_embed, zoom_info )
                             

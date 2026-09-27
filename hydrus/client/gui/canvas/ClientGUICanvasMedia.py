@@ -30,6 +30,7 @@ from hydrus.client.gui.canvas import ClientGUIMPV
 from hydrus.client.gui.canvas import ClientGUIQtMediaPlayer
 from hydrus.client.gui.canvas import ClientGUITransparency
 from hydrus.client.gui.executables import ClientGUIExecutableActions
+from hydrus.client.gui.media import ClientGUIMediaAudioEffects
 from hydrus.client.gui.media import ClientGUIMediaControls
 from hydrus.client.gui.media import ClientGUIMediaVolume
 from hydrus.client.media import ClientMedia
@@ -1561,6 +1562,9 @@ class MediaContainer( QW.QWidget ):
         self._has_per_player_volume = False
         self._per_player_volume = 100
         
+        # these live and die with this container, so they end when the media viewer closes
+        self._audio_effects = ClientGUIMediaAudioEffects.AudioEffects()
+        
         # in a media viewer, the mute button and volume slider only affect this window
         per_player_audio_owner = self if self._canvas_type in CC.CANVAS_MEDIA_VIEWER_TYPES else None
         
@@ -1657,6 +1661,9 @@ class MediaContainer( QW.QWidget ):
                 if isinstance( media_window, ClientGUIMPV.MPVWidget ):
                     
                     mpv_widget = media_window
+                    
+                    # our audio effects belong to us, so the next user of this pooled widget should not hear them
+                    mpv_widget.SetAudioFilterGraph( '' )
                     
                     if CG.client_controller.new_options.GetBoolean( 'mpv_destruction_test' ):
                         
@@ -1858,6 +1865,7 @@ class MediaContainer( QW.QWidget ):
                     
                     self._media_window.SetMute( self._GetCurrentMuteState() )
                     self._media_window.SetVolume( self._GetCurrentVolume() )
+                    self._media_window.SetAudioFilterGraph( self._audio_effects.GetFilterGraph() )
                     
                     self._media_window.SetMedia( self._media, start_paused = self._start_paused )
                     
@@ -2233,6 +2241,15 @@ class MediaContainer( QW.QWidget ):
             
         
     
+    def _UpdateMediaWindowAudioEffects( self ):
+        
+        # only mpv can do audio effects
+        if isinstance( self._media_window, ClientGUIMPV.MPVWidget ):
+            
+            self._media_window.SetAudioFilterGraph( self._audio_effects.GetFilterGraph() )
+            
+        
+    
     def _UpdateMediaWindowMute( self ):
         
         muteable_window_classes = ( ClientGUIMPV.MPVWidget, ClientGUIQtMediaPlayer.QtMediaPlayer )
@@ -2489,6 +2506,11 @@ class MediaContainer( QW.QWidget ):
             QC.QPoint( 0, my_height - animated_scanbar_height ),
             QC.QSize( my_width, animated_scanbar_height )
         )
+        
+    
+    def GetAudioEffects( self ) -> ClientGUIMediaAudioEffects.AudioEffects:
+        
+        return self._audio_effects
         
     
     def GetCurrentMuteState( self ) -> bool:
@@ -2839,6 +2861,13 @@ class MediaContainer( QW.QWidget ):
             
         
         self._SetABLoop( a_ms, b_ms )
+        
+    
+    def SetAudioEffects( self, audio_effects: ClientGUIMediaAudioEffects.AudioEffects ):
+        
+        self._audio_effects = audio_effects
+        
+        self._UpdateMediaWindowAudioEffects()
         
     
     def SetBackgroundColourGenerator( self, background_colour_generator ):

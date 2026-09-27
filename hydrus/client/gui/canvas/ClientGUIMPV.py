@@ -295,6 +295,21 @@ def ConvertABLoopToMPVValues( a_s: float | None, b_s: float | None ):
     return ( f'{a_s:.3f}', f'{b_s:.3f}' )
     
 
+AUDIO_EFFECTS_FILTER_LABEL = '@hydrus_audio_effects'
+
+def ConvertAudioFilterGraphToMPVAFArgs( graph: str ):
+    
+    # our effects go in as one labelled lavfi filter, so we don't stomp on any af line in the user's mpv.conf
+    # adding with a label that is already in the chain replaces that filter in place, and removing a label that isn't there is harmless
+    
+    if graph == '':
+        
+        return ( 'remove', AUDIO_EFFECTS_FILTER_LABEL )
+        
+    
+    return ( 'add', f'{AUDIO_EFFECTS_FILTER_LABEL}:lavfi=[{graph}]' )
+    
+
 class MPVMediator( object ):
     
     def __init__( self, mpv_player: "mpv.MPV" ):
@@ -374,6 +389,11 @@ class MPVMediator( object ):
             
         
         self.SetAudioDevice( mpv_preferred_audio_device )
+        
+    
+    def SetAudioFilterGraph( self, graph: str ):
+        
+        raise NotImplementedError()
         
     
     def SetLogLevel( self, value ):
@@ -510,6 +530,13 @@ class MPVMediatorRude( MPVMediator ):
             
             self._mpv_player.audio_device = name
             
+        
+    
+    def SetAudioFilterGraph( self, graph: str ):
+        
+        ( operation, value ) = ConvertAudioFilterGraphToMPVAFArgs( graph )
+        
+        self._mpv_player.command( 'af', operation, value )
         
     
     def SetPaused( self, value: bool ):
@@ -734,6 +761,13 @@ class MPVMediatorPolite( MPVMediator ):
             
         
     
+    def SetAudioFilterGraph( self, graph: str ):
+        
+        ( operation, value ) = ConvertAudioFilterGraphToMPVAFArgs( graph )
+        
+        self._mpv_player.command_async( 'af', operation, value )
+        
+    
     def SetPaused( self, value: bool ):
         
         # mpv_value = 'yes' if value else 'no'
@@ -781,6 +815,10 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         
         self._last_set_mute_state = False
         self._last_set_volume = 100
+        self._last_set_audio_filter_graph = ''
+        
+        # what we last sent to mpv. None means we don't know, e.g. after an mpv.conf load may have replaced the audio filter chain
+        self._applied_audio_filter_graph: str | None = ''
         
         global LOCALE_IS_SET
         
@@ -877,6 +915,34 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
             
             # fugg, libmpv core probably shut down already. not much we can do but panic
             self._currently_in_media_load_error_state = True
+            
+        
+    
+    def _ApplyAudioFilterGraph( self ):
+        
+        if self._currently_in_media_load_error_state:
+            
+            return
+            
+        
+        graph = self._last_set_audio_filter_graph
+        
+        # changing the filters makes mpv rebuild its audio chain, so don't do it for nothing
+        if graph == self._applied_audio_filter_graph:
+            
+            return
+            
+        
+        try:
+            
+            self._mpv_mediator.SetAudioFilterGraph( graph )
+            
+            self._applied_audio_filter_graph = graph
+            
+        except mpv.ShutdownError:
+            
+            # libmpv core probably shut down
+            pass
             
         
     
@@ -1636,6 +1702,9 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
                     
                     self._player.volume = self._last_set_volume
                     self._player.mute = mute_override or self._last_set_mute_state
+                    
+                    # mpv keeps its audio filters between files, but we may have skipped setting them while in a load error state
+                    self._ApplyAudioFilterGraph()
                     self._mpv_mediator.SetPaused( start_paused )
                     
                     self.update()
@@ -1750,6 +1819,15 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
             
         
     
+    def SetAudioFilterGraph( self, graph: str ):
+        
+        # like volume, the media container decides _what_ audio effects we should have. we just set them
+        
+        self._last_set_audio_filter_graph = graph
+        
+        self._ApplyAudioFilterGraph()
+        
+    
     def UpdateConfAndCoreOptions( self ):
         
         if self._player.handle is None or self._current_mpv_player_state in ( MPV_WIDGET_STATE_CLEANING_UP, MPV_WIDGET_STATE_READY_TO_DESTROY ):
@@ -1818,6 +1896,14 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
                 HydrusData.ShowText( 'MPV could not load its configuration file! This was probably due to an invalid parameter value inside the conf. The error follows:' )
                 
                 HydrusData.ShowException( e )
+                
+            
+            # an af line in the conf replaces the whole audio filter chain, which drops our audio effects, so put them back
+            if self._applied_audio_filter_graph != '':
+                
+                self._applied_audio_filter_graph = None
+                
+                self._ApplyAudioFilterGraph()
                 
             
         else:
