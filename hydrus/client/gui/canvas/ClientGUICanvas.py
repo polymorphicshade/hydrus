@@ -1375,6 +1375,22 @@ class Canvas( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
                 
                 self._media_container.ZoomOut( zoom_center_type_override = ClientGUICanvasMedia.ZOOM_CENTERPOINT_VIEWER_CENTER )
                 
+            elif action == CAC.SIMPLE_ZOOM_IN_ONE_PERCENT:
+                
+                self._media_container.ZoomByPercent( 1 )
+                
+            elif action == CAC.SIMPLE_ZOOM_OUT_ONE_PERCENT:
+                
+                self._media_container.ZoomByPercent( -1 )
+                
+            elif action == CAC.SIMPLE_ZOOM_IN_ONE_PIXEL:
+                
+                self._media_container.ZoomByPixels( 1 )
+                
+            elif action == CAC.SIMPLE_ZOOM_OUT_ONE_PIXEL:
+                
+                self._media_container.ZoomByPixels( -1 )
+                
             elif action == CAC.SIMPLE_RESET_PAN_TO_CENTER:
                 
                 self._media_container.ResetCenterPosition()

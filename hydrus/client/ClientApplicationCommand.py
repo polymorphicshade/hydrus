@@ -218,6 +218,10 @@ SIMPLE_PER_PLAYER_AUDIO_MUTE_FLIP = 205
 SIMPLE_PER_PLAYER_AUDIO_UNMUTE = 206
 SIMPLE_WINDOW_ALWAYS_ON_TOP_WHILE_PLAYING_FLIP = 207
 SIMPLE_SHOW_DETAILED_EMBEDDED_FILE_METADATA_WINDOW = 208
+SIMPLE_ZOOM_IN_ONE_PIXEL = 209
+SIMPLE_ZOOM_OUT_ONE_PIXEL = 210
+SIMPLE_ZOOM_IN_ONE_PERCENT = 211
+SIMPLE_ZOOM_OUT_ONE_PERCENT = 212
 
 REARRANGE_THUMBNAILS_TYPE_FIXED = 0
 REARRANGE_THUMBNAILS_TYPE_COMMAND = 1
@@ -416,6 +420,10 @@ simple_enum_to_str_lookup = {
     SIMPLE_UNDO_RANDOM : 'media navigation: undo random',
     SIMPLE_ZOOM_IN : 'zoom: in',
     SIMPLE_ZOOM_OUT : 'zoom: out',
+    SIMPLE_ZOOM_IN_ONE_PIXEL : 'zoom: in by one pixel',
+    SIMPLE_ZOOM_OUT_ONE_PIXEL : 'zoom: out by one pixel',
+    SIMPLE_ZOOM_IN_ONE_PERCENT : 'zoom: in by one percent',
+    SIMPLE_ZOOM_OUT_ONE_PERCENT : 'zoom: out by one percent',
     SIMPLE_ZOOM_TO_PERCENTAGE : 'zoom: set to percentage',
     SIMPLE_ZOOM_TO_PERCENTAGE_CENTER : 'zoom: set to percentage with forced media viewer center',
     SIMPLE_ZOOM_100_CENTER : 'zoom to 100% with forced media viewer center',

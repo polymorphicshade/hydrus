@@ -1,4 +1,5 @@
 import itertools
+import math
 import typing
 
 from qtpy import QtCore as QC
@@ -1446,6 +1447,9 @@ class MediaContainer( QW.QWidget ):
         
         self._current_zoom = 1.0
         
+        # the sub-pixel part of the last zoom reposition, carried over so small zoom steps stay anchored on the zoom centerpoint
+        self._zoom_position_delta_remainder = ( 0.0, 0.0 )
+        
         self._zoom_types_to_zooms = {
             MEDIA_VIEWER_ZOOM_TYPE_DEFAULT_FOR_FILETYPE : 1.0,
             MEDIA_VIEWER_ZOOM_TYPE_CANVAS : 1.0,
@@ -1648,6 +1652,15 @@ class MediaContainer( QW.QWidget ):
             
             return CG.client_controller.new_options.GetInteger( 'preview_default_zoom_type_override' )
             
+        
+    
+    def _GetFineZoomLimits( self ):
+        
+        possible_zooms = CG.client_controller.new_options.GetMediaZooms()
+        
+        possible_zooms.append( self._zoom_types_to_zooms[ MEDIA_VIEWER_ZOOM_TYPE_CANVAS ] )
+        
+        return ( min( possible_zooms ), max( possible_zooms ) )
         
     
     def _GetMaxZoomDimension( self ):
@@ -2077,7 +2090,15 @@ class MediaContainer( QW.QWidget ):
             zoom_width_delta = my_width - new_my_width
             zoom_height_delta = my_height - new_my_height
             
-            zoom_position_delta = QC.QPoint( int( zoom_width_delta * widths_centerpoint_is_from_pos ), int( zoom_height_delta * heights_centerpoint_is_from_pos ) )
+            ( remainder_x, remainder_y ) = self._zoom_position_delta_remainder
+            
+            float_zoom_position_delta_x = ( zoom_width_delta * widths_centerpoint_is_from_pos ) + remainder_x
+            float_zoom_position_delta_y = ( zoom_height_delta * heights_centerpoint_is_from_pos ) + remainder_y
+            
+            zoom_position_delta = QC.QPoint( round( float_zoom_position_delta_x ), round( float_zoom_position_delta_y ) )
+            
+            # when zooming one pixel at a time, the ideal move is always a fraction of a pixel, so we carry that over or the media drifts away from the centerpoint
+            self._zoom_position_delta_remainder = ( float_zoom_position_delta_x - zoom_position_delta.x(), float_zoom_position_delta_y - zoom_position_delta.y() )
             
         
         #
@@ -2816,6 +2837,123 @@ class MediaContainer( QW.QWidget ):
             
             self._media_window.StopForSlideshow( value )
             
+        
+    
+    def ZoomByPercent( self, percent_delta: int, zoom_center_type_override = None ):
+        
+        if not self.IsZoomable() or percent_delta == 0:
+            
+            return
+            
+        
+        ( min_zoom, max_zoom ) = self._GetFineZoomLimits()
+        
+        current_percent = self._current_zoom * 100
+        
+        # we snap to whole percents, so 37.4% goes to 38% or 37%. the little fudge soaks up float noise like 38.00000000000001
+        if percent_delta > 0:
+            
+            new_zoom = min( ( math.floor( current_percent + 0.0001 ) + percent_delta ) / 100, max_zoom )
+            
+        else:
+            
+            new_zoom = max( ( math.ceil( current_percent - 0.0001 ) + percent_delta ) / 100, min_zoom )
+            
+        
+        if ( new_zoom - self._current_zoom ) * percent_delta <= 0:
+            
+            return
+            
+        
+        self._TryToChangeZoom( new_zoom, zoom_center_type_override = zoom_center_type_override )
+        
+    
+    def ZoomByPixels( self, pixel_delta: int, zoom_center_type_override = None ):
+        
+        if not self.IsZoomable() or pixel_delta == 0:
+            
+            return
+            
+        
+        # this deliberately ignores 'exact zooms only'--the user is explicitly asking for fine control
+        
+        if self._media.GetMime() in HC.AUDIO or not self._media.HasUsefulResolution():
+            
+            # fine zoom makes no sense here, so fall back to the normal steps
+            
+            if pixel_delta > 0:
+                
+                self.ZoomIn( zoom_center_type_override = zoom_center_type_override )
+                
+            else:
+                
+                self.ZoomOut( zoom_center_type_override = zoom_center_type_override )
+                
+            
+            return
+            
+        
+        ( min_zoom, max_zoom ) = self._GetFineZoomLimits()
+        
+        my_dpr = self.devicePixelRatio()
+        
+        ( original_width, original_height ) = self._media.GetResolution()
+        
+        # we step the longer side, so that is the one that changes one pixel at a time
+        step_on_width = original_width >= original_height
+        
+        original_dimension = original_width if step_on_width else original_height
+        
+        def get_dimension( zoom ):
+            
+            size = CalculateMediaContainerSize( self._media, my_dpr, zoom, CC.MEDIA_VIEWER_ACTION_SHOW_WITH_NATIVE )
+            
+            return size.width() if step_on_width else size.height()
+            
+        
+        current_dimension = get_dimension( self._current_zoom )
+        
+        step = 1 if pixel_delta > 0 else -1
+        
+        ( current_raw_width, current_raw_height ) = CalculateMediaSize( self._media, self._current_zoom )
+        
+        raw_dimension = current_raw_width if step_on_width else current_raw_height
+        
+        # with a non-1 dpr, not every raw pixel count is a new on-screen size, so walk the raw pixels until the on-screen size has moved enough
+        while True:
+            
+            raw_dimension += step
+            
+            new_zoom = raw_dimension / original_dimension
+            
+            if step > 0 and new_zoom >= max_zoom:
+                
+                new_zoom = max_zoom
+                
+                break
+                
+            
+            if step < 0 and new_zoom <= min_zoom:
+                
+                new_zoom = min_zoom
+                
+                break
+                
+            
+            new_dimension = get_dimension( new_zoom )
+            
+            if ( new_dimension - current_dimension ) * step >= abs( pixel_delta ):
+                
+                break
+                
+            
+        
+        if ( new_zoom - self._current_zoom ) * step <= 0:
+            
+            return
+            
+        
+        self._TryToChangeZoom( new_zoom, zoom_center_type_override = zoom_center_type_override )
         
     
     def ZoomIn( self, zoom_center_type_override = None ):

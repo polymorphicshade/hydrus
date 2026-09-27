@@ -405,6 +405,10 @@ SHORTCUTS_MEDIA_VIEWER_ACTIONS = [
     CAC.SIMPLE_PAN_HORIZONTAL_CENTER,
     CAC.SIMPLE_ZOOM_IN,
     CAC.SIMPLE_ZOOM_OUT,
+    CAC.SIMPLE_ZOOM_IN_ONE_PERCENT,
+    CAC.SIMPLE_ZOOM_OUT_ONE_PERCENT,
+    CAC.SIMPLE_ZOOM_IN_ONE_PIXEL,
+    CAC.SIMPLE_ZOOM_OUT_ONE_PIXEL,
     CAC.SIMPLE_SWITCH_BETWEEN_100_PERCENT_AND_CANVAS_ZOOM,
     CAC.SIMPLE_SWITCH_BETWEEN_100_PERCENT_AND_CANVAS_FIT_AND_FILL_ZOOM,
     CAC.SIMPLE_SWITCH_BETWEEN_100_PERCENT_AND_CANVAS_FIT_AND_FILL_ZOOM_VIEWER_CENTER,
@@ -837,6 +841,12 @@ def ConvertMouseEventToShortcut( event: QG.QMouseEvent | QG.QWheelEvent ):
             
         
         angle_delta = angle_delta_point.y()
+        
+        # Qt on Windows and X11 turns an alt+wheel into a horizontal scroll, so we undo that
+        if angle_delta == 0 and event.modifiers() & QC.Qt.KeyboardModifier.AltModifier:
+            
+            angle_delta = angle_delta_point.x()
+            
         
         # we used to do QP.WheelEventIsSynthesised here (event.source() == QC.Qt.MouseEventSynthesizedBySystem and event.pointerType() != QG.QPointingDevice.PointerType.Generic), but it seems some normal mice produce a billion small wheel events for smoothscroll gubbins or something, lfg
         # so let's just try this tech for everyone
