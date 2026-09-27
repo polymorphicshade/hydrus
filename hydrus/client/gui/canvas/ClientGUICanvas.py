@@ -170,13 +170,23 @@ def AddAudioVolumeMenu( menu, canvas_type, media_container ):
     
     ClientGUIMenus.AppendSeparator( volume_menu )
     
-    ( mute_option_name, volume_option_name ) = ClientGUIMediaControls.volume_types_to_option_names[ volume_volume_type ]
-    
-    current_volume = CG.client_controller.new_options.GetInteger( volume_option_name )
-    
-    def change_volume_from_slider( v ):
+    if canvas_type in CC.CANVAS_MEDIA_VIEWER_TYPES:
         
-        ClientGUIMediaControls.ChangeVolume( volume_volume_type, v )
+        # each media viewer has its own volume
+        current_volume = media_container.GetCurrentVolume()
+        
+        change_volume_from_slider = media_container.SetPerPlayerVolume
+        
+    else:
+        
+        ( mute_option_name, volume_option_name ) = ClientGUIMediaControls.volume_types_to_option_names[ volume_volume_type ]
+        
+        current_volume = CG.client_controller.new_options.GetInteger( volume_option_name )
+        
+        def change_volume_from_slider( v ):
+            
+            ClientGUIMediaControls.ChangeVolume( volume_volume_type, v )
+            
         
     
     ClientGUIMenus.AppendMenuSlider(

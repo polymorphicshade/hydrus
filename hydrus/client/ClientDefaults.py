@@ -431,6 +431,12 @@ def GetDefaultShortcuts():
         CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_MOVE_ANIMATION_TO_NEXT_FRAME )
     )
     
+    # this overrides the 'global' set's ctrl+g in media viewers, so there it mutes just the focused window
+    media_viewer.SetCommand(
+        ClientGUIShortcuts.Shortcut( ClientGUIShortcuts.SHORTCUT_TYPE_KEYBOARD_CHARACTER, ord( 'G' ), ClientGUIShortcuts.SHORTCUT_PRESS_TYPE_PRESS, [ ClientGUIShortcuts.SHORTCUT_MODIFIER_CTRL ] ),
+        CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_PER_PLAYER_AUDIO_MUTE_FLIP )
+    )
+    
     media_viewer.SetCommand(
         ClientGUIShortcuts.Shortcut( ClientGUIShortcuts.SHORTCUT_TYPE_KEYBOARD_CHARACTER, ord( 'A' ), ClientGUIShortcuts.SHORTCUT_PRESS_TYPE_PRESS, [] ),
         CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_MEDIA_SET_LOOP_POINT_A )

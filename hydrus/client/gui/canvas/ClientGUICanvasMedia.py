@@ -1471,6 +1471,8 @@ class MediaContainer( QW.QWidget ):
     
     zoomChanged = QC.Signal( int, float )
     abLoopChanged = QC.Signal( object, object )
+    muteStateChanged = QC.Signal()
+    volumeChanged = QC.Signal()
     
     def __init__( self, parent, canvas, canvas_type, background_colour_generator, additional_event_filter: QC.QObject ):
         
@@ -1553,11 +1555,17 @@ class MediaContainer( QW.QWidget ):
         # We need this to force-fill some blanks at times
         self.setAutoFillBackground( True )
         
-        self._animation_bar = AnimationBar( self._controls_bar )
-        self._volume_control = ClientGUIMediaControls.VolumeControl( self._controls_bar, self._canvas_type, direction = 'up' )
-        
         self._has_per_player_mute_state = False
         self._per_player_mute_state = False
+        
+        self._has_per_player_volume = False
+        self._per_player_volume = 100
+        
+        # in a media viewer, the mute button and volume slider only affect this window
+        per_player_audio_owner = self if self._canvas_type in CC.CANVAS_MEDIA_VIEWER_TYPES else None
+        
+        self._animation_bar = AnimationBar( self._controls_bar )
+        self._volume_control = ClientGUIMediaControls.VolumeControl( self._controls_bar, self._canvas_type, direction = 'up', per_player_audio_owner = per_player_audio_owner )
         
         self._volume_control.setCursor( QC.Qt.CursorShape.ArrowCursor )
         
@@ -1582,6 +1590,7 @@ class MediaContainer( QW.QWidget ):
         self.hide()
         
         CG.client_controller.sub( self, 'NotifyAudioMuteOptionsChanged', 'notify_new_audio_mute_options' )
+        CG.client_controller.sub( self, 'NotifyAudioVolumeOptionsChanged', 'new_audio_volume' )
         CG.client_controller.sub( self, 'Pause', 'pause_all_media' )
         
     
@@ -1696,6 +1705,18 @@ class MediaContainer( QW.QWidget ):
         else:
             
             return ClientGUIMediaVolume.GetCorrectCurrentMute( self._canvas_type )
+            
+        
+    
+    def _GetCurrentVolume( self ) -> int:
+        
+        if self._has_per_player_volume:
+            
+            return self._per_player_volume
+            
+        else:
+            
+            return ClientGUIMediaVolume.GetCorrectCurrentVolume( self._canvas_type )
             
         
     
@@ -1836,6 +1857,7 @@ class MediaContainer( QW.QWidget ):
                     self._media_window.SetCanvasType( self._canvas_type )
                     
                     self._media_window.SetMute( self._GetCurrentMuteState() )
+                    self._media_window.SetVolume( self._GetCurrentVolume() )
                     
                     self._media_window.SetMedia( self._media, start_paused = self._start_paused )
                     
@@ -1847,6 +1869,7 @@ class MediaContainer( QW.QWidget ):
                     self._media_window = ClientGUIQtMediaPlayer.QtMediaPlayer( self, self._canvas_type, self.parentWidget(), self._background_colour_generator )
                     
                     self._media_window.SetMute( self._GetCurrentMuteState() )
+                    self._media_window.SetVolume( self._GetCurrentVolume() )
                     
                     self._media_window.InstallMouseMoveCatcher( self._qt_media_player_graphics_view_mouse_move_catcher )
                     
@@ -2222,6 +2245,16 @@ class MediaContainer( QW.QWidget ):
             
         
     
+    def _UpdateMediaWindowVolume( self ):
+        
+        audio_window_classes = ( ClientGUIMPV.MPVWidget, ClientGUIQtMediaPlayer.QtMediaPlayer )
+        
+        if isinstance( self._media_window, audio_window_classes ):
+            
+            self._media_window.SetVolume( self._GetCurrentVolume() )
+            
+        
+    
     def _UpdateWindowAlwaysOnTop( self, wait_for_double_click = False ):
         
         if not self._tie_media_window_to_pauseplay_state:
@@ -2395,14 +2428,8 @@ class MediaContainer( QW.QWidget ):
     
     def FlipPerPlayerMuteState( self ):
         
-        if self._has_per_player_mute_state:
-            
-            self.SetPerPlayerMuteState( not self._per_player_mute_state )
-            
-        else:
-            
-            self.SetPerPlayerMuteState( True )
-            
+        # flip what the user is actually hearing, which may be a global/media viewer mute if we have no override yet
+        self.SetPerPlayerMuteState( not self._GetCurrentMuteState() )
         
     
     def GetCurrentMediaPlayerLabel( self ) -> str:
@@ -2462,6 +2489,16 @@ class MediaContainer( QW.QWidget ):
             QC.QPoint( 0, my_height - animated_scanbar_height ),
             QC.QSize( my_width, animated_scanbar_height )
         )
+        
+    
+    def GetCurrentMuteState( self ) -> bool:
+        
+        return self._GetCurrentMuteState()
+        
+    
+    def GetCurrentVolume( self ) -> int:
+        
+        return self._GetCurrentVolume()
         
     
     def GetPerPlayerMuteState( self ):
@@ -2626,6 +2663,18 @@ class MediaContainer( QW.QWidget ):
         if not self._has_per_player_mute_state:
             
             self._UpdateMediaWindowMute()
+            
+            self.muteStateChanged.emit()
+            
+        
+    
+    def NotifyAudioVolumeOptionsChanged( self ):
+        
+        if not self._has_per_player_volume:
+            
+            self._UpdateMediaWindowVolume()
+            
+            self.volumeChanged.emit()
             
         
     
@@ -2905,6 +2954,25 @@ class MediaContainer( QW.QWidget ):
             
         
         self._UpdateMediaWindowMute()
+        
+        self.muteStateChanged.emit()
+        
+    
+    def SetPerPlayerVolume( self, volume: int | None ):
+        
+        if volume is None:
+            
+            self._has_per_player_volume = False
+            
+        else:
+            
+            self._has_per_player_volume = True
+            self._per_player_volume = volume
+            
+        
+        self._UpdateMediaWindowVolume()
+        
+        self.volumeChanged.emit()
         
     
     def SetTieMediaWindowOnTopToPausePlayState( self, tie_media_window_to_pauseplay_state: bool ):

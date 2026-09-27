@@ -23,7 +23,6 @@ from hydrus.client.gui import ClientGUIDialogsMessage
 from hydrus.client.gui import ClientGUIShortcuts
 from hydrus.client.gui import QtPorting as QP
 from hydrus.client.gui.media import ClientGUIMediaControls
-from hydrus.client.gui.media import ClientGUIMediaVolume
 from hydrus.client.media import ClientMediaSingle
 
 MPV_IS_AVAILABLE = True
@@ -781,6 +780,7 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         self._cleanup_start_time = 0
         
         self._last_set_mute_state = False
+        self._last_set_volume = 100
         
         global LOCALE_IS_SET
         
@@ -848,7 +848,6 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         
         self.destroyed.connect( self._player.terminate )
         
-        CG.client_controller.sub( self, 'UpdateAudioVolume', 'new_audio_volume' )
         CG.client_controller.sub( self, 'UpdateConfAndCoreOptions', 'notify_new_options' )
         CG.client_controller.sub( self, 'SetLogLevel', 'set_mpv_log_level' )
         
@@ -1635,7 +1634,7 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
                         HydrusData.ShowException( e )
                         
                     
-                    self._player.volume = ClientGUIMediaVolume.GetCorrectCurrentVolume( self._canvas_type )
+                    self._player.volume = self._last_set_volume
                     self._player.mute = mute_override or self._last_set_mute_state
                     self._mpv_mediator.SetPaused( start_paused )
                     
@@ -1728,10 +1727,11 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         self._player.mute = mute
         
     
-    def UpdateAudioVolume( self ):
+    def SetVolume( self, volume: int ):
         
-        # TODO: like we did with mute, move the responsibility for _what_ volume to set up to the mediacontainer
-        # this guy should only accept 'ok, 43%'
+        # like mute, the media container decides _what_ volume we should be. we just set it
+        
+        self._last_set_volume = volume
         
         if self._currently_in_media_load_error_state:
             
@@ -1741,7 +1741,7 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         try:
             
             # TODO: Move this to the mediator
-            self._player.volume = ClientGUIMediaVolume.GetCorrectCurrentVolume( self._canvas_type )
+            self._player.volume = volume
             
         except mpv.ShutdownError:
             

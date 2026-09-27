@@ -1,6 +1,7 @@
 from qtpy import QtCore as QC
 from qtpy import QtWidgets as QW
 
+from hydrus.client import ClientApplicationCommand as CAC
 from hydrus.client import ClientConstants as CC
 from hydrus.client import ClientGlobals as CG
 from hydrus.client.gui import ClientGUIFunctions
@@ -87,17 +88,62 @@ class AudioMuteButton( ClientGUICommon.IconButton ):
         
     
 
+class PerPlayerAudioMuteButton( ClientGUICommon.IconButton ):
+    
+    def __init__( self, parent, mute_owner ):
+        
+        # the mute_owner is a media container. it has GetCurrentMuteState, FlipPerPlayerMuteState, and a muteStateChanged signal
+        self._mute_owner = mute_owner
+        
+        icon = self._GetCorrectIcon()
+        
+        super().__init__( parent, icon, self._mute_owner.FlipPerPlayerMuteState )
+        
+        self.SetToolTipWithShortcuts( 'mute/unmute just this media viewer', CAC.SIMPLE_PER_PLAYER_AUDIO_MUTE_FLIP )
+        
+        self._mute_owner.muteStateChanged.connect( self.NotifyNewMuteState )
+        
+    
+    def _GetCorrectIcon( self ):
+        
+        if self._mute_owner.GetCurrentMuteState():
+            
+            return CC.global_icons().mute
+            
+        else:
+            
+            return CC.global_icons().sound
+            
+        
+    
+    def NotifyNewMuteState( self ):
+        
+        self.SetIconSmart( self._GetCorrectIcon() )
+        
+    
+
 class VolumeControl( QW.QWidget ):
     
-    def __init__( self, parent, canvas_type, direction = 'down' ):
+    def __init__( self, parent, canvas_type, direction = 'down', per_player_audio_owner = None ):
+        
+        # per_player_audio_owner is a media container. if we have one, our mute and volume only affect that player
         
         super().__init__( parent )
         
         self._canvas_type = canvas_type
         
-        self._global_mute = AudioMuteButton( self, AUDIO_GLOBAL )
+        if per_player_audio_owner is None:
+            
+            self._global_mute = AudioMuteButton( self, AUDIO_GLOBAL )
+            
+            self._global_mute.setToolTip( ClientGUIFunctions.WrapToolTip( 'Global mute/unmute' ) )
+            
+        else:
+            
+            # a media viewer window mutes itself and leaves the other windows alone
+            self._global_mute = PerPlayerAudioMuteButton( self, per_player_audio_owner )
+            
         
-        self._global_mute.setToolTip( ClientGUIFunctions.WrapToolTip( 'Global mute/unmute' ) )
         self._global_mute.setFocusPolicy( QC.Qt.FocusPolicy.NoFocus )
         
         vbox = QP.VBoxLayout( margin = 0, spacing = 0 )
@@ -109,7 +155,7 @@ class VolumeControl( QW.QWidget ):
         # TODO: same as with much of the media controls mess, this needs to be plugged into the layout system properly
         # we should have a custom layout here that specifies where the slider should go and do raise/show/hide while still reporting a nice small sizeHint
         
-        self._popup_window = self._PopupWindow( self, canvas_type, direction = direction )
+        self._popup_window = self._PopupWindow( self, canvas_type, direction = direction, per_player_audio_owner = per_player_audio_owner )
         
     
     def enterEvent( self, event ):
@@ -170,13 +216,15 @@ class VolumeControl( QW.QWidget ):
     
     class _PopupWindow( QW.QFrame ):
         
-        def __init__( self, parent, canvas_type, direction = 'down' ):
+        def __init__( self, parent, canvas_type, direction = 'down', per_player_audio_owner = None ):
             
             super().__init__( parent )
             
             self._canvas_type = canvas_type
             
             self._direction = direction
+            
+            self._per_player_audio_owner = per_player_audio_owner
             
             self.setWindowFlags( QC.Qt.WindowType.Tool | QC.Qt.WindowType.FramelessWindowHint )
             
@@ -193,32 +241,43 @@ class VolumeControl( QW.QWidget ):
                 volume_type = AUDIO_PREVIEW
                 
             
-            self._specific_mute = AudioMuteButton( self, volume_type )
-            
-            self._specific_mute.setToolTip( ClientGUIFunctions.WrapToolTip( 'Mute/unmute: {}'.format( CC.canvas_type_str_lookup[ self._canvas_type ] ) ) )
-            
-            if CG.client_controller.new_options.GetBoolean( option_to_use ):
+            if self._per_player_audio_owner is None:
                 
-                slider_volume_type = volume_type
+                self._specific_mute = AudioMuteButton( self, volume_type )
+                
+                self._specific_mute.setToolTip( ClientGUIFunctions.WrapToolTip( 'Mute/unmute: {}'.format( CC.canvas_type_str_lookup[ self._canvas_type ] ) ) )
+                
+                if CG.client_controller.new_options.GetBoolean( option_to_use ):
+                    
+                    slider_volume_type = volume_type
+                    
+                else:
+                    
+                    slider_volume_type = AUDIO_GLOBAL
+                    
+                
+                self._volume = VolumeSlider( self, slider_volume_type )
                 
             else:
                 
-                slider_volume_type = AUDIO_GLOBAL
+                # the specific mute button mutes every window of this canvas type, so a window that mutes itself does not offer it here
+                self._specific_mute = None
                 
-            
-            self._volume = VolumeSlider( self, slider_volume_type )
+                self._volume = PerPlayerVolumeSlider( self, self._per_player_audio_owner )
+                
             
             vbox = QP.VBoxLayout()
             
-            if self._direction == 'down':
+            widgets = [ self._volume ] if self._specific_mute is None else [ self._specific_mute, self._volume ]
+            
+            if self._direction != 'down':
                 
-                QP.AddToLayout( vbox, self._specific_mute, CC.FLAGS_CENTER )
-                QP.AddToLayout( vbox, self._volume, CC.FLAGS_CENTER )
+                widgets.reverse()
                 
-            else:
+            
+            for widget in widgets:
                 
-                QP.AddToLayout( vbox, self._volume, CC.FLAGS_CENTER )
-                QP.AddToLayout( vbox, self._specific_mute, CC.FLAGS_CENTER )
+                QP.AddToLayout( vbox, widget, CC.FLAGS_CENTER )
                 
             
             #vbox.setAlignment( self._volume, QC.Qt.AlignmentFlag.AlignHCenter )
@@ -301,6 +360,12 @@ class VolumeControl( QW.QWidget ):
         
         def NotifyNewOptions( self ):
             
+            if self._per_player_audio_owner is not None:
+                
+                # our slider follows the player, not the options
+                return
+                
+            
             if self._canvas_type in CC.CANVAS_MEDIA_VIEWER_TYPES:
                 
                 option_to_use = 'media_viewer_uses_its_own_audio_volume'
@@ -328,6 +393,56 @@ class VolumeControl( QW.QWidget ):
             
         
     
+def SetUpVolumeSliderLook( slider: QW.QSlider ):
+    
+    slider.setOrientation( QC.Qt.Orientation.Vertical )
+    slider.setTickInterval( 1 )
+    slider.setTickPosition( QW.QSlider.TickPosition.TicksBothSides )
+    slider.setRange( 0, 100 )
+    
+
+class PerPlayerVolumeSlider( QW.QSlider ):
+    
+    def __init__( self, parent, volume_owner ):
+        
+        # the volume_owner is a media container. it has GetCurrentVolume, SetPerPlayerVolume, and a volumeChanged signal
+        
+        super().__init__( parent )
+        
+        self._volume_owner = volume_owner
+        
+        SetUpVolumeSliderLook( self )
+        
+        self.setValue( self._volume_owner.GetCurrentVolume() )
+        
+        self.setToolTip( ClientGUIFunctions.WrapToolTip( 'volume for just this media viewer' ) )
+        
+        self.valueChanged.connect( self._VolumeSliderMoved )
+        
+        self._volume_owner.volumeChanged.connect( self.NotifyNewVolume )
+        
+    
+    def _VolumeSliderMoved( self ):
+        
+        self._volume_owner.SetPerPlayerVolume( self.value() )
+        
+    
+    def NotifyNewVolume( self ):
+        
+        volume = self._volume_owner.GetCurrentVolume()
+        
+        if volume != self.value():
+            
+            # this came from elsewhere, so don't echo it back as a user change
+            self.blockSignals( True )
+            
+            self.setValue( volume )
+            
+            self.blockSignals( False )
+            
+        
+    
+
 class VolumeSlider( QW.QSlider ):
     
     def __init__( self, parent, volume_type ):
@@ -336,10 +451,7 @@ class VolumeSlider( QW.QSlider ):
         
         self._volume_type = volume_type
         
-        self.setOrientation( QC.Qt.Orientation.Vertical )
-        self.setTickInterval( 1 )
-        self.setTickPosition( QW.QSlider.TickPosition.TicksBothSides )
-        self.setRange( 0, 100 )
+        SetUpVolumeSliderLook( self )
         
         volume = self._GetCorrectValue()
         

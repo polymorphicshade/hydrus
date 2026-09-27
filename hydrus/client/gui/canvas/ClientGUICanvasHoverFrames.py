@@ -971,7 +971,7 @@ class CanvasHoverFrameTop( CanvasHoverFrame ):
         zoom_options.setToolTip( ClientGUIFunctions.WrapToolTip( 'advanced zoom' ) )
         zoom_options.setFocusPolicy( QC.Qt.FocusPolicy.TabFocus )
         
-        self._volume_control = ClientGUIMediaControls.VolumeControl( self, CC.CANVAS_MEDIA_VIEWER )
+        self._volume_control = ClientGUIMediaControls.VolumeControl( self, CC.CANVAS_MEDIA_VIEWER, per_player_audio_owner = self._my_canvas.GetMediaContainer() )
         
         if not ClientGUIMPV.MPV_IS_AVAILABLE:
             

@@ -41,7 +41,6 @@ from hydrus.client.gui import ClientGUIMenus
 from hydrus.client.gui import ClientGUIShortcuts
 from hydrus.client.gui import QtPorting as QP
 from hydrus.client.gui.canvas import ClientGUITransparency
-from hydrus.client.gui.media import ClientGUIMediaVolume
 from hydrus.client.media import ClientMediaSingle
 
 if typing.TYPE_CHECKING:
@@ -145,6 +144,7 @@ class QtMediaPlayer( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         self._my_audio_image_label.setAlignment( QC.Qt.AlignmentFlag.AlignCenter )
         
         self._last_set_mute_state = False
+        self._last_set_volume = 100
         
         # 2026-01: this is the first time hydev has done GraphicsView stuff, and thus all this was divined via haruspex
         # 2026-04: adding transparency checkerboard. the Gods are with us, the stars align in the Weave of Providence
@@ -211,7 +211,6 @@ class QtMediaPlayer( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         
         self._my_shortcut_handler = ClientGUIShortcuts.ShortcutsHandler( self, self, [ shortcut_set ], catch_mouse = True )
         
-        CG.client_controller.sub( self, 'UpdateAudioVolume', 'new_audio_volume' )
         CG.client_controller.sub( self, 'UpdateFromOptions', 'notify_new_options' )
         CG.client_controller.sub( self, 'UpdateFromTransparencyOptions', 'new_transparency_options' )
         
@@ -375,6 +374,13 @@ class QtMediaPlayer( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
             except Exception as e:
                 
                 HydrusData.Print( f'Qt was not happy about me setting the audio device "{self._my_audio_output}" to QMediaPlayer. Base error was "{str(e)}". Please tell hydev.' )
+                
+            
+            # a fresh output starts at full volume and unmuted, so bring it in line with what we were told
+            if self._my_audio_output is not None:
+                
+                self._my_audio_output.setVolume( self._last_set_volume / 100 )
+                self._my_audio_output.setMuted( self._last_set_mute_state )
                 
             
         
@@ -773,7 +779,7 @@ class QtMediaPlayer( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         
         if self._my_audio_output is not None:
             
-            self._my_audio_output.setVolume( ClientGUIMediaVolume.GetCorrectCurrentVolume( self._canvas_type ) / 100 )
+            self._my_audio_output.setVolume( self._last_set_volume / 100 )
             self._my_audio_output.setMuted( self._last_set_mute_state )
             
         
@@ -814,14 +820,15 @@ class QtMediaPlayer( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
             
         
     
-    def UpdateAudioVolume( self ):
+    def SetVolume( self, volume: int ):
         
-        # TODO: like we did with mute, move the responsibility for _what_ volume to set up to the mediacontainer
-        # this guy should only accept 'ok, 43%'
+        # like mute, the media container decides _what_ volume we should be. we just set it
+        
+        self._last_set_volume = volume
         
         if self._my_audio_output is not None:
             
-            self._my_audio_output.setVolume( ClientGUIMediaVolume.GetCorrectCurrentVolume( self._canvas_type ) / 100 )
+            self._my_audio_output.setVolume( volume / 100 )
             
         
     
