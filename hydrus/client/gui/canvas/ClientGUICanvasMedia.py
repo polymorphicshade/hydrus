@@ -2802,7 +2802,7 @@ class MediaContainer( QW.QWidget ):
                     
                     self._media_window.GotoFrame( current_frame_index )
                     
-                elif isinstance( self._media_window, ClientGUIMPV.MPVWidget ):
+                elif isinstance( self._media_window, ( ClientGUIMPV.MPVWidget, ClientGUIQtMediaPlayer.QtMediaPlayer ) ):
                     
                     self._media_window.GotoPreviousOrNextFrame( direction )
                     

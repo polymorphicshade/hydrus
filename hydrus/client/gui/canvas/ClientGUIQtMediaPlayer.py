@@ -48,6 +48,9 @@ if typing.TYPE_CHECKING:
     from hydrus.client.gui.canvas import ClientGUICanvas
     
 
+# when we don't know how many frames a video has, we step as if it were 30fps
+FALLBACK_FRAME_DURATION_MS = 1000 / 30
+
 def GetAvailableAudioDevices() -> "list[ QM.QAudioDevice ]":
     
     if not QT_MULTIMEDIA_IS_AVAILABLE:
@@ -563,6 +566,55 @@ class QtMediaPlayer( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
             
         
         return ( current_frame_index, current_timestamp_ms, paused, buffer_indices )
+        
+    
+    def GotoPreviousOrNextFrame( self, direction ):
+        
+        if self._media is None:
+            
+            return
+            
+        
+        duration_ms = self._media.GetDurationMS()
+        num_frames = self._media.GetNumFrames()
+        
+        if duration_ms is None or duration_ms <= 0:
+            
+            return
+            
+        
+        # Qt has no frame-step, so we pause and seek by one average frame length. this is fine for constant frame rate video, and close enough otherwise
+        if num_frames is None or num_frames < 2:
+            
+            frame_duration_ms = FALLBACK_FRAME_DURATION_MS
+            
+        else:
+            
+            frame_duration_ms = duration_ms / num_frames
+            
+        
+        self.Pause()
+        
+        current_frame_index = int( self._media_player.position() / frame_duration_ms )
+        
+        new_frame_index = current_frame_index + direction
+        
+        last_frame_index = max( 0, int( ( duration_ms - 1 ) / frame_duration_ms ) )
+        
+        # like the native viewer, wrap around the ends
+        if new_frame_index < 0:
+            
+            new_frame_index = last_frame_index
+            
+        elif new_frame_index > last_frame_index:
+            
+            new_frame_index = 0
+            
+        
+        # aim for the middle of the frame, so rounding does not land us on its neighbour
+        new_position_ms = int( ( new_frame_index + 0.5 ) * frame_duration_ms )
+        
+        self._media_player.setPosition( min( new_position_ms, duration_ms - 1 ) )
         
     
     def HasPlayedOnceThrough( self ):

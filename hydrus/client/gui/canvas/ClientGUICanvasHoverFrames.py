@@ -919,6 +919,22 @@ class CanvasHoverFrameTop( CanvasHoverFrame ):
         QP.AddToLayout( self._top_center_hbox, self._undelete_button, CC.FLAGS_CENTER_PERPENDICULAR )
         QP.AddToLayout( self._top_center_hbox, self._show_embedded_metadata_button, CC.FLAGS_CENTER_PERPENDICULAR )
         
+        # frame-by-frame
+        
+        self._previous_frame_button = ClientGUICommon.BetterButton( self, '◀|', self.sendApplicationCommand.emit, CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_MOVE_ANIMATION_TO_PREVIOUS_FRAME ) )
+        self._next_frame_button = ClientGUICommon.BetterButton( self, '|▶', self.sendApplicationCommand.emit, CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_MOVE_ANIMATION_TO_NEXT_FRAME ) )
+        
+        self._previous_frame_button.SetToolTipWithShortcuts( 'pause and go back one frame', CAC.SIMPLE_MOVE_ANIMATION_TO_PREVIOUS_FRAME )
+        self._next_frame_button.SetToolTipWithShortcuts( 'pause and go forward one frame', CAC.SIMPLE_MOVE_ANIMATION_TO_NEXT_FRAME )
+        
+        for button in ( self._previous_frame_button, self._next_frame_button ):
+            
+            button.setFixedWidth( ClientGUIFunctions.ConvertTextToPixelWidth( button, 4 ) )
+            button.setFocusPolicy( QC.Qt.FocusPolicy.TabFocus )
+            
+            QP.AddToLayout( self._top_center_hbox, button, CC.FLAGS_CENTER_PERPENDICULAR )
+            
+        
         # a-b repeat
         
         self._ab_loop_a_ms = None
@@ -1119,6 +1135,14 @@ class CanvasHoverFrameTop( CanvasHoverFrame ):
             for button in ( self._ab_loop_a_button, self._ab_loop_b_button, self._ab_loop_clear_button ):
                 
                 button.setVisible( has_playback )
+                
+            
+            # audio has no frames to step through
+            has_frames = has_playback and self._current_media.GetMime() not in HC.AUDIO
+            
+            for button in ( self._previous_frame_button, self._next_frame_button ):
+                
+                button.setVisible( has_frames )
                 
             
         
