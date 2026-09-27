@@ -185,6 +185,7 @@ class Predicate( Enum ):
     NUM_NOTES = auto()
     HAS_NOTE_NAME = auto()
     NO_NOTE_NAME = auto()
+    COUNTER = auto()
     RATING_SPECIFIC_NUMERICAL = auto()
     RATING_SPECIFIC_LIKE_DISLIKE = auto()
     RATING_SPECIFIC_INCDEC = auto()
@@ -219,6 +220,7 @@ class Value( Enum ):
     NAMESPACE_AND_NUM_TAGS = auto()
     TAG_ADVANCED_TAG = auto() # ': "tag"'
     RATING_ADVANCED = auto() # complicated, but usually something like 'all inc/dec ratings rated'
+    COUNTER_NAME_AND_NUMBER_TEST = auto() # 'tally > 2'
 
 
 # Possible operator formats
@@ -344,6 +346,8 @@ SYSTEM_PREDICATES = {
     'num(ber)?( of)? notes?': (Predicate.NUM_NOTES, Operators.RELATIONAL_EXACT, Value.NATURAL, None),
     '(has (a )?)?note (with name|named)': (Predicate.HAS_NOTE_NAME, None, Value.ANY_STRING, None),
     '((has )?no|does not have( a)?|doesn\'t have( a)?) note (with name|named)': (Predicate.NO_NOTE_NAME, None, Value.ANY_STRING, None),
+    # before the ratings, which would otherwise read 'counter' as 'count'
+    'counter': (Predicate.COUNTER, None, Value.COUNTER_NAME_AND_NUMBER_TEST, None ),
     'has( a)? (rating|count)( for)?': (Predicate.HAS_RATING, None, Value.ANY_STRING, None ),
     '((has )?no|does not have( a)?|doesn\'t have( a)?) (rating|count)( for)?': (Predicate.NO_RATING, None, Value.ANY_STRING, None ),
     r'(rating|count)( for)?(?=.+?\d+/\d+$)': (Predicate.RATING_SPECIFIC_NUMERICAL, Operators.RELATIONAL_FOR_RATING_SERVICE, Value.RATING_SERVICE_NAME_AND_NUMERICAL_VALUE, None ),
@@ -955,6 +959,47 @@ def parse_value( parse_result: SystemPredParseResult, spec ):
             
         
         raise ValueError( "Invalid value, expected an inc/dec rating" )
+        
+    elif spec == Value.COUNTER_NAME_AND_NUMBER_TEST:
+        
+        # 'tally > 2', 'times watched >= 10', '"my counter" = 0'
+        operators_to_number_test_operators = {
+            '<=' : UNICODE_LESS_THAN_OR_EQUAL_TO,
+            '>=' : UNICODE_GREATER_THAN_OR_EQUAL_TO,
+            '!=' : UNICODE_NOT_EQUAL,
+            '==' : '=',
+            UNICODE_LESS_THAN_OR_EQUAL_TO : UNICODE_LESS_THAN_OR_EQUAL_TO,
+            UNICODE_GREATER_THAN_OR_EQUAL_TO : UNICODE_GREATER_THAN_OR_EQUAL_TO,
+            UNICODE_NOT_EQUAL : UNICODE_NOT_EQUAL,
+            '<' : '<',
+            '>' : '>',
+            '=' : '='
+        }
+        
+        # the longest operators first, so '>=' is not read as '>' then '='
+        operators_regex = '|'.join( re.escape( operator ) for operator in sorted( operators_to_number_test_operators.keys(), key = len, reverse = True ) )
+        
+        match = re.match( r'(?P<name>.+?)\s*(?P<operator>' + operators_regex + r')\s*(?P<num>[0-9,]+)\s*$', string )
+        
+        if match:
+            
+            name = match[ 'name' ].strip()
+            
+            if len( name ) >= 2 and name.startswith( '"' ) and name.endswith( '"' ):
+                
+                name = name[ 1 : -1 ]
+                
+            
+            operator = operators_to_number_test_operators[ match[ 'operator' ] ]
+            num = int( match[ 'num' ].replace( ',', '' ) )
+            
+            parse_result.text_remainder = ''
+            parse_result.value = ( name, operator, num )
+            
+            return
+            
+        
+        raise ValueError( 'Invalid value, expected a counter name, then something like "> 2"' )
         
     elif spec == Value.NAMESPACE_AND_NUM_TAGS:
         

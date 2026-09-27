@@ -26,6 +26,7 @@ from hydrus.client.search import ClientSearchTagContext
 
 FLESH_OUT_SYSTEM_PRED_TYPES = {
     ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_NUM_TAGS,
+    ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_COUNTER,
     ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_LIMIT,
     ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_SIZE,
     ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_FILE_PROPERTIES,
@@ -356,6 +357,10 @@ class EditPredicatesPanel( ClientGUIScrolledPanels.EditPanel ):
             elif predicate_type == ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_HAS_NOTE_NAME:
                 
                 self._editable_pred_panels.append( ClientGUIPredicatesSingle.PanelPredicateSystemHasNoteName( self, predicate ) )
+                
+            elif predicate_type == ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_COUNTER:
+                
+                self._editable_pred_panels.append( ClientGUIPredicatesSingle.PanelPredicateSystemCounter( self, predicate ) )
                 
             elif predicate_type == ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_NUM_WORDS:
                 
@@ -832,6 +837,12 @@ class FleshOutPredicatePanel( ClientGUIScrolledPanels.EditPanel ):
         elif predicate_type == ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_NUM_WORDS:
             
             editable_pred_panels.append( self._PredOKPanel( self, ClientGUIPredicatesSingle.PanelPredicateSystemNumWords, predicate ) )
+            
+        elif predicate_type == ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_COUNTER:
+            
+            static_pred_buttons.extend( ( ClientGUIPredicatesSingle.StaticSystemPredicateButton( self, ( ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_COUNTER, ( counter.name, ClientNumberTest.NumberTest.STATICCreateFromCharacters( '>', 0 ) ) ), ), show_remove_button = False ) for counter in CG.client_controller.new_options.GetCounters() ) )
+            
+            editable_pred_panels.append( self._PredOKPanel( self, ClientGUIPredicatesSingle.PanelPredicateSystemCounter, predicate ) )
             
         elif predicate_type == ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_RATING:
             

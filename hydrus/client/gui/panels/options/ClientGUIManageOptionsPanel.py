@@ -19,6 +19,7 @@ from hydrus.client.gui.panels.options import ClientGUIOptionsPanelBase
 from hydrus.client.gui.panels.options import ColoursPanel
 from hydrus.client.gui.panels.options import CommandPalettePanel
 from hydrus.client.gui.panels.options import ConnectionPanel
+from hydrus.client.gui.panels.options import CountersPanel
 from hydrus.client.gui.panels.options import DownloadingPanel
 from hydrus.client.gui.panels.options import DuplicatesPanel
 from hydrus.client.gui.panels.options import ExportingPanel
@@ -80,6 +81,7 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
         self._listbook.AddPage( 'command palette', CommandPalettePanel.CommandPalettePanel( self._listbook, self._new_options ) )
         self._listbook.AddPage( 'colours', ColoursPanel.ColoursPanel( self._listbook ) )
         self._listbook.AddPage( 'connection', ConnectionPanel.ConnectionPanel( self._listbook ) )
+        self._listbook.AddPage( 'counters', CountersPanel.CountersPanel( self._listbook, self._new_options ) )
         self._listbook.AddPage( 'downloading', DownloadingPanel.DownloadingPanel( self._listbook, self._new_options ) )
         self._listbook.AddPage( 'duplicates', DuplicatesPanel.DuplicatesPanel( self._listbook, self._new_options ) )
         self._listbook.AddPage( 'exporting', ExportingPanel.ExportingPanel( self._listbook ) )

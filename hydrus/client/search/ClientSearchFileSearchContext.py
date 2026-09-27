@@ -378,6 +378,17 @@ class FileSystemPredicates( object ):
                     
                 
             
+            if predicate_type == ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_COUNTER and value is not None:
+                
+                if 'counters' not in self._common_info:
+                    
+                    self._common_info[ 'counters' ] = []
+                    
+                
+                # ( counter_name, number_test )
+                self._common_info[ 'counters' ].append( value )
+                
+            
             if predicate_type == ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_HAS_NOTE_NAME:
                 
                 ( operator, name ) = value

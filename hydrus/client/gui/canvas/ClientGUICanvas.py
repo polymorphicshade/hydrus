@@ -2491,6 +2491,16 @@ class CanvasWithHovers( Canvas ):
         self._media_container.AddPlaybackSkip( a_ms, b_ms )
         
     
+    def _ChangeCounter( self, counter_id: bytes, delta: int ):
+        
+        if self._current_media is None:
+            
+            return
+            
+        
+        CG.client_controller.Write( 'file_counter_increment', self._current_media.GetHash(), counter_id, delta )
+        
+    
     def _ClearPlaybackSkips( self ):
         
         self._media_container.ClearPlaybackSkips()
@@ -3214,6 +3224,16 @@ class CanvasWithHovers( Canvas ):
         self._last_cursor_autohide_touch_time = HydrusTime.GetNowFloat()
         
         self._cursor_autohide_timer.start( 100 )
+        
+    
+    def _SetCounter( self, counter_id: bytes, count: int ):
+        
+        if self._current_media is None:
+            
+            return
+            
+        
+        CG.client_controller.Write( 'file_counter_set', self._current_media.GetHash(), counter_id, count )
         
     
     def _ShowAudioEffects( self ):
@@ -4861,6 +4881,53 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
                 
                 ClientGUIMenus.AppendMenu( menu, skips_menu, f'skips ({len( playback_skips )})' if len( playback_skips ) > 0 else 'skips' )
                 
+            
+            counters_menu = ClientGUIMenus.GenerateMenu( menu )
+            
+            counters = new_options.GetCounters()
+            
+            if len( counters ) == 0:
+                
+                ClientGUIMenus.AppendMenuLabel( counters_menu, 'no counters yet--add some under options->counters' )
+                
+            else:
+                
+                counter_ids_to_counts = CG.client_controller.Read( 'file_counters', self._current_media.GetHash() )
+                
+                counted_counters = []
+                
+                for counter in counters:
+                    
+                    count = counter_ids_to_counts.get( counter.object_id, 0 )
+                    
+                    ClientGUIMenus.AppendMenuItem( counters_menu, f'{counter.name}: {HydrusNumbers.ToHumanInt( count )}', f'Add one to this file\'s "{counter.name}" count.', self._ChangeCounter, counter.object_id, 1 )
+                    
+                    if count > 0:
+                        
+                        counted_counters.append( counter )
+                        
+                    
+                
+                # for mis-clicks
+                if len( counted_counters ) > 0:
+                    
+                    ClientGUIMenus.AppendSeparator( counters_menu )
+                    
+                    subtract_menu = ClientGUIMenus.GenerateMenu( counters_menu )
+                    reset_menu = ClientGUIMenus.GenerateMenu( counters_menu )
+                    
+                    for counter in counted_counters:
+                        
+                        ClientGUIMenus.AppendMenuItem( subtract_menu, counter.name, f'Take one from this file\'s "{counter.name}" count.', self._ChangeCounter, counter.object_id, -1 )
+                        ClientGUIMenus.AppendMenuItem( reset_menu, counter.name, f'Set this file\'s "{counter.name}" count back to zero.', self._SetCounter, counter.object_id, 0 )
+                        
+                    
+                    ClientGUIMenus.AppendMenu( counters_menu, subtract_menu, 'subtract one' )
+                    ClientGUIMenus.AppendMenu( counters_menu, reset_menu, 'reset to zero' )
+                    
+                
+            
+            ClientGUIMenus.AppendMenu( menu, counters_menu, 'counters' )
             
             ClientGUIMenus.AppendSeparator( menu )
             

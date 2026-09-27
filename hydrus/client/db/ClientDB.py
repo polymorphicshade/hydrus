@@ -33,6 +33,7 @@ from hydrus.client import ClientTime
 from hydrus.client.db import ClientDBDefinitionsCache
 from hydrus.client.db import ClientDBContentUpdates
 from hydrus.client.db import ClientDBFileDeleteLock
+from hydrus.client.db import ClientDBFilesCounters
 from hydrus.client.db import ClientDBFilesDuplicatesAutoResolutionSearch
 from hydrus.client.db import ClientDBFilesDuplicatesAutoResolutionStorage
 from hydrus.client.db import ClientDBFilesDuplicatesFileSearch
@@ -2410,6 +2411,11 @@ class DB( HydrusDB.HydrusDB ):
             blank_pred_types.add( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_RATING )
             
         
+        if len( self._controller.new_options.GetCounters() ) > 0:
+            
+            blank_pred_types.add( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_COUNTER )
+            
+        
         if location_context.IsAllKnownFiles():
             
             tag_service_key = file_search_context.GetTagContext().service_key
@@ -3922,6 +3928,7 @@ class DB( HydrusDB.HydrusDB ):
                 'duplicates_auto_resolution_resolution_pair' : self.modules_files_duplicates_auto_resolution_search.GetResolutionPair,
                 'duplicates_auto_resolution_rules_with_counts' : self.modules_files_duplicates_auto_resolution_storage.GetRulesWithCounts,
                 'file_duplicate_hashes' : self.modules_files_duplicates_storage.GetFileHashesByDuplicateType,
+                'file_counters' : self.modules_files_counters.GetCounts,
                 'file_duplicate_info' : self.modules_files_duplicates_storage.GetFileDuplicateInfo,
                 'file_hashes' : self.modules_hashes.GetFileHashes,
                 'file_info_managers' : self.modules_media_results.GetFileInfoManagersFromHashes,
@@ -4061,6 +4068,9 @@ class DB( HydrusDB.HydrusDB ):
                 'duplicates_auto_resolution_set_rules' : self.modules_files_duplicates_auto_resolution_storage.SetRules,
                 'duplicate_pair_status' : self.modules_files_duplicates_setter.SetDuplicatePairStatus,
                 'duplicate_set_king' : self.modules_files_duplicates_updates.SetKingFromHash,
+                'delete_file_counters' : self.modules_files_counters.DeleteCounters,
+                'file_counter_increment' : self.modules_files_counters.IncrementCount,
+                'file_counter_set' : self.modules_files_counters.SetCount,
                 'file_maintenance_add_jobs' : self.modules_files_maintenance_queue.AddJobs,
                 'file_maintenance_add_jobs_hashes' : self.modules_files_maintenance_queue.AddJobsHashes,
                 'file_maintenance_cancel_jobs' : self.modules_files_maintenance_queue.CancelJobs,
@@ -4236,6 +4246,10 @@ class DB( HydrusDB.HydrusDB ):
         self.modules_files_playback_skips = ClientDBFilesPlaybackSkips.ClientDBFilesPlaybackSkips( self._c, self.modules_hashes_local_cache )
         
         self._modules.append( self.modules_files_playback_skips )
+        
+        self.modules_files_counters = ClientDBFilesCounters.ClientDBFilesCounters( self._c, self.modules_hashes_local_cache )
+        
+        self._modules.append( self.modules_files_counters )
         
         #
         
@@ -4455,7 +4469,8 @@ class DB( HydrusDB.HydrusDB ):
             self.modules_tag_search,
             self.modules_similar_files,
             self.modules_files_duplicates_storage,
-            self.modules_files_search_tags
+            self.modules_files_search_tags,
+            self.modules_files_counters
         )
         
         self._modules.append( self.modules_files_query )

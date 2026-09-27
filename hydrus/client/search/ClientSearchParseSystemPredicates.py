@@ -329,6 +329,7 @@ pred_generators = {
     SystemPredicateParser.Predicate.NUM_NOTES : lambda o, v, u: ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_NUM_NOTES, ClientNumberTest.NumberTest.STATICCreateFromCharacters( o, v ) ),
     SystemPredicateParser.Predicate.HAS_NOTE_NAME : lambda o, v, u: ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_HAS_NOTE_NAME, ( True, strip_quotes( v ) ) ),
     SystemPredicateParser.Predicate.NO_NOTE_NAME : lambda o, v, u: ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_HAS_NOTE_NAME, ( False, strip_quotes( v ) ) ),
+    SystemPredicateParser.Predicate.COUNTER : lambda o, v, u: ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_COUNTER, ( v[0], ClientNumberTest.NumberTest.STATICCreateFromCharacters( v[1], v[2] ) ) ),
     SystemPredicateParser.Predicate.HAS_RATING : lambda o, v, u: rating_service_pred_generator( '=', ( 'rated', v ) ),
     SystemPredicateParser.Predicate.NO_RATING : lambda o, v, u: rating_service_pred_generator( '=', ( 'not rated', v ) ),
     SystemPredicateParser.Predicate.RATING_SPECIFIC_NUMERICAL : lambda o, v, u: rating_service_pred_generator( o, v ),

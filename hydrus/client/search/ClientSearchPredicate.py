@@ -80,6 +80,7 @@ PREDICATE_TYPE_SYSTEM_RATING_ADVANCED = 66 # what in the, did I hit 6X by accide
 PREDICATE_TYPE_SYSTEM_HAS_XMP = 67 # /\/\--(^-^)--\/\/
 PREDICATE_TYPE_SYSTEM_HAS_IPTC = 68
 PREDICATE_TYPE_SYSTEM_HAS_SOFTWARE_SOURCE = 69
+PREDICATE_TYPE_SYSTEM_COUNTER = 1001 # not an official hydrus predicate, so it is well away from hydev's numbers
 
 SYSTEM_PREDICATE_TYPES = {
     PREDICATE_TYPE_SYSTEM_EVERYTHING,
@@ -120,6 +121,7 @@ SYSTEM_PREDICATE_TYPES = {
     PREDICATE_TYPE_SYSTEM_NUM_WORDS,
     PREDICATE_TYPE_SYSTEM_NUM_NOTES,
     PREDICATE_TYPE_SYSTEM_HAS_NOTE_NAME,
+    PREDICATE_TYPE_SYSTEM_COUNTER,
     PREDICATE_TYPE_SYSTEM_FILE_SERVICE,
     PREDICATE_TYPE_SYSTEM_NUM_PIXELS,
     PREDICATE_TYPE_SYSTEM_DIMENSIONS,
@@ -366,6 +368,7 @@ EDIT_PRED_TYPES = {
     PREDICATE_TYPE_SYSTEM_NUM_TAGS,
     PREDICATE_TYPE_SYSTEM_NUM_NOTES,
     PREDICATE_TYPE_SYSTEM_HAS_NOTE_NAME,
+    PREDICATE_TYPE_SYSTEM_COUNTER,
     PREDICATE_TYPE_SYSTEM_NUM_WORDS,
     PREDICATE_TYPE_SYSTEM_SIMILAR_TO_FILES,
     PREDICATE_TYPE_SYSTEM_SIMILAR_TO_DATA,
@@ -631,6 +634,12 @@ class Predicate( HydrusSerialisable.SerialisableBase ):
                 
                 serialisable_value = HydrusSerialisable.SerialisableList( or_predicates ).GetSerialisableTuple()
                 
+            elif self._predicate_type == PREDICATE_TYPE_SYSTEM_COUNTER:
+                
+                ( counter_name, number_test ) = self._value
+                
+                serialisable_value = ( counter_name, number_test.GetSerialisableTuple() )
+                
             elif self._predicate_type in ( PREDICATE_TYPE_SYSTEM_WIDTH, PREDICATE_TYPE_SYSTEM_HEIGHT, PREDICATE_TYPE_SYSTEM_NUM_NOTES, PREDICATE_TYPE_SYSTEM_NUM_WORDS, PREDICATE_TYPE_SYSTEM_NUM_URLS, PREDICATE_TYPE_SYSTEM_NUM_FRAMES, PREDICATE_TYPE_SYSTEM_DURATION, PREDICATE_TYPE_SYSTEM_FRAMERATE ):
                 
                 number_test_or_none = typing.cast( ClientNumberTest.NumberTest | None, self._value )
@@ -752,6 +761,12 @@ class Predicate( HydrusSerialisable.SerialisableBase ):
                         pass
                         
                     
+                
+            elif self._predicate_type == PREDICATE_TYPE_SYSTEM_COUNTER:
+                
+                ( counter_name, serialisable_number_test ) = serialisable_value
+                
+                self._value = ( counter_name, HydrusSerialisable.CreateFromSerialisableTuple( serialisable_number_test ) )
                 
             elif self._predicate_type in ( PREDICATE_TYPE_SYSTEM_WIDTH, PREDICATE_TYPE_SYSTEM_HEIGHT, PREDICATE_TYPE_SYSTEM_NUM_NOTES, PREDICATE_TYPE_SYSTEM_NUM_WORDS, PREDICATE_TYPE_SYSTEM_NUM_URLS, PREDICATE_TYPE_SYSTEM_NUM_FRAMES, PREDICATE_TYPE_SYSTEM_DURATION, PREDICATE_TYPE_SYSTEM_FRAMERATE ):
                 
@@ -2146,6 +2161,17 @@ class Predicate( HydrusSerialisable.SerialisableBase ):
                         
                         base += f' {number_test.ToString( absolute_number_renderer = absolute_number_renderer )}'
                         
+                    
+                
+            elif self._predicate_type == PREDICATE_TYPE_SYSTEM_COUNTER:
+                
+                base = 'counter'
+                
+                if self._value is not None:
+                    
+                    ( counter_name, number_test ) = self._value
+                    
+                    base = f'counter {counter_name} {number_test.ToString()}'
                     
                 
             elif self._predicate_type == PREDICATE_TYPE_SYSTEM_HAS_NOTE_NAME:

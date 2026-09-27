@@ -259,6 +259,116 @@ class TestClientDB( unittest.TestCase ):
         self.assertEqual( result.GetName(), export_folder.GetName() )
         
     
+    def test_file_counters( self ):
+        
+        TestClientDB._clear_db()
+        
+        path = HydrusStaticDir.GetStaticPath( 'hydrus.png' )
+        
+        full_import_options_container = ImportOptionsManager.ImportOptionsManager.STATICGetDefaultInitialisedManager().GetDefaultImportOptionsContainerForCallerType( IOC.IMPORT_OPTIONS_CALLER_TYPE_GLOBAL )
+        
+        file_import_job = ClientImportFiles.FileImportJob( path, full_import_options_container )
+        
+        file_import_job.GeneratePreImportHashAndStatus()
+        
+        file_import_job.GenerateInfo()
+        
+        self._write( 'import_file', file_import_job )
+        
+        hash = file_import_job.GetHash()
+        
+        tally = HydrusSerialisable.IdAndName( os.urandom( 32 ), 'Tally' )
+        other = HydrusSerialisable.IdAndName( os.urandom( 32 ), 'other' )
+        
+        new_options = TG.test_controller.new_options
+        
+        original_counters = new_options.GetCounters()
+        
+        new_options.SetCounters( [ tally, other ] )
+        
+        def run_search( predicate ):
+            
+            location_context = ClientLocation.LocationContext.STATICCreateSimple( CC.LOCAL_FILE_SERVICE_KEY )
+            
+            search_context = ClientSearchFileSearchContext.FileSearchContext( location_context = location_context, predicates = [ predicate ] )
+            
+            return len( self._read( 'file_query_ids', search_context ) )
+            
+        
+        def counter_predicate( counter_name, operator, value ):
+            
+            return ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_COUNTER, ( counter_name, ClientNumberTest.NumberTest.STATICCreateFromCharacters( operator, value ) ) )
+            
+        
+        try:
+            
+            self.assertEqual( self._read( 'file_counters', hash ), {} )
+            
+            for i in range( 3 ):
+                
+                self._write( 'file_counter_increment', hash, tally.object_id, 1 )
+                
+            
+            # never below zero
+            self._write( 'file_counter_increment', hash, other.object_id, -1 )
+            
+            self.assertEqual( self._read( 'file_counters', hash ), { tally.object_id : 3 } )
+            
+            # search
+            
+            self.assertEqual( run_search( counter_predicate( 'tally', '>', 2 ) ), 1 )
+            self.assertEqual( run_search( counter_predicate( 'TALLY', '>', 3 ) ), 0 )
+            self.assertEqual( run_search( counter_predicate( 'Tally', '=', 3 ) ), 1 )
+            self.assertEqual( run_search( counter_predicate( 'tally', '<', 3 ) ), 0 )
+            self.assertEqual( run_search( counter_predicate( 'other', '=', 0 ) ), 1 )
+            self.assertEqual( run_search( counter_predicate( 'other', '>', 0 ) ), 0 )
+            self.assertEqual( run_search( counter_predicate( 'no such counter', '=', 0 ) ), 1 )
+            self.assertEqual( run_search( counter_predicate( 'no such counter', '>', 0 ) ), 0 )
+            
+            # typed in
+            
+            from hydrus.client.search import ClientSearchParseSystemPredicates
+            
+            for ( text, result ) in [
+                ( 'system:counter tally > 2', 1 ),
+                ( 'system:counter:tally >= 3', 1 ),
+                ( 'system:counter "Tally" = 4', 0 ),
+                ( 'system:counter tally != 3', 0 ),
+                ( 'system:counter other < 1', 1 )
+            ]:
+                
+                ( predicate, ) = ClientSearchParseSystemPredicates.ParseSystemPredicateStringsToPredicates( [ text ] )
+                
+                self.assertEqual( run_search( predicate ), result, text )
+                
+                # it writes back out as something we can read in again
+                ( reparsed_predicate, ) = ClientSearchParseSystemPredicates.ParseSystemPredicateStringsToPredicates( [ predicate.ToString() ] )
+                
+                self.assertEqual( reparsed_predicate, predicate )
+                
+                # and it survives saving
+                self.assertEqual( HydrusSerialisable.CreateFromSerialisableTuple( predicate.GetSerialisableTuple() ), predicate )
+                
+            
+            # reset and delete
+            
+            self._write( 'file_counter_set', hash, tally.object_id, 0 )
+            
+            self.assertEqual( self._read( 'file_counters', hash ), {} )
+            
+            self._write( 'file_counter_set', hash, tally.object_id, 5 )
+            self._write( 'file_counter_set', hash, other.object_id, 1 )
+            
+            self._write( 'delete_file_counters', { tally.object_id } )
+            
+            self.assertEqual( self._read( 'file_counters', hash ), { other.object_id : 1 } )
+            
+        finally:
+            
+            new_options.SetCounters( original_counters )
+            
+        
+    
     def test_file_playback_skips( self ):
         
         hash_a = os.urandom( 32 )

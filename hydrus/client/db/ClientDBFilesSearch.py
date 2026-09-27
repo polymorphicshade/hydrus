@@ -14,6 +14,7 @@ from hydrus.client import ClientLocation
 from hydrus.client import ClientServices
 from hydrus.client import ClientThreading
 from hydrus.client.db import ClientDBDefinitionsCache
+from hydrus.client.db import ClientDBFilesCounters
 from hydrus.client.db import ClientDBFilesDuplicatesStorage
 from hydrus.client.db import ClientDBFilesInbox
 from hydrus.client.db import ClientDBFilesMetadataBasic
@@ -1077,7 +1078,8 @@ class ClientDBFilesQuery( ClientDBModule.ClientDBModule ):
         modules_tag_search: ClientDBTagSearch.ClientDBTagSearch,
         modules_similar_files: ClientDBSimilarFiles.ClientDBSimilarFiles,
         modules_files_duplicates_storage: ClientDBFilesDuplicatesStorage.ClientDBFilesDuplicatesStorage,
-        modules_files_search_tags: ClientDBFilesSearchTags
+        modules_files_search_tags: ClientDBFilesSearchTags,
+        modules_files_counters: ClientDBFilesCounters.ClientDBFilesCounters
     ):
         
         # this is obviously a monster, so the solution is going to be to merge the sub-modules into 'search' modules like the 'tags' one above. this guy doesn't have to do search, it can farm that work out
@@ -1098,6 +1100,7 @@ class ClientDBFilesQuery( ClientDBModule.ClientDBModule ):
         self.modules_similar_files = modules_similar_files
         self.modules_files_duplicates_storage = modules_files_duplicates_storage
         self.modules_files_search_tags = modules_files_search_tags
+        self.modules_files_counters = modules_files_counters
         
         super().__init__( 'client file query', cursor )
         
@@ -1957,6 +1960,8 @@ class ClientDBFilesQuery( ClientDBModule.ClientDBModule ):
         
         query_hash_ids = self._DoNotePreds( system_predicates, query_hash_ids, job_status = job_status )
         
+        query_hash_ids = self._DoCounterPreds( system_predicates, query_hash_ids, job_status = job_status )
+        
         for ( view_type, desired_canvas_types, operator, viewing_value ) in system_predicates.GetFileViewingStatsPredicates():
             
             only_do_zero = ( operator in ( '=', HC.UNICODE_APPROX_EQUAL ) and viewing_value == 0 ) or ( operator == '<' and viewing_value == 1 )
@@ -2433,6 +2438,52 @@ class ClientDBFilesQuery( ClientDBModule.ClientDBModule ):
         if rated or logical_operator == HC.LOGICAL_OPERATOR_ONLY:
             
             query_hash_ids = self._DoAdvancedRatingPredicate( predicate, query_hash_ids, job_status = job_status )
+            
+        
+        return query_hash_ids
+        
+    
+    def _DoCounterPreds( self, system_predicates: ClientSearchFileSearchContext.FileSystemPredicates, query_hash_ids: set[ int ], job_status: ClientThreading.JobStatus | None = None ) -> set[ int ]:
+        
+        simple_preds = system_predicates.GetSimpleInfo()
+        
+        if 'counters' not in simple_preds:
+            
+            return query_hash_ids
+            
+        
+        # counter names are case-insensitive
+        counter_names_to_number_tests = collections.defaultdict( list )
+        
+        for ( counter_name, number_test ) in simple_preds[ 'counters' ]:
+            
+            counter_names_to_number_tests[ counter_name.lower() ].append( number_test )
+            
+        
+        for ( counter_name, number_tests ) in counter_names_to_number_tests.items():
+            
+            # counters live in the options, so this is where we find out which one the user means
+            counter_id = CG.client_controller.new_options.GetCounterIdFromName( counter_name )
+            
+            if counter_id is None:
+                
+                # nothing has ever been counted for a counter that does not exist, so every file is at zero
+                if False in ( number_test.WantsZero() for number_test in number_tests ):
+                    
+                    query_hash_ids = set()
+                    
+                
+                continue
+                
+            
+            with self._MakeTemporaryIntegerTable( query_hash_ids, 'hash_id' ) as temp_table_name:
+                
+                self._AnalyzeTempTable( temp_table_name )
+                
+                counter_hash_ids = self.modules_files_counters.GetHashIdsFromCounts( counter_id, number_tests, query_hash_ids, temp_table_name, job_status = job_status )
+                
+                query_hash_ids = intersection_update_qhi( query_hash_ids, counter_hash_ids )
+                
             
         
         return query_hash_ids

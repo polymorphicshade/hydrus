@@ -748,6 +748,9 @@ class ClientOptions( HydrusSerialisable.SerialisableBase ):
         #
         
         self._dictionary[ 'launch_url_executable_ids_and_names' ] = HydrusSerialisable.SerialisableList()
+        
+        # the counters the user keeps per file. the ids are what the db stores against, so a rename keeps the counts
+        self._dictionary[ 'counters' ] = HydrusSerialisable.SerialisableList()
         self._dictionary[ 'mimes_to_launch_file_executable_ids_and_names' ] = HydrusSerialisable.SerialisableDictionary( { HC.GENERAL_FILE : HydrusSerialisable.SerialisableList() } )
         
         #
@@ -1474,6 +1477,30 @@ class ClientOptions( HydrusSerialisable.SerialisableBase ):
             
         
     
+    def GetCounterIdFromName( self, name: str ) -> bytes | None:
+        
+        # counter names are case-insensitive
+        name = name.lower()
+        
+        for counter in self.GetCounters():
+            
+            if counter.name.lower() == name:
+                
+                return counter.object_id
+                
+            
+        
+        return None
+        
+    
+    def GetCounters( self ) -> list[ HydrusSerialisable.IdAndName ]:
+        
+        with self._lock:
+            
+            return list( self._dictionary[ 'counters' ] )
+            
+        
+    
     def GetCustomDefaultSystemPredicates( self, predicate_type = None, comparable_predicate = None ):
         
         with self._lock:
@@ -2168,6 +2195,14 @@ class ClientOptions( HydrusSerialisable.SerialisableBase ):
                 
             
             self._dictionary[ 'colours' ][ colourset ][ colour_type ] = ( r, g, b )
+            
+        
+    
+    def SetCounters( self, counters: list[ HydrusSerialisable.IdAndName ] ):
+        
+        with self._lock:
+            
+            self._dictionary[ 'counters' ] = HydrusSerialisable.SerialisableList( counters )
             
         
     

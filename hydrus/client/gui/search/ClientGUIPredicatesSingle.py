@@ -1357,6 +1357,92 @@ class PanelPredicateSystemHash( PanelPredicateSystemSingle ):
         
     
 
+class PanelPredicateSystemCounter( PanelPredicateSystemSingle ):
+    
+    def __init__( self, parent, predicate ):
+        
+        super().__init__( parent )
+        
+        self._counter_name = ClientGUICommon.BetterChoice( self )
+        
+        for counter in CG.client_controller.new_options.GetCounters():
+            
+            self._counter_name.addItem( counter.name, counter.name )
+            
+        
+        allowed_operators = [
+            ClientNumberTest.NUMBER_TEST_OPERATOR_LESS_THAN,
+            ClientNumberTest.NUMBER_TEST_OPERATOR_LESS_THAN_OR_EQUAL_TO,
+            ClientNumberTest.NUMBER_TEST_OPERATOR_EQUAL,
+            ClientNumberTest.NUMBER_TEST_OPERATOR_NOT_EQUAL,
+            ClientNumberTest.NUMBER_TEST_OPERATOR_GREATER_THAN,
+            ClientNumberTest.NUMBER_TEST_OPERATOR_GREATER_THAN_OR_EQUAL_TO
+        ]
+        
+        self._number_test = ClientGUINumberTest.NumberTestWidget( self, allowed_operators = allowed_operators )
+        
+        #
+        
+        predicate = self._GetPredicateToInitialisePanelWith( predicate )
+        
+        ( counter_name, number_test ) = predicate.GetValue()
+        
+        # names are not case-sensitive, and a parsed predicate comes in lowercase
+        for i in range( self._counter_name.count() ):
+            
+            if self._counter_name.itemData( i ).lower() == counter_name.lower():
+                
+                self._counter_name.setCurrentIndex( i )
+                
+                break
+                
+            
+        
+        self._number_test.SetValue( number_test )
+        
+        #
+        
+        hbox = QP.HBoxLayout()
+        
+        QP.AddToLayout( hbox, ClientGUICommon.BetterStaticText( self, 'system:counter' ), CC.FLAGS_CENTER_PERPENDICULAR )
+        QP.AddToLayout( hbox, self._counter_name, CC.FLAGS_CENTER_PERPENDICULAR )
+        QP.AddToLayout( hbox, self._number_test, CC.FLAGS_CENTER_PERPENDICULAR )
+        
+        hbox.addStretch( 0 )
+        
+        self.setLayout( hbox )
+        
+        self.setFocusProxy( self._counter_name )
+        
+    
+    def GetDefaultPredicate( self ):
+        
+        counters = CG.client_controller.new_options.GetCounters()
+        
+        counter_name = counters[0].name if len( counters ) > 0 else ''
+        
+        number_test = ClientNumberTest.NumberTest( operator = ClientNumberTest.NUMBER_TEST_OPERATOR_GREATER_THAN, value = 0 )
+        
+        return ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_COUNTER, ( counter_name, number_test ) )
+        
+    
+    def GetPredicates( self ):
+        
+        counter_name = self._counter_name.GetValue()
+        
+        if counter_name is None:
+            
+            raise Exception( 'There are no counters yet! Add some under options->counters.' )
+            
+        
+        number_test = self._number_test.GetValue()
+        
+        predicates = ( ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_COUNTER, ( counter_name, number_test ) ), )
+        
+        return predicates
+        
+    
+
 class PanelPredicateSystemHasNoteName( PanelPredicateSystemSingle ):
     
     def __init__( self, parent, predicate ):
