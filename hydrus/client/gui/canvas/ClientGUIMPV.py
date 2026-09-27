@@ -279,6 +279,23 @@ class MPVPlaybackRestarted( QC.QEvent ):
         
     
 
+def ConvertABLoopToMPVValues( a_s: float | None, b_s: float | None ):
+    
+    # mpv only loops when both are set, so a None 'a' (loop from the start) is 0
+    
+    if b_s is None:
+        
+        return ( 'no', 'no' )
+        
+    
+    if a_s is None:
+        
+        a_s = 0.0
+        
+    
+    return ( f'{a_s:.3f}', f'{b_s:.3f}' )
+    
+
 class MPVMediator( object ):
     
     def __init__( self, mpv_player: "mpv.MPV" ):
@@ -334,6 +351,11 @@ class MPVMediator( object ):
         
     
     def Seek( self, time_pos, precise = True ):
+        
+        raise NotImplementedError()
+        
+    
+    def SetABLoop( self, a_s: float | None, b_s: float | None ):
         
         raise NotImplementedError()
         
@@ -471,6 +493,14 @@ class MPVMediatorRude( MPVMediator ):
         precision = 'exact'
         
         self._mpv_player.seek( time_pos, reference = 'absolute', precision = precision )
+        
+    
+    def SetABLoop( self, a_s: float | None, b_s: float | None ):
+        
+        ( a_value, b_value ) = ConvertABLoopToMPVValues( a_s, b_s )
+        
+        self._mpv_player[ 'ab-loop-a' ] = a_value
+        self._mpv_player[ 'ab-loop-b' ] = b_value
         
     
     def SetAudioDevice( self, name: str ):
@@ -685,6 +715,14 @@ class MPVMediatorPolite( MPVMediator ):
         self._mpv_player.command_async( 'seek', time_pos, 'absolute', precision )
         
         self._waiting_on_a_seek = True
+        
+    
+    def SetABLoop( self, a_s: float | None, b_s: float | None ):
+        
+        ( a_value, b_value ) = ConvertABLoopToMPVValues( a_s, b_s )
+        
+        self._mpv_player.command_async( 'set', 'ab-loop-a', a_value )
+        self._mpv_player.command_async( 'set', 'ab-loop-b', b_value )
         
     
     def SetAudioDevice( self, name: str ):
@@ -1416,6 +1454,27 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         self.Seek( new_timestamp_ms )
         
     
+    def SetABLoop( self, a_ms: int | None, b_ms: int | None ):
+        
+        if self._currently_in_media_load_error_state:
+            
+            return
+            
+        
+        a_s = None if a_ms is None else HydrusTime.SecondiseMSFloat( a_ms )
+        b_s = None if b_ms is None else HydrusTime.SecondiseMSFloat( b_ms )
+        
+        try:
+            
+            self._mpv_mediator.SetABLoop( a_s, b_s )
+            
+        except mpv.ShutdownError:
+            
+            # libmpv core probably shut down
+            pass
+            
+        
+    
     def SetCanvasType( self, canvas_type ):
         
         self._canvas_type = canvas_type
@@ -1474,6 +1533,9 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         try:
             
             self._mpv_mediator.SetPaused( True )
+            
+            # ab-loop points are player-wide in mpv, so they would carry over to the next file
+            self._mpv_mediator.SetABLoop( None, None )
             
             if self._media is None:
                 

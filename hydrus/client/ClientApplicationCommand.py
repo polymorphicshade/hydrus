@@ -222,6 +222,9 @@ SIMPLE_ZOOM_IN_ONE_PIXEL = 209
 SIMPLE_ZOOM_OUT_ONE_PIXEL = 210
 SIMPLE_ZOOM_IN_ONE_PERCENT = 211
 SIMPLE_ZOOM_OUT_ONE_PERCENT = 212
+SIMPLE_MEDIA_SET_LOOP_POINT_A = 213
+SIMPLE_MEDIA_SET_LOOP_POINT_B = 214
+SIMPLE_MEDIA_CLEAR_LOOP_POINTS = 215
 
 REARRANGE_THUMBNAILS_TYPE_FIXED = 0
 REARRANGE_THUMBNAILS_TYPE_COMMAND = 1
@@ -463,6 +466,9 @@ simple_enum_to_str_lookup = {
     SIMPLE_AUTOCOMPLETE_IF_EMPTY_MEDIA_PREVIOUS : 'if input & results list are empty and in media viewer manage tags dialog, move to previous media',
     SIMPLE_AUTOCOMPLETE_IF_EMPTY_MEDIA_NEXT : 'if input & results list are empty and in media viewer manage tags dialog, move to previous media',
     SIMPLE_MEDIA_SEEK_DELTA : 'seek media',
+    SIMPLE_MEDIA_SET_LOOP_POINT_A : 'a-b loop: mark point A (loop start) at current time',
+    SIMPLE_MEDIA_SET_LOOP_POINT_B : 'a-b loop: mark point B (loop end) at current time',
+    SIMPLE_MEDIA_CLEAR_LOOP_POINTS : 'a-b loop: clear points',
     SIMPLE_GLOBAL_PROFILE_MODE_FLIP : 'profile mode: flip on/off',
     SIMPLE_GLOBAL_FORCE_ANIMATION_SCANBAR_SHOW : 'force the animation scanbar to show: flip on/off',
     SIMPLE_OPEN_COMMAND_PALETTE : 'open the command palette',

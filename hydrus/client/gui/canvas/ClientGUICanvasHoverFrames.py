@@ -834,6 +834,14 @@ class CanvasHoverFrameTop( CanvasHoverFrame ):
         CG.client_controller.sub( self, 'SetIndexString', 'canvas_new_index_string' )
         
     
+    def _ABLoopButtonClicked( self, simple_action: int ):
+        
+        self.sendApplicationCommand.emit( CAC.ApplicationCommand.STATICCreateSimpleCommand( simple_action ) )
+        
+        # A and B flip their own pressed state when clicked, so snap them back to the real state in case nothing changed (e.g. no timestamp yet)
+        self._UpdateABLoopButtons()
+        
+    
     def _Archive( self ):
         
         if self._current_media.HasInbox():
@@ -910,6 +918,29 @@ class CanvasHoverFrameTop( CanvasHoverFrame ):
         QP.AddToLayout( self._top_center_hbox, self._delete_button, CC.FLAGS_CENTER_PERPENDICULAR )
         QP.AddToLayout( self._top_center_hbox, self._undelete_button, CC.FLAGS_CENTER_PERPENDICULAR )
         QP.AddToLayout( self._top_center_hbox, self._show_embedded_metadata_button, CC.FLAGS_CENTER_PERPENDICULAR )
+        
+        # a-b repeat
+        
+        self._ab_loop_a_ms = None
+        self._ab_loop_b_ms = None
+        
+        self._ab_loop_a_button = ClientGUICommon.BetterButton( self, 'A', self._ABLoopButtonClicked, CAC.SIMPLE_MEDIA_SET_LOOP_POINT_A )
+        self._ab_loop_b_button = ClientGUICommon.BetterButton( self, 'B', self._ABLoopButtonClicked, CAC.SIMPLE_MEDIA_SET_LOOP_POINT_B )
+        self._ab_loop_clear_button = ClientGUICommon.BetterButton( self, 'C', self._ABLoopButtonClicked, CAC.SIMPLE_MEDIA_CLEAR_LOOP_POINTS )
+        
+        # A and B show as pressed-in while their point is set
+        self._ab_loop_a_button.setCheckable( True )
+        self._ab_loop_b_button.setCheckable( True )
+        
+        for button in ( self._ab_loop_a_button, self._ab_loop_b_button, self._ab_loop_clear_button ):
+            
+            button.setFixedWidth( ClientGUIFunctions.ConvertTextToPixelWidth( button, 4 ) )
+            button.setFocusPolicy( QC.Qt.FocusPolicy.TabFocus )
+            
+            QP.AddToLayout( self._top_center_hbox, button, CC.FLAGS_CENTER_PERPENDICULAR )
+            
+        
+        self._UpdateABLoopButtons()
         
     
     def _PopulateLeftButtons( self ):
@@ -1082,6 +1113,13 @@ class CanvasHoverFrameTop( CanvasHoverFrame ):
                 
             
             self._show_embedded_metadata_button.setToolTip( ClientGUIFunctions.WrapToolTip( tt ) )
+            
+            has_playback = self._current_media.HasDuration() or self._current_media.GetMime() == HC.ANIMATION_UGOIRA
+            
+            for button in ( self._ab_loop_a_button, self._ab_loop_b_button, self._ab_loop_clear_button ):
+                
+                button.setVisible( has_playback )
+                
             
         
     
@@ -1417,6 +1455,35 @@ class CanvasHoverFrameTop( CanvasHoverFrame ):
         CGC.core().PopupMenu( self, menu )
         
     
+    def _UpdateABLoopButtons( self ):
+        
+        def time_string( timestamp_ms ):
+            
+            duration_ms = None if self._current_media is None else self._current_media.GetDurationMS()
+            
+            if duration_ms is None or duration_ms <= 0:
+                
+                return HydrusTime.MillisecondsDurationToPrettyTime( timestamp_ms, force_numbers = True )
+                
+            
+            return HydrusTime.ValueRangeToScanbarTimestampsMS( timestamp_ms, duration_ms )
+            
+        
+        a_is_set = self._ab_loop_a_ms is not None
+        b_is_set = self._ab_loop_b_ms is not None
+        
+        self._ab_loop_a_button.setChecked( a_is_set )
+        self._ab_loop_b_button.setChecked( b_is_set )
+        self._ab_loop_clear_button.setEnabled( a_is_set or b_is_set )
+        
+        a_status = time_string( self._ab_loop_a_ms ) if a_is_set else 'not set, so the loop starts at the beginning'
+        b_status = time_string( self._ab_loop_b_ms ) if b_is_set else 'not set, so there is no loop'
+        
+        self._ab_loop_a_button.SetToolTipWithShortcuts( f'A-B repeat: mark the current time as the loop start (A)\n\nA is currently: {a_status}', CAC.SIMPLE_MEDIA_SET_LOOP_POINT_A )
+        self._ab_loop_b_button.SetToolTipWithShortcuts( f'A-B repeat: mark the current time as the loop end (B) and start looping\n\nB is currently: {b_status}', CAC.SIMPLE_MEDIA_SET_LOOP_POINT_B )
+        self._ab_loop_clear_button.SetToolTipWithShortcuts( 'A-B repeat: clear A and B so playback goes back to normal', CAC.SIMPLE_MEDIA_CLEAR_LOOP_POINTS )
+        
+    
     def DragButtonHit( self ):
         
         if self._current_media is None:
@@ -1474,6 +1541,14 @@ class CanvasHoverFrameTop( CanvasHoverFrame ):
             
         
     
+    def SetABLoop( self, a_ms: int | None, b_ms: int | None ):
+        
+        self._ab_loop_a_ms = a_ms
+        self._ab_loop_b_ms = b_ms
+        
+        self._UpdateABLoopButtons()
+        
+    
     def SetCurrentZoom( self, zoom_type: int, zoom: float ):
         
         self._current_zoom_type = zoom_type
@@ -1487,6 +1562,9 @@ class CanvasHoverFrameTop( CanvasHoverFrame ):
     def SetMedia( self, media ):
         
         super().SetMedia( media )
+        
+        # loop points belong to the file they were marked on
+        self.SetABLoop( None, None )
         
         self._ResetText()
         

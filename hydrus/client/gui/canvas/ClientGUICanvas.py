@@ -1351,6 +1351,18 @@ class Canvas( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
                 
                 self._SeekDeltaCurrentMedia( direction, ms )
                 
+            elif action == CAC.SIMPLE_MEDIA_SET_LOOP_POINT_A:
+                
+                self._media_container.SetABLoopPointA()
+                
+            elif action == CAC.SIMPLE_MEDIA_SET_LOOP_POINT_B:
+                
+                self._media_container.SetABLoopPointB()
+                
+            elif action == CAC.SIMPLE_MEDIA_CLEAR_LOOP_POINTS:
+                
+                self._media_container.ClearABLoopPoints()
+                
             elif action == CAC.SIMPLE_MOVE_ANIMATION_TO_PREVIOUS_FRAME:
                 
                 self._media_container.GotoPreviousOrNextFrame( -1 )
@@ -2344,6 +2356,7 @@ class CanvasWithHovers( Canvas ):
         self._top_hover.sendApplicationCommand.connect( self.ProcessApplicationCommand )
         
         self._media_container.zoomChanged.connect( self._top_hover.SetCurrentZoom )
+        self._media_container.abLoopChanged.connect( self._top_hover.SetABLoop )
         self._media_container.sendApplicationCommand.connect( self.ProcessApplicationCommand, QC.Qt.ConnectionType.QueuedConnection )
         
         self._hovers.append( self._top_hover )

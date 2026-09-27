@@ -167,6 +167,12 @@ class QtMediaPlayer( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         
         self._media_player.metaDataChanged.connect( self.NotifyQMetaDataChanged )
         
+        self._ab_loop_a_ms: int | None = None
+        self._ab_loop_b_ms: int | None = None
+        self._ab_loop_last_position_ms: int | None = None
+        
+        self._media_player.positionChanged.connect( self._CheckABLoop )
+        
         self._my_audio_output: QM.QAudioOutput | None = None
         
         self._SetAudioDeviceFromOptions()
@@ -208,6 +214,31 @@ class QtMediaPlayer( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         CG.client_controller.sub( self, 'UpdateAudioVolume', 'new_audio_volume' )
         CG.client_controller.sub( self, 'UpdateFromOptions', 'notify_new_options' )
         CG.client_controller.sub( self, 'UpdateFromTransparencyOptions', 'new_transparency_options' )
+        
+    
+    def _CheckABLoop( self, position_ms: int ):
+        
+        last_position_ms = self._ab_loop_last_position_ms
+        
+        self._ab_loop_last_position_ms = position_ms
+        
+        if self._ab_loop_b_ms is None or last_position_ms is None or self.IsPaused():
+            
+            return
+            
+        
+        # like mpv, we only loop when normal playback runs over B. a user seek past B is left alone
+        # Qt reports position every 33-67ms or so, and it reports the exact duration at the end, so a B at the very end still gets caught
+        normal_playback_step = 0 < position_ms - last_position_ms < 1000
+        
+        if normal_playback_step and last_position_ms <= self._ab_loop_b_ms <= position_ms:
+            
+            self._ab_loop_last_position_ms = None
+            
+            a_ms = 0 if self._ab_loop_a_ms is None else self._ab_loop_a_ms
+            
+            self._media_player.setPosition( a_ms )
+            
         
     
     def _EnsureAudioOutputIsGood( self ):
@@ -680,6 +711,12 @@ class QtMediaPlayer( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         self.Seek( new_timestamp_ms )
         
     
+    def SetABLoop( self, a_ms: int | None, b_ms: int | None ):
+        
+        self._ab_loop_a_ms = a_ms
+        self._ab_loop_b_ms = b_ms
+        
+    
     def SetBackgroundColourGenerator( self, background_colour_generator ):
         
         self._background_colour_generator = background_colour_generator
@@ -695,6 +732,9 @@ class QtMediaPlayer( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         self.ClearMedia()
         
         self._media = media
+        
+        self.SetABLoop( None, None )
+        self._ab_loop_last_position_ms = None
         
         self._UpdateBackgroundBrush()
         

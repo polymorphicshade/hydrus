@@ -432,6 +432,19 @@ def GetDefaultShortcuts():
     )
     
     media_viewer.SetCommand(
+        ClientGUIShortcuts.Shortcut( ClientGUIShortcuts.SHORTCUT_TYPE_KEYBOARD_CHARACTER, ord( 'A' ), ClientGUIShortcuts.SHORTCUT_PRESS_TYPE_PRESS, [] ),
+        CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_MEDIA_SET_LOOP_POINT_A )
+    )
+    media_viewer.SetCommand(
+        ClientGUIShortcuts.Shortcut( ClientGUIShortcuts.SHORTCUT_TYPE_KEYBOARD_CHARACTER, ord( 'B' ), ClientGUIShortcuts.SHORTCUT_PRESS_TYPE_PRESS, [] ),
+        CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_MEDIA_SET_LOOP_POINT_B )
+    )
+    media_viewer.SetCommand(
+        ClientGUIShortcuts.Shortcut( ClientGUIShortcuts.SHORTCUT_TYPE_KEYBOARD_CHARACTER, ord( 'C' ), ClientGUIShortcuts.SHORTCUT_PRESS_TYPE_PRESS, [] ),
+        CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_MEDIA_CLEAR_LOOP_POINTS )
+    )
+    
+    media_viewer.SetCommand(
         ClientGUIShortcuts.Shortcut( ClientGUIShortcuts.SHORTCUT_TYPE_KEYBOARD_CHARACTER, ord( 'F' ), ClientGUIShortcuts.SHORTCUT_PRESS_TYPE_PRESS, [] ),
         CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_SWITCH_BETWEEN_FULLSCREEN_BORDERLESS_AND_REGULAR_FRAMED_WINDOW )
     )

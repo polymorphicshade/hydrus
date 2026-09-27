@@ -89,6 +89,9 @@ media_viewer_zoom_type_to_cac_simple_commands = {
 OPEN_EXTERNALLY_BUTTON_SIZE = ( 200, 45 )
 OPEN_EXTERNALLY_MAX_THUMBNAIL_SIZE = ( 200, 200 )
 
+# anything shorter than this is not a useful loop, and mpv's 'rewind loop' damaged-file detection gets twitchy if we restart near 0 many times a second
+MIN_AB_LOOP_DURATION_MS = 100
+
 def CalculateCanvasMediaSize( media, canvas_size: QC.QSize, show_action ):
     
     canvas_width = canvas_size.width()
@@ -404,6 +407,9 @@ class Animation( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         
         self._paused = True
         
+        self._ab_loop_a_ms: int | None = None
+        self._ab_loop_b_ms: int | None = None
+        
         self._video_container = None
         
         self._canvas_qt_pixmap = None
@@ -420,6 +426,26 @@ class Animation( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         self._my_shortcut_handler = ClientGUIShortcuts.ShortcutsHandler( self, self, [ shortcut_set ], catch_mouse = True )
         
     
+    def _ABLoopWantsToJumpBack( self, next_frame_index: int ) -> bool:
+        
+        if self._ab_loop_b_ms is None or self._video_container is None or not self._video_container.IsInitialised():
+            
+            return False
+            
+        
+        if next_frame_index == 0:
+            
+            # B is at the very end, or the user seeked past it--either way, wrap round to A, not the start
+            return True
+            
+        
+        # like mpv, we only loop when normal playback runs over B. a user seek past B is left alone
+        current_frame_timestamp_ms = self._video_container.GetTimestampMS( self._current_frame_index )
+        next_frame_timestamp_ms = self._video_container.GetTimestampMS( next_frame_index )
+        
+        return current_frame_timestamp_ms <= self._ab_loop_b_ms < next_frame_timestamp_ms
+        
+    
     def _ClearCanvasBitmap( self ):
         
         if self._canvas_qt_pixmap is not None:
@@ -431,6 +457,20 @@ class Animation( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
     def _GetRawPixelSize( self ) -> QC.QSize:
         
         return self.size() * self.devicePixelRatio()
+        
+    
+    def _JumpToABLoopStart( self ):
+        
+        a_ms = 0 if self._ab_loop_a_ms is None else self._ab_loop_a_ms
+        
+        frame_index = int( self._video_container.GetFrameIndex( a_ms ) )
+        
+        frame_index = max( 0, min( frame_index, self._num_frames - 1 ) )
+        
+        self._current_frame_index = frame_index
+        self._current_timestamp_ms = self._video_container.GetTimestampMS( frame_index )
+        
+        self._video_container.GetReadyForFrame( frame_index )
         
     
     def _ReinitForResizeOrDPRChange( self ):
@@ -765,6 +805,12 @@ class Animation( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
             
         
     
+    def SetABLoop( self, a_ms: int | None, b_ms: int | None ):
+        
+        self._ab_loop_a_ms = a_ms
+        self._ab_loop_b_ms = b_ms
+        
+    
     def SetBackgroundColourGenerator( self, background_colour_generator ):
         
         self._background_colour_generator = background_colour_generator
@@ -783,6 +829,8 @@ class Animation( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
             
         
         self._media = media
+        
+        self.SetABLoop( None, None )
         
         self._ClearCanvasBitmap()
         
@@ -871,7 +919,11 @@ class Animation( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
                         
                         next_frame_index = ( self._current_frame_index + 1 ) % num_frames
                         
-                        if next_frame_index == 0:
+                        if self._ABLoopWantsToJumpBack( next_frame_index ):
+                            
+                            self._JumpToABLoopStart()
+                            
+                        elif next_frame_index == 0:
                             
                             self._playthrough_count += 1
                             
@@ -1418,6 +1470,7 @@ class MediaContainer( QW.QWidget ):
     sendApplicationCommand = QC.Signal( CAC.ApplicationCommand )
     
     zoomChanged = QC.Signal( int, float )
+    abLoopChanged = QC.Signal( object, object )
     
     def __init__( self, parent, canvas, canvas_type, background_colour_generator, additional_event_filter: QC.QObject ):
         
@@ -1449,6 +1502,10 @@ class MediaContainer( QW.QWidget ):
         
         # the sub-pixel part of the last zoom reposition, carried over so small zoom steps stay anchored on the zoom centerpoint
         self._zoom_position_delta_remainder = ( 0.0, 0.0 )
+        
+        # a-b repeat. None for 'a' means the start of the media. the loop is active whenever 'b' is set
+        self._ab_loop_a_ms: int | None = None
+        self._ab_loop_b_ms: int | None = None
         
         self._zoom_types_to_zooms = {
             MEDIA_VIEWER_ZOOM_TYPE_DEFAULT_FOR_FILETYPE : 1.0,
@@ -1640,6 +1697,30 @@ class MediaContainer( QW.QWidget ):
             
             return ClientGUIMediaVolume.GetCorrectCurrentMute( self._canvas_type )
             
+        
+    
+    def _GetCurrentPlaybackTimestampMS( self ) -> int | None:
+        
+        if not self.CurrentlyPresentingMediaWithDuration():
+            
+            return None
+            
+        
+        animation_bar_status = self._media_window.GetAnimationBarStatus()
+        
+        if animation_bar_status is None:
+            
+            return None
+            
+        
+        ( current_frame_index, current_timestamp_ms, paused, buffer_indices ) = animation_bar_status
+        
+        if current_timestamp_ms is None:
+            
+            return None
+            
+        
+        return int( current_timestamp_ms )
         
     
     def _GetDefaultZoomType( self ):
@@ -1834,6 +1915,19 @@ class MediaContainer( QW.QWidget ):
             
             self._deferred_set_media_call = None
             
+        
+    
+    def _SetABLoop( self, a_ms: int | None, b_ms: int | None ):
+        
+        self._ab_loop_a_ms = a_ms
+        self._ab_loop_b_ms = b_ms
+        
+        if self.CurrentlyPresentingMediaWithDuration():
+            
+            self._media_window.SetABLoop( a_ms, b_ms )
+            
+        
+        self.abLoopChanged.emit( a_ms, b_ms )
         
     
     def _SetZoom( self, zoom: float, move_delta = None ):
@@ -2189,9 +2283,16 @@ class MediaContainer( QW.QWidget ):
         return self.ReadyToSwitchMedia()
         
     
+    def ClearABLoopPoints( self ):
+        
+        self._SetABLoop( None, None )
+        
+    
     def ClearMedia( self ):
         
         self._media = None
+        
+        self._SetABLoop( None, None )
         
         self._animation_bar.ClearMedia()
         
@@ -2651,6 +2752,46 @@ class MediaContainer( QW.QWidget ):
             
         
     
+    def SetABLoopPointA( self ):
+        
+        a_ms = self._GetCurrentPlaybackTimestampMS()
+        
+        if a_ms is None:
+            
+            return
+            
+        
+        b_ms = self._ab_loop_b_ms
+        
+        # the newest point wins. if it makes the loop backwards or too short, the other point is dropped
+        if b_ms is not None and b_ms - a_ms < MIN_AB_LOOP_DURATION_MS:
+            
+            b_ms = None
+            
+        
+        self._SetABLoop( a_ms, b_ms )
+        
+    
+    def SetABLoopPointB( self ):
+        
+        b_ms = self._GetCurrentPlaybackTimestampMS()
+        
+        if b_ms is None or b_ms < MIN_AB_LOOP_DURATION_MS:
+            
+            return
+            
+        
+        a_ms = self._ab_loop_a_ms
+        
+        # the newest point wins. if it makes the loop backwards or too short, the other point is dropped and we loop from the start
+        if a_ms is not None and b_ms - a_ms < MIN_AB_LOOP_DURATION_MS:
+            
+            a_ms = None
+            
+        
+        self._SetABLoop( a_ms, b_ms )
+        
+    
     def SetBackgroundColourGenerator( self, background_colour_generator ):
         
         self._background_colour_generator = background_colour_generator
@@ -2705,6 +2846,9 @@ class MediaContainer( QW.QWidget ):
             
             self._MakeMediaWindow()
             
+        
+        # loop points belong to the file they were marked on
+        self._SetABLoop( None, None )
         
         if maintain_zoom and previous_media is not None:
             
