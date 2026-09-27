@@ -61,3 +61,28 @@ certutil -hashfile mpv-dev-x86_64-20240818-git-a3baf94.7z SHA256
 ```
 
 **Linux:** install libmpv from your package manager, e.g. `sudo apt install libmpv2`.
+
+### Custom database location
+By default the client keeps its database in the `db` folder next to `hydrus_client.py`. To keep it somewhere else on Windows, pass the folder with `-d` in the launch script:
+
+1. Copy `hydrus_client.bat` to `hydrus_client-user.bat`. Git ignores that filename, so a `git pull` won't overwrite your changes.
+2. In the copy, find this line:
+
+   ```bat
+   start "" "pythonw" hydrus_client.pyw
+   ```
+
+   and add `-d` with your folder:
+
+   ```bat
+   start "" "pythonw" hydrus_client.pyw -d="E:\hydrus"
+   ```
+
+3. Start hydrus with `hydrus_client-user.bat` from now on.
+
+A few things to know:
+
+- If the folder doesn't exist, hydrus creates it and starts a new, empty database there. To keep your existing database, close the client and move everything in the old `db` folder into the new one before you launch.
+- A relative path such as `-d="..\hydrus_db"` is resolved from the hydrus install folder.
+- Don't end the path with a backslash (`"E:\hydrus\"`), because Windows then reads `\"` as a literal quote and hydrus gets the wrong path.
+- To launch with the console open for debugging, add the same flag to the commented-out line instead: `python hydrus_client.py -d="E:\hydrus"`.
