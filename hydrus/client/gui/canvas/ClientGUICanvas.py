@@ -4804,6 +4804,9 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
         
         ClientGUIScreenLocations.MoveWindowToScreenLocation( self, self.window(), screen_location )
         
+        # a new place and size, so a fresh start at the default zoom
+        self._media_container.ResetZoomToDefault()
+        
     
     def _PausePlaySlideshow( self ):
         

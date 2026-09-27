@@ -1752,6 +1752,9 @@ class MediaContainer( QW.QWidget ):
         self._saved_zoom: float | None = None
         self._saved_zoom_load_id = 0
         
+        # after a move to a screen location, the file sits at the default zoom until the user zooms or we go to another file. its saved zoom stays in the db for next time
+        self._holding_default_zoom = False
+        
         self._zoom_types_to_zooms = {
             MEDIA_VIEWER_ZOOM_TYPE_DEFAULT_FOR_FILETYPE : 1.0,
             MEDIA_VIEWER_ZOOM_TYPE_CANVAS : 1.0,
@@ -2306,6 +2309,8 @@ class MediaContainer( QW.QWidget ):
         
         self._saved_zoom = None
         
+        self._holding_default_zoom = False
+        
         if self._media is None or not self._remembers_file_zooms:
             
             return
@@ -2328,7 +2333,7 @@ class MediaContainer( QW.QWidget ):
             
             self._saved_zoom = zoom
             
-            if self._saved_zoom is not None and self.IsZoomable():
+            if self._saved_zoom is not None and self.IsZoomable() and not self._holding_default_zoom:
                 
                 self._SetZoom( self._GetZoomWithinMaxDimension( self._saved_zoom ) )
                 
@@ -2606,6 +2611,8 @@ class MediaContainer( QW.QWidget ):
         self._saved_zoom_load_id += 1
         
         self._saved_zoom = zoom
+        
+        self._holding_default_zoom = False
         
         CG.client_controller.Write( 'file_viewer_zoom', self._media.GetHash(), zoom )
         
@@ -3672,6 +3679,21 @@ class MediaContainer( QW.QWidget ):
             
         
     
+    def ResetZoomToDefault( self ):
+        
+        if self._media is None:
+            
+            return
+            
+        
+        # the default zoom for now, over the file's saved zoom and any zoom timestamp we are in. this holds through the resizes that follow a window move
+        self._holding_default_zoom = True
+        
+        self.ZoomReinit()
+        
+        self.ResetCenterPosition()
+        
+    
     def resizeEvent( self, event ):
         
         if self._media is not None:
@@ -4407,8 +4429,8 @@ class MediaContainer( QW.QWidget ):
             return
             
         
-        # this is a resize or a new file. if we are in a zoom timestamp, it needs to go back on
-        self._current_zoom_timestamp_needs_reapply = True
+        # this is a resize or a new file. if we are in a zoom timestamp, it needs to go back on, unless we are holding the default zoom
+        self._current_zoom_timestamp_needs_reapply = not self._holding_default_zoom
         
         canvas_size = self.parentWidget().size()
         my_dpr = self.devicePixelRatio()
@@ -4420,7 +4442,7 @@ class MediaContainer( QW.QWidget ):
         zoom = self._zoom_types_to_zooms[ self._current_zoom_type ]
         
         # a file with its own zoom keeps it, e.g. when the media viewer window is resized
-        if self._saved_zoom is not None:
+        if self._saved_zoom is not None and not self._holding_default_zoom:
             
             zoom = self._GetZoomWithinMaxDimension( self._saved_zoom )
             
