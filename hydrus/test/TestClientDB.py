@@ -579,6 +579,27 @@ class TestClientDB( unittest.TestCase ):
         
         self.assertEqual( self._read( 'playlists' ), [] )
         
+        # adding to a new playlist, for when there are none to pick from
+        
+        self._write( 'playlist_add_item_to_new_playlist', ' new   one ', hash_a, 1000, 5000 )
+        
+        playlists = self._read( 'playlists' )
+        
+        self.assertEqual( [ ( name, num_items ) for ( playlist_id, name, num_items ) in playlists ], [ ( 'new one', 1 ) ] )
+        
+        ( ( new_one_id, new_one_name, new_one_count ), ) = playlists
+        
+        self.assertEqual( self._read( 'playlist_items', new_one_id ), [ ( hash_a, 1000, 5000 ) ] )
+        
+        # if one with that name turned up in the meantime, it goes in that
+        
+        self._write( 'playlist_add_item_to_new_playlist', 'new one', hash_b, None, None )
+        
+        self.assertEqual( self._read( 'playlists' ), [ ( new_one_id, 'new one', 2 ) ] )
+        self.assertEqual( self._read( 'playlist_items', new_one_id ), [ ( hash_a, 1000, 5000 ), ( hash_b, None, None ) ] )
+        
+        self._write( 'playlists', [] )
+        
     
     def test_playlist_helpers( self ):
         

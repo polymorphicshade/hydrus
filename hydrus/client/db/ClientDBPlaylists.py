@@ -52,6 +52,20 @@ class ClientDBPlaylists( ClientDBModule.ClientDBModule ):
         self._Execute( 'INSERT INTO playlist_items ( playlist_id, position, hash_id, start_ms, end_ms ) VALUES ( ?, ?, ?, ?, ? );', ( playlist_id, position, hash_id, start_ms, end_ms ) )
         
     
+    def AddPlaylistItemToNewPlaylist( self, name: str, hash: bytes, start_ms: int | None, end_ms: int | None ) -> int:
+        
+        # makes the playlist and puts the item in it in one go. if a playlist with that name turned up in the meantime, the item goes in that
+        name = ClientMediaPlaylists.NormalisePlaylistName( name )
+        
+        self._Execute( 'INSERT OR IGNORE INTO playlists ( name ) VALUES ( ? );', ( name, ) )
+        
+        ( playlist_id, ) = self._Execute( 'SELECT playlist_id FROM playlists WHERE name = ?;', ( name, ) ).fetchone()
+        
+        self.AddPlaylistItem( playlist_id, hash, start_ms, end_ms )
+        
+        return playlist_id
+        
+    
     def GetPlaylistItems( self, playlist_id: int ) -> list[ tuple[ bytes, int | None, int | None ] ]:
         
         rows = self._Execute( 'SELECT hash_id, start_ms, end_ms FROM playlist_items WHERE playlist_id = ? ORDER BY position;', ( playlist_id, ) ).fetchall()

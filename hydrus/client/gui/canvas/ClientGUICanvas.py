@@ -4554,14 +4554,33 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
         
         playlists = CG.client_controller.Read( 'playlists' )
         
+        ( start_ms, end_ms ) = self._GetPlaylistItemSpan()
+        
         if len( playlists ) == 0:
             
-            ClientGUIDialogsMessage.ShowInformation( self, 'You do not have any playlists yet! Make one under playlists->editor in the main window.' )
+            # the dialog is modal, but a slideshow can move us on to another file while it is open
+            hash = self._current_media.GetHash()
+            
+            try:
+                
+                name = ClientGUIDialogsQuick.EnterText( self, 'You do not have any playlists yet! Enter a name for a new one, and this file will go in it.', title = 'new playlist' )
+                
+            except HydrusExceptions.CancelledException:
+                
+                return
+                
+            
+            name = ClientMediaPlaylists.NormalisePlaylistName( name )
+            
+            if name == '':
+                
+                return
+                
+            
+            CG.client_controller.Write( 'playlist_add_item_to_new_playlist', name, hash, start_ms, end_ms )
             
             return
             
-        
-        ( start_ms, end_ms ) = self._GetPlaylistItemSpan()
         
         if start_ms is None:
             
