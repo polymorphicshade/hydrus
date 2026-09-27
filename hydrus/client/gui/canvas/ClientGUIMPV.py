@@ -374,6 +374,13 @@ class MPVMediator( object ):
         raise NotImplementedError()
         
     
+    def TakeSnapshot( self, path: str ):
+        
+        # 'video' means the frame as decoded, at its own resolution, without subtitles or osd. mpv picks the image format from the extension
+        # this is synchronous, even in the polite mediator, so we know whether it worked
+        self._mpv_player.command( 'screenshot-to-file', path, 'video' )
+        
+    
     def SetAudioDevice( self, name: str ):
         
         raise NotImplementedError()
@@ -1826,6 +1833,23 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         self._last_set_audio_filter_graph = graph
         
         self._ApplyAudioFilterGraph()
+        
+    
+    def TakeSnapshot( self, path: str ):
+        
+        if self._media is None or self._currently_in_media_load_error_state or not self._file_header_is_loaded:
+            
+            raise Exception( 'The video is not loaded yet, so there is no frame to take a snapshot of!' )
+            
+        
+        try:
+            
+            self._mpv_mediator.TakeSnapshot( path )
+            
+        except mpv.ShutdownError:
+            
+            raise Exception( 'The mpv player shut down, so it could not take a snapshot!' )
+            
         
     
     def UpdateConfAndCoreOptions( self ):

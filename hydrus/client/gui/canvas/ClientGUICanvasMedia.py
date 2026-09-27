@@ -1,5 +1,6 @@
 import itertools
 import math
+import time
 import typing
 
 from qtpy import QtCore as QC
@@ -18,6 +19,7 @@ from hydrus.client import ClientApplicationCommand as CAC
 from hydrus.client import ClientConstants as CC
 from hydrus.client import ClientGlobals as CG
 from hydrus.client import ClientRendering
+from hydrus.client import ClientThreading
 from hydrus.client import ClientUgoiraHandling
 from hydrus.client.gui import ClientGUIAsync
 from hydrus.client.gui import ClientGUIExceptionHandling
@@ -111,6 +113,21 @@ def ConvertPlaybackTimestampToString( timestamp_ms: int ) -> str:
     return f'{minutes}:{seconds:0>2}.{milliseconds:0>3}'
     
 
+def GenerateSnapshotFilename( media: ClientMediaSingle.MediaSingle, timestamp_ms: int | None ) -> str:
+    
+    hash_hex = media.GetHash().hex()[:16]
+    
+    if timestamp_ms is None:
+        
+        return f'{hash_hex}.png'
+        
+    
+    ( minutes, remainder_ms ) = divmod( int( timestamp_ms ), 60000 )
+    ( seconds, milliseconds ) = divmod( remainder_ms, 1000 )
+    
+    return f'{hash_hex} {minutes}m{seconds:0>2}.{milliseconds:0>3}s.png'
+    
+
 def MediaHasPlayback( media: ClientMediaSingle.MediaSingle ):
     
     return media.HasDuration() or media.GetMime() == HC.ANIMATION_UGOIRA
@@ -137,6 +154,17 @@ def MergePlaybackSkips( skips: list[ tuple[ int, int ] ] ) -> list[ tuple[ int, 
         
     
     return merged_skips
+    
+
+def ReportSnapshotSaved( path: str ):
+    
+    job_status = ClientThreading.JobStatus()
+    
+    job_status.SetStatusText( f'snapshot saved to {path}' )
+    
+    CG.client_controller.pub( 'message', job_status )
+    
+    job_status.FinishAndDismiss( 5 )
     
 
 def CalculateCanvasMediaSize( media, canvas_size: QC.QSize, show_action ):
@@ -958,6 +986,67 @@ class Animation( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
     def GetNumFrames( self ):
         
         return self._num_frames
+        
+    
+    def TakeSnapshot( self, path: str ):
+        
+        if self._media is None:
+            
+            return
+            
+        
+        media = self._media
+        frame_index = self._current_frame_index
+        frame_durations_ms = self._frame_durations_ms
+        
+        def do_it():
+            
+            try:
+                
+                # the frames we show are scaled to fit the canvas, so we render this one again at its own resolution
+                video_container = ClientRendering.RasterContainerVideo( media, init_position = frame_index, frame_durations_ms = frame_durations_ms )
+                
+                try:
+                    
+                    give_up_time = HydrusTime.GetNowFloat() + 60
+                    
+                    while not video_container.HasFrame( frame_index ):
+                        
+                        if HG.started_shutdown:
+                            
+                            return
+                            
+                        
+                        if HydrusTime.TimeHasPassedFloat( give_up_time ):
+                            
+                            raise Exception( 'Rendering the frame took too long!' )
+                            
+                        
+                        time.sleep( 0.05 )
+                        
+                    
+                    qt_image = video_container.GetFrame( frame_index ).GetQtImage()
+                    
+                    if not qt_image.save( path, 'PNG' ):
+                        
+                        raise Exception( f'Could not save the snapshot to "{path}"!' )
+                        
+                    
+                finally:
+                    
+                    video_container.Stop()
+                    
+                
+                ReportSnapshotSaved( path )
+                
+            except Exception as e:
+                
+                HydrusData.ShowText( 'Could not take a snapshot:' )
+                HydrusData.ShowException( e )
+                
+            
+        
+        CG.client_controller.CallToThread( do_it )
         
     
     def TIMERAnimationUpdate( self ):
@@ -2576,6 +2665,16 @@ class MediaContainer( QW.QWidget ):
         self.hide()
         
     
+    def CanTakeSnapshot( self ) -> bool:
+        
+        if self._media is None or self._media.GetMime() in HC.AUDIO:
+            
+            return False
+            
+        
+        return isinstance( self._media_window, ( Animation, ClientGUIMPV.MPVWidget, ClientGUIQtMediaPlayer.QtMediaPlayer ) )
+        
+    
     def ClearPlaybackSkips( self ):
         
         self._SavePlaybackSkips( [] )
@@ -2753,6 +2852,11 @@ class MediaContainer( QW.QWidget ):
     def GetPerPlayerMuteState( self ):
         
         return self._per_player_mute_state
+        
+    
+    def GetCurrentPlaybackTimestampMS( self ) -> int | None:
+        
+        return self._GetCurrentPlaybackTimestampMS()
         
     
     def GetPlaybackSkips( self ) -> list[ tuple[ int, int ] ]:
@@ -3888,6 +3992,22 @@ class MediaContainer( QW.QWidget ):
         self._current_zoom_type = zoom_type
         
         self._SetZoom( self._zoom_types_to_zooms[ self._current_zoom_type ] )
+        
+    
+    def TakeSnapshot( self, path: str ):
+        
+        if not self.CanTakeSnapshot():
+            
+            raise Exception( 'This media has no frame to take a snapshot of!' )
+            
+        
+        self._media_window.TakeSnapshot( path )
+        
+        # the native renderer works in the background and reports for itself
+        if not isinstance( self._media_window, Animation ):
+            
+            ReportSnapshotSaved( path )
+            
         
     
     def TIMERAnimationUpdate( self ):

@@ -1,4 +1,5 @@
 import collections.abc
+import os
 import typing
 
 from qtpy import QtCore as QC
@@ -21,6 +22,7 @@ from hydrus.client import ClientLocation
 from hydrus.client import ClientServices
 from hydrus.client import ClientThreading
 from hydrus.client.gui import ClientGUICore as CGC
+from hydrus.client.gui import ClientGUIDialogsFiles
 from hydrus.client.gui import ClientGUIDialogsManage
 from hydrus.client.gui import ClientGUIDialogsMessage
 from hydrus.client.gui import ClientGUIDialogsQuick
@@ -3261,6 +3263,50 @@ class CanvasWithHovers( Canvas ):
         self.canvasWithHoversExiting.connect( frame.close )
         
     
+    def _TakeSnapshot( self ):
+        
+        if self._current_media is None or not self._media_container.CanTakeSnapshot():
+            
+            return
+            
+        
+        # hold the frame still while the user picks where to put it
+        was_paused = self._media_container.IsPaused()
+        
+        self._media_container.Pause()
+        
+        try:
+            
+            default_filename = ClientGUICanvasMedia.GenerateSnapshotFilename( self._current_media, self._media_container.GetCurrentPlaybackTimestampMS() )
+            
+            with ClientGUIDialogsFiles.FileDialog( self, 'save snapshot', acceptMode = QW.QFileDialog.AcceptMode.AcceptSave, fileMode = QW.QFileDialog.FileMode.AnyFile, default_filename = default_filename, default_directory = os.getcwd(), wildcard = 'PNG (*.png)', defaultSuffix = 'png' ) as dlg:
+                
+                if dlg.exec() != QW.QDialog.DialogCode.Accepted:
+                    
+                    return
+                    
+                
+                path = dlg.GetPath()
+                
+            
+            try:
+                
+                self._media_container.TakeSnapshot( path )
+                
+            except Exception as e:
+                
+                ClientGUIDialogsMessage.ShowWarning( self, f'Could not take a snapshot: {e}' )
+                
+            
+        finally:
+            
+            if not was_paused:
+                
+                self._media_container.PausePlay()
+                
+            
+        
+    
     def _TryToCloseWindow( self ):
         
         self.window().close()
@@ -4940,6 +4986,11 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
                     
                 
                 ClientGUIMenus.AppendMenu( menu, skips_menu, f'skips ({len( playback_skips )})' if len( playback_skips ) > 0 else 'skips' )
+                
+            
+            if self._media_container.CanTakeSnapshot():
+                
+                ClientGUIMenus.AppendMenuItem( menu, 'take snapshot', 'Save the current frame as a png.', self._TakeSnapshot )
                 
             
             counters_menu = ClientGUIMenus.GenerateMenu( menu )

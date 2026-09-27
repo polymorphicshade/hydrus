@@ -848,6 +848,28 @@ class QtMediaPlayer( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         self._stop_for_slideshow = value
         
     
+    def TakeSnapshot( self, path: str ):
+        
+        video_frame = self._my_video_output.videoSink().videoFrame()
+        
+        if not video_frame.isValid():
+            
+            raise Exception( 'There is no video frame to take a snapshot of yet!' )
+            
+        
+        qt_image = video_frame.toImage()
+        
+        if qt_image.isNull():
+            
+            raise Exception( 'Could not convert the current video frame to an image!' )
+            
+        
+        if not qt_image.save( path, 'PNG' ):
+            
+            raise Exception( f'Could not save the snapshot to "{path}"!' )
+            
+        
+    
     def TryToUnload( self ):
         
         # this call is crashtastic, so don't inject it while the player is buffering or whatever
