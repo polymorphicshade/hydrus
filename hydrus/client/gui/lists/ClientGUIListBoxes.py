@@ -2460,6 +2460,9 @@ class ListBox( QW.QScrollArea ):
         
         fades_can_ever_happen = QtInit.WE_ARE_QT6 and CG.client_controller.new_options.GetBoolean( 'fade_sibling_connector' )
         
+        # namespace colours are usually chosen for a light background, so on a dark one we lift any that would be unreadable
+        rgbs_to_readable_colours = {}
+        
         current_visible_index = first_visible_positional_index
         
         for logical_index in range( first_visible_logical_index, last_visible_logical_index + 1 ):
@@ -2495,7 +2498,12 @@ class ListBox( QW.QScrollArea ):
                         background_colour_x = x_start
                         
                     
-                    namespace_colour = QG.QColor( r, g, b )
+                    if ( r, g, b ) not in rgbs_to_readable_colours:
+                        
+                        rgbs_to_readable_colours[ ( r, g, b ) ] = ClientGUIFunctions.GetColourReadableOnDarkBackground( QG.QColor( r, g, b ), bg_colour )
+                        
+                    
+                    namespace_colour = rgbs_to_readable_colours[ ( r, g, b ) ]
                     
                     text_colour = namespace_colour
                     

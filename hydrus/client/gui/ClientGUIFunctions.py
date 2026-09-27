@@ -199,6 +199,54 @@ def GetLighterDarkerColour( colour, intensity = 3 ):
         
     
 
+def GetRelativeLuminance( colour: QG.QColor ) -> float:
+    
+    # the WCAG definition, which is what contrast ratio is built on
+    
+    def linearise( channel: float ):
+        
+        return channel / 12.92 if channel <= 0.03928 else ( ( channel + 0.055 ) / 1.055 ) ** 2.4
+        
+    
+    return 0.2126 * linearise( colour.redF() ) + 0.7152 * linearise( colour.greenF() ) + 0.0722 * linearise( colour.blueF() )
+    
+
+def GetContrastRatio( colour_a: QG.QColor, colour_b: QG.QColor ) -> float:
+    
+    ( brighter, darker ) = sorted( ( GetRelativeLuminance( colour_a ), GetRelativeLuminance( colour_b ) ), reverse = True )
+    
+    return ( brighter + 0.05 ) / ( darker + 0.05 )
+    
+
+def GetColourReadableOnDarkBackground( colour: QG.QColor, background: QG.QColor, min_contrast = 4.5 ) -> QG.QColor:
+    
+    # user colours like the tag namespace colours are usually picked against a white background. on a dark one, some are too dim to read (the default 'meta' is black!)
+    # so on a dark background, we lift the lightness of anything below normal readable contrast, keeping its hue. light backgrounds are left alone
+    
+    if GetRelativeLuminance( background ) > 0.2 or GetContrastRatio( colour, background ) >= min_contrast:
+        
+        return colour
+        
+    
+    ( hue, saturation, lightness, alpha ) = colour.getHslF()
+    
+    hue = max( hue, 0.0 ) # greys report -1
+    
+    while lightness < 1.0:
+        
+        lightness = min( 1.0, lightness + 0.02 )
+        
+        readable_colour = QG.QColor.fromHslF( hue, saturation, lightness, alpha )
+        
+        if GetContrastRatio( readable_colour, background ) >= min_contrast:
+            
+            return readable_colour
+            
+        
+    
+    return QG.QColor.fromHslF( hue, saturation, 1.0, alpha )
+    
+
 def GetMousePos() -> QC.QPoint:
     
     # On Wayland and perhaps others, this will be the 'last seen' coordinate. You aren't allowed to ask about the mouse when it isn't over your windows etc..

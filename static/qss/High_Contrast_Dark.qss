@@ -1,0 +1,720 @@
+/*
+
+High Contrast Dark
+
+A simple high-contrast dark theme, in the spirit of the Windows 'High Contrast Black' theme.
+
+Pure black backgrounds, white text and borders, cyan for selected/active things, yellow for hover/focus and links.
+
+Best with the 'Fusion' Qt style (options->style). The arrows and checkmarks are svgs in the High_Contrast_Dark folder next to this file.
+
+    background      #000000
+    text/borders    #ffffff
+    quiet borders   #9a9a9a
+    selected/on     #1aebff, with black text
+    hover/focus     #ffff00
+    disabled        #8c8c8c
+
+*/
+
+
+/* ---------- Base ---------- */
+
+QWidget
+{
+    color: #ffffff;
+    background-color: #000000;
+    alternate-background-color: #141414;
+    selection-color: #000000;
+    selection-background-color: #1aebff;
+}
+
+QWidget:disabled
+{
+    color: #8c8c8c;
+}
+
+QToolTip
+{
+    color: #ffffff;
+    background-color: #000000;
+    border: 1px solid #ffff00;
+    padding: 2px;
+}
+
+
+/* ---------- Menus ---------- */
+
+QMenuBar
+{
+    border-bottom: 1px solid #9a9a9a;
+}
+
+QMenuBar::item
+{
+    background: transparent;
+    padding: 3px 8px;
+}
+
+QMenuBar::item:selected, QMenuBar::item:pressed
+{
+    color: #000000;
+    background-color: #1aebff;
+}
+
+QMenu
+{
+    border: 1px solid #ffffff;
+    padding: 2px;
+}
+
+QMenu::item
+{
+    padding: 3px 24px 3px 24px;
+}
+
+QMenu::item:selected
+{
+    color: #000000;
+    background-color: #1aebff;
+}
+
+QMenu::item:disabled
+{
+    color: #8c8c8c;
+    background-color: transparent;
+}
+
+QMenu::separator
+{
+    height: 1px;
+    margin: 3px 6px;
+    background-color: #9a9a9a;
+}
+
+QMenu::indicator
+{
+    width: 11px;
+    height: 11px;
+    left: 6px;
+    border: 1px solid #ffffff;
+    background-color: #000000;
+}
+
+QMenu::indicator:checked
+{
+    background-color: #1aebff;
+    image: url("static/qss/High_Contrast_Dark/check.svg");
+}
+
+QMenu::right-arrow
+{
+    width: 10px;
+    height: 10px;
+    image: url("static/qss/High_Contrast_Dark/arrow_right.svg");
+}
+
+
+/* ---------- Buttons ---------- */
+
+QPushButton, QToolButton
+{
+    color: #ffffff;
+    background-color: #000000;
+    border: 1px solid #ffffff;
+    padding: 3px 8px;
+}
+
+QToolButton
+{
+    padding: 3px;
+}
+
+QPushButton:hover, QToolButton:hover
+{
+    color: #ffff00;
+    border-color: #ffff00;
+}
+
+QPushButton:pressed, QToolButton:pressed, QPushButton:checked, QToolButton:checked
+{
+    color: #000000;
+    background-color: #1aebff;
+    border-color: #1aebff;
+}
+
+QPushButton:disabled, QToolButton:disabled
+{
+    color: #8c8c8c;
+    border-color: #8c8c8c;
+    background-color: #000000;
+}
+
+QPushButton:focus, QToolButton:focus
+{
+    border: 1px solid #ffff00;
+}
+
+QPushButton::menu-indicator, QToolButton::menu-indicator
+{
+    subcontrol-position: right center;
+    right: 3px;
+    width: 10px;
+    height: 10px;
+    image: url("static/qss/High_Contrast_Dark/arrow_down.svg");
+}
+
+
+/* ---------- Text input ---------- */
+
+QLineEdit, QTextEdit, QPlainTextEdit, QAbstractSpinBox, QComboBox
+{
+    color: #ffffff;
+    background-color: #000000;
+    border: 1px solid #ffffff;
+    padding: 2px;
+}
+
+QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QAbstractSpinBox:focus, QComboBox:focus
+{
+    border-color: #ffff00;
+}
+
+QLineEdit:disabled, QTextEdit:disabled, QPlainTextEdit:disabled, QAbstractSpinBox:disabled, QComboBox:disabled
+{
+    color: #8c8c8c;
+    border-color: #8c8c8c;
+}
+
+QComboBox
+{
+    padding-right: 20px;
+}
+
+QComboBox:hover
+{
+    border-color: #ffff00;
+}
+
+QComboBox::drop-down
+{
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 18px;
+    border-left: 1px solid #9a9a9a;
+}
+
+QComboBox::down-arrow
+{
+    width: 10px;
+    height: 10px;
+    image: url("static/qss/High_Contrast_Dark/arrow_down.svg");
+}
+
+QComboBox::down-arrow:disabled
+{
+    image: url("static/qss/High_Contrast_Dark/arrow_down_disabled.svg");
+}
+
+QAbstractSpinBox
+{
+    padding-right: 18px;
+}
+
+QAbstractSpinBox::up-button, QAbstractSpinBox::down-button
+{
+    subcontrol-origin: border;
+    width: 16px;
+    border-left: 1px solid #9a9a9a;
+}
+
+QAbstractSpinBox::up-button
+{
+    subcontrol-position: top right;
+    border-bottom: 1px solid #9a9a9a;
+}
+
+QAbstractSpinBox::down-button
+{
+    subcontrol-position: bottom right;
+}
+
+QAbstractSpinBox::up-button:hover, QAbstractSpinBox::down-button:hover
+{
+    background-color: #262626;
+}
+
+QAbstractSpinBox::up-arrow
+{
+    width: 8px;
+    height: 8px;
+    image: url("static/qss/High_Contrast_Dark/arrow_up.svg");
+}
+
+QAbstractSpinBox::down-arrow
+{
+    width: 8px;
+    height: 8px;
+    image: url("static/qss/High_Contrast_Dark/arrow_down.svg");
+}
+
+QComboBox QAbstractItemView
+{
+    border: 1px solid #ffffff;
+    selection-color: #000000;
+    selection-background-color: #1aebff;
+}
+
+
+/* ---------- Check boxes and radio buttons ---------- */
+
+QCheckBox, QRadioButton
+{
+    spacing: 6px;
+    background: transparent;
+}
+
+QCheckBox::indicator, QRadioButton::indicator, QGroupBox::indicator, QAbstractItemView::indicator
+{
+    width: 12px;
+    height: 12px;
+    border: 1px solid #ffffff;
+    background-color: #000000;
+}
+
+QRadioButton::indicator
+{
+    border-radius: 7px;
+}
+
+QCheckBox::indicator:hover, QRadioButton::indicator:hover, QGroupBox::indicator:hover
+{
+    border-color: #ffff00;
+}
+
+QCheckBox::indicator:checked, QRadioButton::indicator:checked, QGroupBox::indicator:checked, QAbstractItemView::indicator:checked
+{
+    background-color: #1aebff;
+}
+
+QCheckBox::indicator:checked, QGroupBox::indicator:checked, QAbstractItemView::indicator:checked
+{
+    image: url("static/qss/High_Contrast_Dark/check.svg");
+}
+
+QCheckBox::indicator:indeterminate, QAbstractItemView::indicator:indeterminate
+{
+    background-color: #8c8c8c;
+}
+
+QCheckBox::indicator:disabled, QRadioButton::indicator:disabled
+{
+    border-color: #8c8c8c;
+}
+
+QCheckBox::indicator:checked:disabled, QRadioButton::indicator:checked:disabled
+{
+    background-color: #5a5a5a;
+}
+
+
+/* ---------- Lists, trees, tables ---------- */
+
+QAbstractItemView
+{
+    color: #ffffff;
+    background-color: #000000;
+    alternate-background-color: #141414;
+    border: 1px solid #ffffff;
+    gridline-color: #9a9a9a;
+}
+
+QAbstractItemView::item:hover
+{
+    background-color: #262626;
+}
+
+QAbstractItemView::item:selected
+{
+    color: #000000;
+    background-color: #1aebff;
+}
+
+QHeaderView::section
+{
+    color: #ffffff;
+    background-color: #000000;
+    border: 1px solid #9a9a9a;
+    padding: 3px 6px;
+}
+
+QHeaderView::section:hover
+{
+    color: #ffff00;
+}
+
+QHeaderView::up-arrow, QHeaderView::down-arrow
+{
+    subcontrol-position: center right;
+    width: 10px;
+    height: 10px;
+    right: 4px;
+}
+
+QHeaderView::up-arrow
+{
+    image: url("static/qss/High_Contrast_Dark/arrow_up.svg");
+}
+
+QHeaderView::down-arrow
+{
+    image: url("static/qss/High_Contrast_Dark/arrow_down.svg");
+}
+
+QTreeView::branch:has-children:closed
+{
+    border-image: none;
+    image: url("static/qss/High_Contrast_Dark/arrow_right.svg");
+}
+
+QTreeView::branch:has-children:open
+{
+    border-image: none;
+    image: url("static/qss/High_Contrast_Dark/arrow_down.svg");
+}
+
+QTableCornerButton::section
+{
+    background-color: #000000;
+    border: 1px solid #9a9a9a;
+}
+
+
+/* ---------- Tabs ---------- */
+
+QTabWidget::pane
+{
+    border: 1px solid #9a9a9a;
+}
+
+QTabBar::tab
+{
+    color: #ffffff;
+    background-color: #000000;
+    border: 1px solid #9a9a9a;
+    padding: 4px 10px;
+    margin-right: 2px;
+}
+
+QTabBar::tab:selected
+{
+    color: #000000;
+    background-color: #1aebff;
+    border-color: #1aebff;
+}
+
+QTabBar::tab:hover:!selected
+{
+    color: #ffff00;
+    border-color: #ffff00;
+}
+
+QTabBar::tab:disabled
+{
+    color: #8c8c8c;
+}
+
+/* the scroll buttons that appear when there are too many tabs to fit */
+
+QTabBar QToolButton
+{
+    background-color: #000000;
+    border: 1px solid #9a9a9a;
+    padding: 0px;
+}
+
+QTabBar QToolButton::left-arrow
+{
+    image: url("static/qss/High_Contrast_Dark/arrow_left.svg");
+}
+
+QTabBar QToolButton::right-arrow
+{
+    image: url("static/qss/High_Contrast_Dark/arrow_right.svg");
+}
+
+
+/* ---------- Group boxes and frames ---------- */
+
+QGroupBox
+{
+    border: 1px solid #9a9a9a;
+    margin-top: 1.2em;
+    padding-top: 4px;
+}
+
+QGroupBox::title
+{
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 8px;
+    padding: 0 4px;
+}
+
+QSplitter::handle
+{
+    background-color: #4d4d4d;
+}
+
+QSplitter::handle:hover
+{
+    background-color: #ffff00;
+}
+
+QStatusBar
+{
+    border-top: 1px solid #9a9a9a;
+}
+
+QStatusBar::item
+{
+    border: none;
+}
+
+
+/* ---------- Scroll bars ---------- */
+
+QScrollBar:vertical
+{
+    width: 14px;
+    background-color: #000000;
+    border-left: 1px solid #9a9a9a;
+    margin: 0px;
+}
+
+QScrollBar:horizontal
+{
+    height: 14px;
+    background-color: #000000;
+    border-top: 1px solid #9a9a9a;
+    margin: 0px;
+}
+
+QScrollBar::handle:vertical
+{
+    min-height: 24px;
+    margin: 2px;
+    background-color: #c0c0c0;
+}
+
+QScrollBar::handle:horizontal
+{
+    min-width: 24px;
+    margin: 2px;
+    background-color: #c0c0c0;
+}
+
+QScrollBar::handle:hover
+{
+    background-color: #ffffff;
+}
+
+QScrollBar::handle:pressed
+{
+    background-color: #1aebff;
+}
+
+QScrollBar::add-line, QScrollBar::sub-line
+{
+    width: 0px;
+    height: 0px;
+    border: none;
+}
+
+QScrollBar::add-page, QScrollBar::sub-page
+{
+    background: none;
+}
+
+
+/* ---------- Progress bars and sliders ---------- */
+
+QProgressBar
+{
+    color: #ffffff;
+    background-color: #000000;
+    border: 1px solid #ffffff;
+    text-align: center;
+}
+
+QProgressBar::chunk
+{
+    /* darker than the usual cyan so the white percentage text stays readable on top of it */
+    background-color: #006b77;
+}
+
+QSlider::groove:horizontal
+{
+    height: 4px;
+    background-color: #9a9a9a;
+}
+
+QSlider::groove:vertical
+{
+    width: 4px;
+    background-color: #9a9a9a;
+}
+
+QSlider::handle:horizontal
+{
+    width: 12px;
+    margin: -6px 0px;
+    background-color: #1aebff;
+    border: 1px solid #ffffff;
+}
+
+QSlider::handle:vertical
+{
+    height: 12px;
+    margin: 0px -6px;
+    background-color: #1aebff;
+    border: 1px solid #ffffff;
+}
+
+QSlider::handle:hover
+{
+    border-color: #ffff00;
+}
+
+
+/* ---------- Command palette (ctrl+p) ---------- */
+
+QLocatorResultWidget#selectedLocatorResult
+{
+    background-color: #1aebff;
+}
+
+QLocatorResultWidget#selectedLocatorResult QLabel
+{
+    color: #000000;
+}
+
+
+/* ---------- Hydrus text and field states ---------- */
+
+/* these override the light pastel defaults, which are unreadable under white text */
+
+QLabel#HydrusValid
+{
+    color: #00ff00;
+}
+
+QLineEdit#HydrusValid, QTextEdit#HydrusValid, QPlainTextEdit#HydrusValid
+{
+    color: #ffffff;
+    background-color: #003d00;
+    border-color: #00ff00;
+}
+
+QLabel#HydrusIndeterminate
+{
+    color: #a0a0ff;
+}
+
+QLineEdit#HydrusIndeterminate, QTextEdit#HydrusIndeterminate, QPlainTextEdit#HydrusIndeterminate
+{
+    color: #ffffff;
+    background-color: #1a1a66;
+    border-color: #a0a0ff;
+}
+
+QLabel#HydrusInvalid
+{
+    color: #ff5050;
+}
+
+QLineEdit#HydrusInvalid, QTextEdit#HydrusInvalid, QPlainTextEdit#HydrusInvalid
+{
+    color: #ffffff;
+    background-color: #4d0000;
+    border-color: #ff5050;
+}
+
+QLabel#HydrusWarning, QCheckBox#HydrusWarning
+{
+    color: #ff5050;
+}
+
+QPushButton#HydrusAccept
+{
+    color: #00ff00;
+}
+
+QPushButton#HydrusCancel
+{
+    color: #ff5050;
+}
+
+QPushButton#HydrusOnOffButton[hydrus_on=true]
+{
+    color: #00ff00;
+}
+
+QPushButton#HydrusOnOffButton[hydrus_on=false]
+{
+    color: #ff5050;
+}
+
+QLabel#HydrusHyperlink
+{
+    qproperty-link_color: #ffff00;
+}
+
+
+/* ---------- Hydrus custom-drawn widgets ---------- */
+
+/* The scanbar beneath video/audio in the media viewer. */
+
+QWidget#HydrusAnimationBar
+{
+    qproperty-hab_border: #ffffff;
+    qproperty-hab_background: #262626;
+    qproperty-hab_nub: #1aebff;
+}
+
+/* The main thumbnail grid. Local files are white/cyan, files not in your client are red. */
+
+QWidget#HydrusMediaList
+{
+    qproperty-hmrp_background: #000000;
+    qproperty-hmrp_thumbnail_local_background_normal: #111111;
+    qproperty-hmrp_thumbnail_local_border_normal: #b0b0b0;
+    qproperty-hmrp_thumbnail_local_background_selected: #004d57;
+    qproperty-hmrp_thumbnail_local_border_selected: #1aebff;
+    qproperty-hmrp_thumbnail_not_local_background_normal: #2a0000;
+    qproperty-hmrp_thumbnail_not_local_border_normal: #ff9a9a;
+    qproperty-hmrp_thumbnail_not_local_background_selected: #6b0000;
+    qproperty-hmrp_thumbnail_not_local_border_selected: #ff4d4d;
+}
+
+/* The media viewer. */
+
+QWidget#HydrusMediaViewer
+{
+    qproperty-hmv_background: #000000;
+    qproperty-hmv_text: #ffffff;
+}
+
+/* The tag autocomplete text input. */
+
+QWidget#HydrusTagAutocomplete
+{
+    qproperty-hta_background: #000000;
+}
+
+/* Tag lists across the program. */
+
+QWidget#HydrusTagList
+{
+    qproperty-htl_background: #000000;
+}
