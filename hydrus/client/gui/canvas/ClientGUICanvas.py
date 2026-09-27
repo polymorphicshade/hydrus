@@ -1981,6 +1981,7 @@ class CanvasPanel( Canvas ):
             
             ClientGUIMenus.AppendMenuItem( manage_menu, 'times', 'Edit the timestamps for your files.', self._ManageTimestamps )
             ClientGUIMenus.AppendMenuItem( manage_menu, 'force filetype', 'Force your files to appear as a different filetype.', ClientGUIMediaModalActions.SetFilesForcedFiletypes, self, [ self._current_media ] )
+            ClientGUIMenus.AppendMenuItem( manage_menu, 'virtual paths', 'Give this file folder-like paths, like "collections/tv_shows/action", that you can search for with system:path.', ClientGUIMediaModalActions.EditFileVirtualPaths, self, [ self._current_media ] )
             
             ClientGUIMediaMenus.AddManageFileViewingStatsMenu( self, manage_menu, [ self._current_media ] )
             
@@ -5119,6 +5120,7 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
             
             ClientGUIMenus.AppendMenuItem( manage_menu, 'times', 'Edit the timestamps for your files.', self._ManageTimestamps )
             ClientGUIMenus.AppendMenuItem( manage_menu, 'force filetype', 'Force your files to appear as a different filetype.', ClientGUIMediaModalActions.SetFilesForcedFiletypes, self, [ self._current_media ] )
+            ClientGUIMenus.AppendMenuItem( manage_menu, 'virtual paths', 'Give this file folder-like paths, like "collections/tv_shows/action", that you can search for with system:path.', ClientGUIMediaModalActions.EditFileVirtualPaths, self, [ self._current_media ] )
             
             ClientGUIMediaMenus.AddManageFileViewingStatsMenu( self, manage_menu, [ self._current_media ] )
             

@@ -1527,6 +1527,7 @@ class MediaResultsPanelThumbnails( ClientGUIMediaResultsPanel.MediaResultsPanel 
             
             ClientGUIMenus.AppendMenuItem( manage_menu, 'times', 'Edit the timestamps for your files.', self._ManageTimestamps )
             ClientGUIMenus.AppendMenuItem( manage_menu, 'force filetype', 'Force your files to appear as a different filetype.', ClientGUIMediaModalActions.SetFilesForcedFiletypes, self, self._selected_media )
+            ClientGUIMenus.AppendMenuItem( manage_menu, 'virtual paths', 'Give the selected files folder-like paths, like "collections/tv_shows/action", that you can search for with system:path.', ClientGUIMediaModalActions.EditFileVirtualPaths, self, self._selected_media )
             
             if self._HasFocusSingleton():
                 
@@ -3854,6 +3855,7 @@ class MediaResultsPanelThumbnailsGraphicsViewTest( ClientGUIMediaResultsPanel.Me
             
             ClientGUIMenus.AppendMenuItem( manage_menu, 'times', 'Edit the timestamps for your files.', self._ManageTimestamps )
             ClientGUIMenus.AppendMenuItem( manage_menu, 'force filetype', 'Force your files to appear as a different filetype.', ClientGUIMediaModalActions.SetFilesForcedFiletypes, self, self._selected_media )
+            ClientGUIMenus.AppendMenuItem( manage_menu, 'virtual paths', 'Give the selected files folder-like paths, like "collections/tv_shows/action", that you can search for with system:path.', ClientGUIMediaModalActions.EditFileVirtualPaths, self, self._selected_media )
             
             if self._HasFocusSingleton():
                 

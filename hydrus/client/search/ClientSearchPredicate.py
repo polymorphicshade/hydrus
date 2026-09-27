@@ -81,6 +81,7 @@ PREDICATE_TYPE_SYSTEM_HAS_XMP = 67 # /\/\--(^-^)--\/\/
 PREDICATE_TYPE_SYSTEM_HAS_IPTC = 68
 PREDICATE_TYPE_SYSTEM_HAS_SOFTWARE_SOURCE = 69
 PREDICATE_TYPE_SYSTEM_COUNTER = 1001 # not an official hydrus predicate, so it is well away from hydev's numbers
+PREDICATE_TYPE_SYSTEM_VIRTUAL_PATH = 1002
 
 SYSTEM_PREDICATE_TYPES = {
     PREDICATE_TYPE_SYSTEM_EVERYTHING,
@@ -122,6 +123,7 @@ SYSTEM_PREDICATE_TYPES = {
     PREDICATE_TYPE_SYSTEM_NUM_NOTES,
     PREDICATE_TYPE_SYSTEM_HAS_NOTE_NAME,
     PREDICATE_TYPE_SYSTEM_COUNTER,
+    PREDICATE_TYPE_SYSTEM_VIRTUAL_PATH,
     PREDICATE_TYPE_SYSTEM_FILE_SERVICE,
     PREDICATE_TYPE_SYSTEM_NUM_PIXELS,
     PREDICATE_TYPE_SYSTEM_DIMENSIONS,
@@ -369,6 +371,7 @@ EDIT_PRED_TYPES = {
     PREDICATE_TYPE_SYSTEM_NUM_NOTES,
     PREDICATE_TYPE_SYSTEM_HAS_NOTE_NAME,
     PREDICATE_TYPE_SYSTEM_COUNTER,
+    PREDICATE_TYPE_SYSTEM_VIRTUAL_PATH,
     PREDICATE_TYPE_SYSTEM_NUM_WORDS,
     PREDICATE_TYPE_SYSTEM_SIMILAR_TO_FILES,
     PREDICATE_TYPE_SYSTEM_SIMILAR_TO_DATA,
@@ -2172,6 +2175,17 @@ class Predicate( HydrusSerialisable.SerialisableBase ):
                     ( counter_name, number_test ) = self._value
                     
                     base = f'counter {counter_name} {number_test.ToString()}'
+                    
+                
+            elif self._predicate_type == PREDICATE_TYPE_SYSTEM_VIRTUAL_PATH:
+                
+                base = 'path'
+                
+                if self._value is not None:
+                    
+                    ( is_is, pattern ) = self._value
+                    
+                    base = f'path is {pattern}' if is_is else f'path is not {pattern}'
                     
                 
             elif self._predicate_type == PREDICATE_TYPE_SYSTEM_HAS_NOTE_NAME:

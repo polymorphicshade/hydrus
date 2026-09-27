@@ -50,6 +50,7 @@ from hydrus.client.db import ClientDBFilesPlaybackSkips
 from hydrus.client.db import ClientDBFilesSearch
 from hydrus.client.db import ClientDBFilesStorage
 from hydrus.client.db import ClientDBFilesTimestamps
+from hydrus.client.db import ClientDBFilesVirtualPaths
 from hydrus.client.db import ClientDBFilesViewingStats
 from hydrus.client.db import ClientDBMaintenance
 from hydrus.client.db import ClientDBMappingsCacheCombinedFilesDisplay
@@ -2416,6 +2417,11 @@ class DB( HydrusDB.HydrusDB ):
             blank_pred_types.add( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_COUNTER )
             
         
+        if self.modules_files_virtual_paths.HasPaths():
+            
+            blank_pred_types.add( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_VIRTUAL_PATH )
+            
+        
         if location_context.IsAllKnownFiles():
             
             tag_service_key = file_search_context.GetTagContext().service_key
@@ -3929,6 +3935,8 @@ class DB( HydrusDB.HydrusDB ):
                 'duplicates_auto_resolution_rules_with_counts' : self.modules_files_duplicates_auto_resolution_storage.GetRulesWithCounts,
                 'file_duplicate_hashes' : self.modules_files_duplicates_storage.GetFileHashesByDuplicateType,
                 'file_counters' : self.modules_files_counters.GetCounts,
+                'file_virtual_paths' : self.modules_files_virtual_paths.GetPaths,
+                'all_file_virtual_paths' : self.modules_files_virtual_paths.GetAllPaths,
                 'file_duplicate_info' : self.modules_files_duplicates_storage.GetFileDuplicateInfo,
                 'file_hashes' : self.modules_hashes.GetFileHashes,
                 'file_info_managers' : self.modules_media_results.GetFileInfoManagersFromHashes,
@@ -4071,6 +4079,7 @@ class DB( HydrusDB.HydrusDB ):
                 'delete_file_counters' : self.modules_files_counters.DeleteCounters,
                 'file_counter_increment' : self.modules_files_counters.IncrementCount,
                 'file_counter_set' : self.modules_files_counters.SetCount,
+                'file_virtual_paths' : self.modules_files_virtual_paths.SetPaths,
                 'file_maintenance_add_jobs' : self.modules_files_maintenance_queue.AddJobs,
                 'file_maintenance_add_jobs_hashes' : self.modules_files_maintenance_queue.AddJobsHashes,
                 'file_maintenance_cancel_jobs' : self.modules_files_maintenance_queue.CancelJobs,
@@ -4250,6 +4259,10 @@ class DB( HydrusDB.HydrusDB ):
         self.modules_files_counters = ClientDBFilesCounters.ClientDBFilesCounters( self._c, self.modules_hashes_local_cache )
         
         self._modules.append( self.modules_files_counters )
+        
+        self.modules_files_virtual_paths = ClientDBFilesVirtualPaths.ClientDBFilesVirtualPaths( self._c, self.modules_hashes_local_cache )
+        
+        self._modules.append( self.modules_files_virtual_paths )
         
         #
         
@@ -4470,7 +4483,8 @@ class DB( HydrusDB.HydrusDB ):
             self.modules_similar_files,
             self.modules_files_duplicates_storage,
             self.modules_files_search_tags,
-            self.modules_files_counters
+            self.modules_files_counters,
+            self.modules_files_virtual_paths
         )
         
         self._modules.append( self.modules_files_query )

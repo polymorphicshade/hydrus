@@ -30,6 +30,7 @@ from hydrus.client.importing.options import ImportOptionsContainer
 from hydrus.client.importing.options import ImportOptionsManager
 from hydrus.client.metadata import ClientContentUpdates
 from hydrus.client.metadata import ClientTags
+from hydrus.client.metadata import ClientVirtualPaths
 from hydrus.client.search import ClientNumberTest
 from hydrus.client.search import ClientSearchFileSearchContext
 from hydrus.client.search import ClientSearchPredicate
@@ -386,6 +387,131 @@ class TestClientDB( unittest.TestCase ):
         
         self.assertEqual( self._read( 'file_playback_skips', hash_a ), [] )
         self.assertEqual( self._read( 'file_playback_skips', hash_b ), [ ( 0, 500 ) ] )
+        
+    
+    def test_file_virtual_paths( self ):
+        
+        TestClientDB._clear_db()
+        
+        full_import_options_container = ImportOptionsManager.ImportOptionsManager.STATICGetDefaultInitialisedManager().GetDefaultImportOptionsContainerForCallerType( IOC.IMPORT_OPTIONS_CALLER_TYPE_GLOBAL )
+        
+        hashes = []
+        
+        for filename in ( 'hydrus.png', 'hydrus_small.png' ):
+            
+            file_import_job = ClientImportFiles.FileImportJob( HydrusStaticDir.GetStaticPath( filename ), full_import_options_container )
+            
+            file_import_job.GeneratePreImportHashAndStatus()
+            
+            file_import_job.GenerateInfo()
+            
+            self._write( 'import_file', file_import_job )
+            
+            hashes.append( file_import_job.GetHash() )
+            
+        
+        ( hash_a, hash_b ) = hashes
+        
+        def run_search( predicate ):
+            
+            location_context = ClientLocation.LocationContext.STATICCreateSimple( CC.LOCAL_FILE_SERVICE_KEY )
+            
+            search_context = ClientSearchFileSearchContext.FileSearchContext( location_context = location_context, predicates = [ predicate ] )
+            
+            return set( self._read( 'file_query_ids', search_context ) )
+            
+        
+        def run_search_hashes( predicate ):
+            
+            return { self._read( 'hash_ids_to_hashes', hash_ids = ( hash_id, ) )[ hash_id ] for hash_id in run_search( predicate ) }
+            
+        
+        def path_predicate( is_is, pattern ):
+            
+            return ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_VIRTUAL_PATH, ( is_is, pattern ) )
+            
+        
+        # normalising
+        
+        self.assertEqual( ClientVirtualPaths.NormaliseVirtualPath( ' Collections/TV Shows//Action/ ' ), 'collections/tv_shows/action' )
+        self.assertEqual( ClientVirtualPaths.NormaliseVirtualPath( 'a\\b' ), 'a/b' )
+        
+        # wildcards
+        
+        for ( pattern, path, result ) in [
+            ( 'collections/*/action', 'collections/tv_shows/action', True ),
+            ( 'collections/*/action', 'collections/tv_shows/old/action', False ),
+            ( 'collections/*/action', 'collections/action', False ),
+            ( 'collections/tv_*', 'collections/tv_shows', True ),
+            ( 'collections/tv_*', 'collections/tv_shows/action', False ),
+            ( 'collections/**', 'collections/tv_shows/action', True ),
+            ( 'collections/**', 'collections', True ),
+            ( 'collections/**', 'collectionsx', False ),
+            ( '**/action', 'collections/tv_shows/action', True ),
+            ( '**/action', 'action', True ),
+            ( '**/action', 'collections/action_x', False ),
+            ( 'collections/**/action', 'collections/action', True ),
+            ( 'collections/**/action', 'collections/a/b/action', True ),
+            ( '*', 'collections', True ),
+            ( '*', 'collections/tv_shows', False ),
+            ( 'Collections/TV Shows', 'collections/tv_shows', True ),
+            ( 'a.b', 'axb', False )
+        ]:
+            
+            self.assertEqual( ClientVirtualPaths.VirtualPathMatchesPattern( path, ClientVirtualPaths.ConvertVirtualPathPatternToRegex( pattern ) ), result, ( pattern, path ) )
+            
+        
+        # storage
+        
+        self.assertEqual( self._read( 'file_virtual_paths', ( hash_a, hash_b ) ), { hash_a : [], hash_b : [] } )
+        
+        self._write( 'file_virtual_paths', { hash_a : [ 'collections/tv shows/action', 'Favourites' ], hash_b : [ 'collections/movies/action', 'bad/*/path' ] } )
+        
+        self.assertEqual( self._read( 'file_virtual_paths', ( hash_a, hash_b ) ), { hash_a : [ 'collections/tv_shows/action', 'favourites' ], hash_b : [ 'collections/movies/action' ] } )
+        
+        self.assertEqual( self._read( 'all_file_virtual_paths' ), [ 'collections/movies/action', 'collections/tv_shows/action', 'favourites' ] )
+        
+        # search
+        
+        self.assertEqual( run_search_hashes( path_predicate( True, 'collections/tv_shows/action' ) ), { hash_a } )
+        self.assertEqual( run_search_hashes( path_predicate( True, 'collections/*/action' ) ), { hash_a, hash_b } )
+        self.assertEqual( run_search_hashes( path_predicate( True, 'collections/**' ) ), { hash_a, hash_b } )
+        self.assertEqual( run_search_hashes( path_predicate( True, 'collections' ) ), set() )
+        self.assertEqual( run_search_hashes( path_predicate( True, 'favourites' ) ), { hash_a } )
+        self.assertEqual( run_search_hashes( path_predicate( False, 'favourites' ) ), { hash_b } )
+        self.assertEqual( run_search_hashes( path_predicate( False, 'collections/*/action' ) ), set() )
+        self.assertEqual( run_search_hashes( path_predicate( True, 'nothing/here' ) ), set() )
+        
+        # typed in
+        
+        from hydrus.client.search import ClientSearchParseSystemPredicates
+        
+        for ( text, result ) in [
+            ( 'system:path is collections/*/action', { hash_a, hash_b } ),
+            ( 'system:path is Collections/TV Shows/Action', { hash_a } ),
+            ( 'system:path = collections/movies/*', { hash_b } ),
+            ( 'system:path is not collections/movies/**', { hash_a } ),
+            ( 'system:path != favourites', { hash_b } )
+        ]:
+            
+            ( predicate, ) = ClientSearchParseSystemPredicates.ParseSystemPredicateStringsToPredicates( [ text ] )
+            
+            self.assertEqual( run_search_hashes( predicate ), result, text )
+            
+            # it writes back out as something we can read in again
+            ( reparsed_predicate, ) = ClientSearchParseSystemPredicates.ParseSystemPredicateStringsToPredicates( [ predicate.ToString() ] )
+            
+            self.assertEqual( reparsed_predicate, predicate )
+            
+            # and it survives saving
+            self.assertEqual( HydrusSerialisable.CreateFromSerialisableTuple( predicate.GetSerialisableTuple() ), predicate )
+            
+        
+        # clearing
+        
+        self._write( 'file_virtual_paths', { hash_a : [] } )
+        
+        self.assertEqual( self._read( 'file_virtual_paths', ( hash_a, hash_b ) ), { hash_a : [], hash_b : [ 'collections/movies/action' ] } )
         
     
     def test_file_query_ids( self ):

@@ -31,6 +31,7 @@ from hydrus.client.gui.executables import ClientGUIExecutableActions
 from hydrus.client.gui.exporting import ClientGUIExport
 from hydrus.client.gui.media import ClientGUIMediaSimpleActions
 from hydrus.client.gui.metadata import ClientGUIEditTimestamps
+from hydrus.client.gui.metadata import ClientGUIEditVirtualPaths
 from hydrus.client.gui.panels import ClientGUIScrolledPanels
 from hydrus.client.gui.panels import ClientGUIScrolledPanelsEdit
 from hydrus.client.gui.panels import ClientGUIScrolledPanelsReview
@@ -499,6 +500,41 @@ def EditFileTimestamps( win: QW.QWidget, ordered_medias: list[ ClientMediaSingle
                     
                     CG.client_controller.CallToThread( do_it )
                     
+                
+            
+        
+    
+
+def EditFileVirtualPaths( win: QW.QWidget, medias: collections.abc.Collection[ ClientMedia.Media ] ):
+    
+    flat_medias = ClientMediaList.FlattenMedia( medias )
+    
+    if len( flat_medias ) == 0:
+        
+        return
+        
+    
+    hashes = [ media.GetHash() for media in flat_medias ]
+    
+    original_hashes_to_paths = CG.client_controller.Read( 'file_virtual_paths', hashes )
+    
+    all_known_paths = CG.client_controller.Read( 'all_file_virtual_paths' )
+    
+    with ClientGUITopLevelWindowsPanels.DialogEdit( win, 'manage virtual paths' ) as dlg:
+        
+        panel = ClientGUIEditVirtualPaths.EditVirtualPathsPanel( dlg, original_hashes_to_paths, all_known_paths )
+        
+        dlg.SetPanel( panel )
+        
+        if dlg.exec() == QW.QDialog.DialogCode.Accepted:
+            
+            hashes_to_paths = panel.GetValue()
+            
+            changed_hashes_to_paths = { hash : paths for ( hash, paths ) in hashes_to_paths.items() if set( paths ) != set( original_hashes_to_paths[ hash ] ) }
+            
+            if len( changed_hashes_to_paths ) > 0:
+                
+                CG.client_controller.Write( 'file_virtual_paths', changed_hashes_to_paths )
                 
             
         

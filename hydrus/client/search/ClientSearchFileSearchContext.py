@@ -389,6 +389,17 @@ class FileSystemPredicates( object ):
                 self._common_info[ 'counters' ].append( value )
                 
             
+            if predicate_type == ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_VIRTUAL_PATH and value is not None:
+                
+                if 'virtual_paths' not in self._common_info:
+                    
+                    self._common_info[ 'virtual_paths' ] = []
+                    
+                
+                # ( is_is, pattern )
+                self._common_info[ 'virtual_paths' ].append( value )
+                
+            
             if predicate_type == ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_HAS_NOTE_NAME:
                 
                 ( operator, name ) = value

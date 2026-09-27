@@ -31,6 +31,7 @@ from hydrus.client.gui.widgets import ClientGUICommon
 from hydrus.client.gui.widgets import ClientGUINumberTest
 from hydrus.client.gui.widgets import ClientGUIRegex
 from hydrus.client.metadata import ClientRatings
+from hydrus.client.metadata import ClientVirtualPaths
 from hydrus.client.metadata import ClientTags
 from hydrus.client.parsing import ClientParsing
 from hydrus.client.search import ClientNumberTest
@@ -3494,6 +3495,72 @@ class PanelPredicateSystemTagAsNumber( PanelPredicateSystemSingle ):
     def GetPredicates( self ):
         
         predicates = ( ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_TAG_AS_NUMBER, ( self._namespace.GetValue(), self._sign.GetValue(), self._num.value() ) ), )
+        
+        return predicates
+        
+    
+
+class PanelPredicateSystemVirtualPath( PanelPredicateSystemSingle ):
+    
+    def __init__( self, parent, predicate ):
+        
+        super().__init__( parent )
+        
+        self._operator = ClientGUICommon.BetterChoice( self )
+        
+        self._operator.addItem( 'is', True )
+        self._operator.addItem( 'is not', False )
+        
+        self._pattern = QW.QLineEdit( self )
+        self._pattern.setPlaceholderText( 'collections/*/action' )
+        
+        tt = 'A file matches if any of its virtual paths matches this.'
+        tt += '\n' * 2
+        tt += '"*" matches anything inside one folder, so "collections/*/action" matches "collections/tv_shows/action" but not "collections/tv_shows/old/action".'
+        tt += '\n' * 2
+        tt += 'A "**" folder matches any number of folders, so "collections/**" matches everything under "collections", and "**/action" matches any path that ends in "action".'
+        tt += '\n' * 2
+        tt += 'Spaces become underscores, and it is not case-sensitive.'
+        
+        self._pattern.setToolTip( ClientGUIFunctions.WrapToolTip( tt ) )
+        
+        #
+        
+        predicate = self._GetPredicateToInitialisePanelWith( predicate )
+        
+        ( is_is, pattern ) = predicate.GetValue()
+        
+        self._operator.SetValue( is_is )
+        self._pattern.setText( pattern )
+        
+        #
+        
+        hbox = QP.HBoxLayout()
+        
+        QP.AddToLayout( hbox, ClientGUICommon.BetterStaticText( self, 'system:path' ), CC.FLAGS_CENTER_PERPENDICULAR )
+        QP.AddToLayout( hbox, self._operator, CC.FLAGS_CENTER_PERPENDICULAR )
+        QP.AddToLayout( hbox, self._pattern, CC.FLAGS_EXPAND_BOTH_WAYS )
+        
+        self.setLayout( hbox )
+        
+        self.setFocusProxy( self._pattern )
+        
+    
+    def GetDefaultPredicate( self ):
+        
+        return ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_VIRTUAL_PATH, ( True, '' ) )
+        
+    
+    def GetPredicates( self ):
+        
+        pattern = ClientVirtualPaths.NormaliseVirtualPath( self._pattern.text() )
+        
+        if pattern == '':
+            
+            raise Exception( 'Please enter a path to search for!' )
+            
+        
+        predicates = ( ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_VIRTUAL_PATH, ( self._operator.GetValue(), pattern ) ), )
         
         return predicates
         
