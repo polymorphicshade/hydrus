@@ -1715,6 +1715,27 @@ class MediaContainer( QW.QWidget ):
         self._has_per_player_volume = False
         self._per_player_volume = 100
         
+        if self._canvas_type in CC.CANVAS_MEDIA_VIEWER_TYPES:
+            
+            # a new media viewer starts with whatever mute and volume the last one was set to
+            # the mute is stored as 0/1 so that None can mean 'nothing set yet, follow the options'
+            last_mute = CG.client_controller.new_options.GetNoneableInteger( 'media_viewer_last_mute' )
+            
+            if last_mute is not None:
+                
+                self._has_per_player_mute_state = True
+                self._per_player_mute_state = bool( last_mute )
+                
+            
+            last_volume = CG.client_controller.new_options.GetNoneableInteger( 'media_viewer_last_volume' )
+            
+            if last_volume is not None:
+                
+                self._has_per_player_volume = True
+                self._per_player_volume = last_volume
+                
+            
+        
         # these live and die with this container, so they end when the media viewer closes
         self._audio_effects = ClientGUIMediaAudioEffects.AudioEffects()
         
@@ -3354,6 +3375,12 @@ class MediaContainer( QW.QWidget ):
             self._per_player_mute_state = mute_state
             
         
+        if self._canvas_type in CC.CANVAS_MEDIA_VIEWER_TYPES:
+            
+            # 'stop forcing' clears this, so new media viewers go back to following the options
+            CG.client_controller.new_options.SetNoneableInteger( 'media_viewer_last_mute', None if mute_state is None else int( mute_state ) )
+            
+        
         self._UpdateMediaWindowMute()
         
         self.muteStateChanged.emit()
@@ -3369,6 +3396,11 @@ class MediaContainer( QW.QWidget ):
             
             self._has_per_player_volume = True
             self._per_player_volume = volume
+            
+            if self._canvas_type in CC.CANVAS_MEDIA_VIEWER_TYPES:
+                
+                CG.client_controller.new_options.SetNoneableInteger( 'media_viewer_last_volume', volume )
+                
             
         
         self._UpdateMediaWindowVolume()

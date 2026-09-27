@@ -679,6 +679,8 @@ class ClientOptions( HydrusSerialisable.SerialisableBase ):
             'command_palette_limit_history_results' : 10,
             'command_palette_limit_favourite_searches_results' : None,
             'treeview_alignment' : None,
+            'media_viewer_last_volume' : None,
+            'media_viewer_last_mute' : None,
         }
         
         #
