@@ -3976,6 +3976,7 @@ ATTACH "client.mappings.db" as external_mappings;'''
         
         ClientGUIMenus.AppendMenuItem( special_menu, 'new page of pages', 'Open a new tab that can hold more tabs.', self.ProcessApplicationCommand, CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_NEW_PAGE_OF_PAGES ) )
         ClientGUIMenus.AppendMenuItem( special_menu, 'new duplicates processing page', 'Open a new tab to discover and filter duplicate files.', self.ProcessApplicationCommand, CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_NEW_DUPLICATE_FILTER_PAGE ) )
+        ClientGUIMenus.AppendMenuItem( special_menu, 'new quick view page' + HC.UNICODE_ELLIPSIS, 'Enter a tag or a tag preset, and open a new tab of those files in a random order, with the media viewer open on the first one.', self.ProcessApplicationCommand, CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_NEW_QUICK_VIEW_PAGE ) )
         
         ClientGUIMenus.AppendMenu( menu, special_menu, 'special' )
         
@@ -8611,6 +8612,10 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
             elif action == CAC.SIMPLE_NEW_DUPLICATE_FILTER_PAGE:
                 
                 self._notebook.NewPageDuplicateFilter( on_deepest_notebook = True )
+                
+            elif action == CAC.SIMPLE_NEW_QUICK_VIEW_PAGE:
+                
+                self._notebook.NewPageQuickView( on_deepest_notebook = True )
                 
             elif action == CAC.SIMPLE_NEW_GALLERY_DOWNLOADER_PAGE:
                 

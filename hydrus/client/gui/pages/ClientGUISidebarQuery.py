@@ -121,6 +121,9 @@ class SidebarQuery( ClientGUISidebarCore.Sidebar ):
         
         self._query_job_status.Finish()
         
+        # quick view pages open the media viewer on the first file once their search is done
+        self._launch_media_viewer_after_next_search = False
+        
         self._search_panel = ClientGUICommon.StaticBox( self, 'search', start_expanded = True, can_expand = True )
         
         synchronised = self._page_manager.GetVariable( 'synchronised' )
@@ -168,6 +171,8 @@ class SidebarQuery( ClientGUISidebarCore.Sidebar ):
     def _CancelSearch( self ):
         
         self._query_job_status.Cancel()
+        
+        self._launch_media_viewer_after_next_search = False
         
         panel = ClientGUIMediaResultsPanelThumbnails.GetThumbnailPanelBridge( self._page, self._page_key, self._page_manager, [] )
         
@@ -407,6 +412,11 @@ class SidebarQuery( ClientGUISidebarCore.Sidebar ):
         return self._tag_autocomplete.GetPredicates()
         
     
+    def LaunchMediaViewerAfterNextSearch( self ):
+        
+        self._launch_media_viewer_after_next_search = True
+        
+    
     def LockSearch( self ):
         
         file_search_context = self._tag_autocomplete.GetFileSearchContext()
@@ -598,6 +608,18 @@ class SidebarQuery( ClientGUISidebarCore.Sidebar ):
             self._page.SwapMediaResultsPanel( panel )
             
             self._page_state = CC.PAGE_STATE_NORMAL
+            
+            if self._launch_media_viewer_after_next_search:
+                
+                self._launch_media_viewer_after_next_search = False
+                
+                first_media = panel.GetFirst()
+                
+                if first_media is not None:
+                    
+                    panel.LaunchMediaViewerOn( first_media )
+                    
+                
             
         
     

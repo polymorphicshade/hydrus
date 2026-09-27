@@ -21,6 +21,7 @@ from hydrus.client import ClientLocation
 from hydrus.client import ClientThreading
 from hydrus.client.gui import ClientGUIAsync
 from hydrus.client.gui import ClientGUICore as CGC
+from hydrus.client.gui import ClientGUIDialogsMessage
 from hydrus.client.gui import ClientGUIDialogsQuick
 from hydrus.client.gui import ClientGUIFunctions
 from hydrus.client.gui import ClientGUIMenus
@@ -39,8 +40,10 @@ from hydrus.client.gui.pages import ClientGUISidebar
 # noinspection PyUnresolvedReferences
 from hydrus.client.gui.pages import ClientGUISessionLegacy # to get serialisable data types loaded
 
+from hydrus.client.media import ClientMediaSort
 from hydrus.client.search import ClientSearchFileSearchContext
 from hydrus.client.search import ClientSearchPredicate
+from hydrus.client.search import ClientSearchQuickView
 from hydrus.client.search import ClientSearchTagContext
 
 def ConvertNumHashesToWeight( num_hashes: int ) -> int:
@@ -1331,6 +1334,17 @@ class PagesNotebook( ClientGUIPagesTreeView.TabWidgetWithDnD ):
                     page_manager = page_data
                     
                     self.NewPage( page_manager )
+                    
+                elif page_type == 'quick_view':
+                    
+                    page = self.NewPageQuickView()
+                    
+                    if page is None:
+                        
+                        self._next_new_page_index = None
+                        
+                        return
+                        
                     
                 self.layoutChanged.emit( 0, self.count() - 1 )
                 
@@ -3843,6 +3857,60 @@ class PagesNotebook( ClientGUIPagesTreeView.TabWidgetWithDnD ):
             
             page.GetMediaResultsPanel().Sort( media_sort )
             
+        
+        return page
+        
+    
+    def NewPageQuickView( self, on_deepest_notebook = False ):
+        
+        # a shortcut for: new search page, enter a tag or a tag preset, sort by random, open the media viewer on the first file
+        tag_presets = CG.client_controller.new_options.GetTagPresets()
+        
+        message = 'Enter a tag, or the name of a tag preset. A new search page will show those files in a random order, and the media viewer will open on the first one.'
+        
+        if len( tag_presets ) > 0:
+            
+            message += '\n\nOr click a tag preset:'
+            
+        
+        suggestions = [ name for ( name, entries ) in tag_presets ]
+        
+        try:
+            
+            text = ClientGUIDialogsQuick.EnterText( self, message, suggestions = suggestions, min_char_width = 48, title = 'quick view' )
+            
+        except HydrusExceptions.CancelledException:
+            
+            return None
+            
+        
+        tag_service_key = CG.client_controller.new_options.GetKey( 'default_tag_service_search_page' )
+        
+        if not CG.client_controller.services_manager.ServiceExists( tag_service_key ):
+            
+            tag_service_key = CC.COMBINED_TAG_SERVICE_KEY
+            
+        
+        tag_autocomplete_options = CG.client_controller.tag_display_manager.GetTagAutocompleteOptions( tag_service_key )
+        
+        try:
+            
+            ( page_name, predicates ) = ClientSearchQuickView.GetQuickViewSearch( text, tag_presets, tag_autocomplete_options )
+            
+        except HydrusExceptions.VetoException as e:
+            
+            ClientGUIDialogsMessage.ShowWarning( self, str( e ) )
+            
+            return None
+            
+        
+        location_context = CG.client_controller.new_options.GetDefaultLocalLocationContext()
+        
+        media_sort = ClientMediaSort.MediaSort( sort_type = ( 'system', CC.SORT_FILES_BY_RANDOM ), sort_order = CC.SORT_ASC )
+        
+        page = self.NewPageQuery( location_context, initial_predicates = predicates, initial_sort = media_sort, page_name = page_name, on_deepest_notebook = on_deepest_notebook )
+        
+        page.GetSidebar().LaunchMediaViewerAfterNextSearch()
         
         return page
         

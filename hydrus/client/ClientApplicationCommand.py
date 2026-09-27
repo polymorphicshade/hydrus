@@ -225,6 +225,7 @@ SIMPLE_ZOOM_OUT_ONE_PERCENT = 212
 SIMPLE_MEDIA_SET_LOOP_POINT_A = 213
 SIMPLE_MEDIA_SET_LOOP_POINT_B = 214
 SIMPLE_MEDIA_CLEAR_LOOP_POINTS = 215
+SIMPLE_NEW_QUICK_VIEW_PAGE = 216
 
 REARRANGE_THUMBNAILS_TYPE_FIXED = 0
 REARRANGE_THUMBNAILS_TYPE_COMMAND = 1
@@ -357,6 +358,7 @@ simple_enum_to_str_lookup = {
     SIMPLE_NEW_GALLERY_DOWNLOADER_PAGE : 'open a new page: gallery downloader',
     SIMPLE_NEW_PAGE : 'open a new page: choose a page',
     SIMPLE_NEW_PAGE_OF_PAGES : 'open a new page: page of pages',
+    SIMPLE_NEW_QUICK_VIEW_PAGE : 'open a new page: quick view (enter a tag or tag preset, see its files in random order in the media viewer)',
     SIMPLE_NEW_SIMPLE_DOWNLOADER_PAGE : 'open a new page: simple downloader',
     SIMPLE_NEW_URL_DOWNLOADER_PAGE : 'open a new page: url downloader',
     SIMPLE_NEW_WATCHER_DOWNLOADER_PAGE : 'open a new page: thread watcher',

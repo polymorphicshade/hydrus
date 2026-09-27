@@ -132,6 +132,10 @@ class DialogPageChooser( ClientGUIDialogs.Dialog ):
             
             button.setText( 'page of pages' )
             
+        elif entry_type == 'page_quick_view':
+            
+            button.setText( 'quick view' )
+            
         elif entry_type in ( 'page_query', 'page_petitions' ):
             
             name = CG.client_controller.services_manager.GetService( obj ).GetName()
@@ -200,6 +204,11 @@ class DialogPageChooser( ClientGUIDialogs.Dialog ):
                 elif entry_type == 'pages_notebook':
                     
                     self._result = ( 'pages', None )
+                    
+                elif entry_type == 'page_quick_view':
+                    
+                    # the notebook asks for the tag once we are closed, since this dialog closes itself when it loses focus
+                    self._result = ( 'quick_view', None )
                     
                 elif entry_type == 'page_import_gallery':
                     
@@ -300,6 +309,7 @@ class DialogPageChooser( ClientGUIDialogs.Dialog ):
             
             entries.append( ( 'pages_notebook', None ) )
             entries.append( ( 'page_duplicate_filter', None ) )
+            entries.append( ( 'page_quick_view', None ) )
             
         
         if len( entries ) <= 4:
