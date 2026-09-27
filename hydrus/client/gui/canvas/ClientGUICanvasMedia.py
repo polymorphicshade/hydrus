@@ -156,6 +156,44 @@ def MergePlaybackSkips( skips: list[ tuple[ int, int ] ] ) -> list[ tuple[ int, 
     return merged_skips
     
 
+def ConvertFrameStartToPlaybackPointMS( frame_start_ms: float ) -> int:
+    
+    # A, zoom timestamps, and the like are the start of a frame. rounding down means playback is at or past the point as soon as that frame is up
+    # the round first stops float fuzz like 999.9999999 from knocking a whole ms off
+    return int( math.floor( round( frame_start_ms, 3 ) ) )
+    
+
+def ConvertFrameToABLoopPointBMS( frame_start_ms: float, frame_duration_ms: float ) -> int:
+    
+    # B is in the last frame the loop shows. we put it in the middle of that frame, well clear of both its edges, so no rounding or frame-length guesswork can push it into a neighbour
+    # the native renderer shows the frame B is in and then loops, and mpv loops when it gets to a frame that starts after B
+    return ConvertFrameStartToPlaybackPointMS( frame_start_ms + max( 0.0, frame_duration_ms ) / 2 )
+    
+
+def GetFrameIndexAtPlaybackPoint( point_ms: float, num_frames: int, get_frame_start_ms: typing.Callable[ [ int ], float ] ) -> int:
+    
+    # the first frame that starts at or after this point. for a point from the start of a frame, that is the frame it came from, and for a B, it is the frame after
+    # half a ms of slack covers the rounding down. a point after the start of the last frame gives num_frames
+    lo = 0
+    hi = num_frames
+    
+    while lo < hi:
+        
+        mid = ( lo + hi ) // 2
+        
+        if get_frame_start_ms( mid ) < point_ms - 0.5:
+            
+            lo = mid + 1
+            
+        else:
+            
+            hi = mid
+            
+        
+    
+    return lo
+    
+
 def GetZoomTimestampAt( zoom_timestamps: list[ tuple[ int, float ] ], timestamp_ms: float ) -> tuple[ int, float ] | None:
     
     # the zoom timestamp that playback is under at this point, which is the last one at or before it. None means we are before the first one
@@ -553,13 +591,18 @@ class Animation( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         return self.size() * self.devicePixelRatio()
         
     
+    def _GetFrameIndexAtPlaybackPoint( self, point_ms: int ) -> int:
+        
+        frame_index = GetFrameIndexAtPlaybackPoint( point_ms, self._num_frames, self._video_container.GetTimestampMS )
+        
+        return max( 0, min( frame_index, self._num_frames - 1 ) )
+        
+    
     def _JumpToABLoopStart( self ):
         
         a_ms = 0 if self._ab_loop_a_ms is None else self._ab_loop_a_ms
         
-        frame_index = int( self._video_container.GetFrameIndex( a_ms ) )
-        
-        frame_index = max( 0, min( frame_index, self._num_frames - 1 ) )
+        frame_index = self._GetFrameIndexAtPlaybackPoint( a_ms )
         
         self._current_frame_index = frame_index
         self._current_timestamp_ms = self._video_container.GetTimestampMS( frame_index )
@@ -706,6 +749,16 @@ class Animation( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
     def CurrentFrame( self ):
         
         return self._current_frame_index
+        
+    
+    def GetCurrentFrameStartAndDurationMS( self ) -> tuple[ float, float ] | None:
+        
+        if self._video_container is None or not self._video_container.IsInitialised():
+            
+            return None
+            
+        
+        return ( self._video_container.GetTimestampMS( self._current_frame_index ), self._video_container.GetDurationMS( self._current_frame_index ) )
         
     
     def GetAnimationBarStatus( self ):
@@ -903,10 +956,8 @@ class Animation( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         
         if self._video_container is not None and self._video_container.IsInitialised():
             
-            frame_index = int( self._video_container.GetFrameIndex( timestamp_ms ) )
-            
-            # a skip that runs off the end lands on the last frame, so the normal wrap-around to the start still counts the playthrough
-            frame_index = max( 0, min( frame_index, self._num_frames - 1 ) )
+            # the first frame that is not in the skip. a skip that runs off the end lands on the last frame, so the normal wrap-around to the start still counts the playthrough
+            frame_index = self._GetFrameIndexAtPlaybackPoint( timestamp_ms )
             
             self.GotoFrame( frame_index, pause_afterwards = False )
             
@@ -2104,6 +2155,60 @@ class MediaContainer( QW.QWidget ):
             
         
         return int( current_timestamp_ms )
+        
+    
+    def _GetCurrentFrameStartAndDurationMS( self ) -> tuple[ float, float ] | None:
+        
+        # the frame on screen, so A-B loops and zoom timestamps land on frames, not somewhere between them
+        if not self.CurrentlyPresentingMediaWithDuration():
+            
+            return None
+            
+        
+        if isinstance( self._media_window, Animation ):
+            
+            return self._media_window.GetCurrentFrameStartAndDurationMS()
+            
+        
+        animation_bar_status = self._media_window.GetAnimationBarStatus()
+        
+        if animation_bar_status is None:
+            
+            return None
+            
+        
+        ( current_frame_index, current_timestamp_ms, paused, buffer_indices ) = animation_bar_status
+        
+        if current_timestamp_ms is None:
+            
+            return None
+            
+        
+        # mpv and Qt do not tell us how long each frame is, so we go with the average. audio has no frames at all
+        num_frames = self._media.GetNumFrames()
+        duration_ms = self._media.GetDurationMS()
+        
+        if num_frames is None or num_frames < 2 or duration_ms is None or duration_ms <= 0:
+            
+            frame_duration_ms = 0.0
+            
+        else:
+            
+            frame_duration_ms = duration_ms / num_frames
+            
+        
+        if isinstance( self._media_window, ClientGUIQtMediaPlayer.QtMediaPlayer ) and frame_duration_ms > 0:
+            
+            # Qt's time runs smoothly through each frame, so we go back to the start of the one we are in
+            frame_start_ms = math.floor( round( current_timestamp_ms / frame_duration_ms, 6 ) ) * frame_duration_ms
+            
+        else:
+            
+            # mpv's time is the start of the frame it is on
+            frame_start_ms = current_timestamp_ms
+            
+        
+        return ( frame_start_ms, frame_duration_ms )
         
     
     def _GetDefaultZoomType( self ):
@@ -3606,12 +3711,17 @@ class MediaContainer( QW.QWidget ):
     
     def SetABLoopPointA( self ):
         
-        a_ms = self._GetCurrentPlaybackTimestampMS()
+        frame_start_and_duration = self._GetCurrentFrameStartAndDurationMS()
         
-        if a_ms is None:
+        if frame_start_and_duration is None:
             
             return
             
+        
+        ( frame_start_ms, frame_duration_ms ) = frame_start_and_duration
+        
+        # the frame on screen is the first one the loop shows
+        a_ms = ConvertFrameStartToPlaybackPointMS( frame_start_ms )
         
         b_ms = self._ab_loop_b_ms
         
@@ -3626,9 +3736,19 @@ class MediaContainer( QW.QWidget ):
     
     def SetABLoopPointB( self ):
         
-        b_ms = self._GetCurrentPlaybackTimestampMS()
+        frame_start_and_duration = self._GetCurrentFrameStartAndDurationMS()
         
-        if b_ms is None or b_ms < MIN_AB_LOOP_DURATION_MS:
+        if frame_start_and_duration is None:
+            
+            return
+            
+        
+        ( frame_start_ms, frame_duration_ms ) = frame_start_and_duration
+        
+        # the frame on screen is the last one the loop shows
+        b_ms = ConvertFrameToABLoopPointBMS( frame_start_ms, frame_duration_ms )
+        
+        if b_ms < MIN_AB_LOOP_DURATION_MS:
             
             return
             
@@ -4464,21 +4584,17 @@ class MediaContainer( QW.QWidget ):
             return False
             
         
-        animation_bar_status = self._media_window.GetAnimationBarStatus()
+        frame_start_and_duration = self._GetCurrentFrameStartAndDurationMS()
         
-        if animation_bar_status is None:
+        if frame_start_and_duration is None:
             
             return False
             
         
-        ( current_frame_index, current_timestamp_ms, paused, buffer_indices ) = animation_bar_status
+        ( frame_start_ms, frame_duration_ms ) = frame_start_and_duration
         
-        if current_timestamp_ms is None:
-            
-            return False
-            
-        
-        timestamp_ms = int( current_timestamp_ms )
+        # the zoom happens as the frame on screen comes up
+        timestamp_ms = ConvertFrameStartToPlaybackPointMS( frame_start_ms )
         
         zoom_timestamp = ( timestamp_ms, self._current_zoom )
         

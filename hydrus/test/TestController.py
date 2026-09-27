@@ -76,6 +76,7 @@ from hydrus.test import TestClientMigration
 from hydrus.test import TestClientNetworking
 from hydrus.test import TestClientNetworkingSettings
 from hydrus.test import TestClientParsing
+from hydrus.test import TestClientPlaybackPoints
 from hydrus.test import TestClientScreenLocations
 from hydrus.test import TestClientSearch
 from hydrus.test import TestClientSearchQuickView
@@ -938,6 +939,7 @@ class Controller( object ):
         module_lookup[ 'gui' ] = [
             TestDialogs,
             TestClientListBoxes,
+            TestClientPlaybackPoints,
             TestClientZoomTimestamps
         ]
         
