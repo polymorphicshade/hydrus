@@ -752,6 +752,9 @@ class ClientOptions( HydrusSerialisable.SerialisableBase ):
         
         # the counters the user keeps per file. the ids are what the db stores against, so a rename keeps the counts
         self._dictionary[ 'counters' ] = HydrusSerialisable.SerialisableList()
+        
+        # named spots on a monitor that a media viewer can snap to. ( name, screen_name, x, y, width, height )
+        self._dictionary[ 'screen_locations' ] = []
         self._dictionary[ 'mimes_to_launch_file_executable_ids_and_names' ] = HydrusSerialisable.SerialisableDictionary( { HC.GENERAL_FILE : HydrusSerialisable.SerialisableList() } )
         
         #
@@ -1901,6 +1904,15 @@ class ClientOptions( HydrusSerialisable.SerialisableBase ):
             
         
     
+    def GetScreenLocations( self ) -> list[ tuple[ str, str, int, int, int, int ] ]:
+        
+        with self._lock:
+            
+            # they come back from the db as lists
+            return [ tuple( screen_location ) for screen_location in self._dictionary[ 'screen_locations' ] ]
+            
+        
+    
     def GetSimpleDownloaderFormulae( self ):
         
         with self._lock:
@@ -2471,6 +2483,14 @@ class ClientOptions( HydrusSerialisable.SerialisableBase ):
             
             self._dictionary[ 'related_tags_search_tag_slices_weight_percent' ] = HydrusSerialisable.SerialisableList( related_tags_search_tag_slices_weight_percent )
             self._dictionary[ 'related_tags_result_tag_slices_weight_percent' ] = HydrusSerialisable.SerialisableList( related_tags_result_tag_slices_weight_percent )
+            
+        
+    
+    def SetScreenLocations( self, screen_locations: list[ tuple[ str, str, int, int, int, int ] ] ):
+        
+        with self._lock:
+            
+            self._dictionary[ 'screen_locations' ] = [ tuple( screen_location ) for screen_location in screen_locations ]
             
         
     

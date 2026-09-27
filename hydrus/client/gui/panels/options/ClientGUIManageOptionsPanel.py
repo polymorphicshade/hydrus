@@ -42,6 +42,7 @@ from hydrus.client.gui.panels.options import OpenExternallyPanel
 from hydrus.client.gui.panels.options import PopupPanel
 from hydrus.client.gui.panels.options import RatingsPanel
 from hydrus.client.gui.panels.options import RegexPanel
+from hydrus.client.gui.panels.options import ScreenLocationsPanel
 from hydrus.client.gui.panels.options import ShortcutsPanel
 from hydrus.client.gui.panels.options import SpeedAndMemoryPanel
 from hydrus.client.gui.panels.options import StylePanel
@@ -101,6 +102,7 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
         self._listbook.AddPage( 'popup notifications', PopupPanel.PopupPanel( self._listbook, self._new_options ) )
         self._listbook.AddPage( 'ratings', RatingsPanel.RatingsPanel( self._listbook, self._new_options ) )
         self._listbook.AddPage( 'regex favourites', RegexPanel.RegexPanel( self._listbook ) )
+        self._listbook.AddPage( 'screen locations', ScreenLocationsPanel.ScreenLocationsPanel( self._listbook, self._new_options ) )
         self._listbook.AddPage( 'shortcuts', ShortcutsPanel.ShortcutsPanel( self._listbook, self._new_options, all_shortcuts ) )
         self._listbook.AddPage( 'speed and memory', SpeedAndMemoryPanel.SpeedAndMemoryPanel( self._listbook, self._new_options ) )
         self._listbook.AddPage( 'style', StylePanel.StylePanel( self._listbook, self._new_options ) )

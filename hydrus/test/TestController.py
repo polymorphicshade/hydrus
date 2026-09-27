@@ -76,6 +76,7 @@ from hydrus.test import TestClientMigration
 from hydrus.test import TestClientNetworking
 from hydrus.test import TestClientNetworkingSettings
 from hydrus.test import TestClientParsing
+from hydrus.test import TestClientScreenLocations
 from hydrus.test import TestClientSearch
 from hydrus.test import TestClientTags
 from hydrus.test import TestClientThreading
@@ -951,6 +952,7 @@ class Controller( object ):
             TestClientImportObjects,
             TestClientImportOptions,
             TestClientParsing,
+            TestClientScreenLocations,
             TestClientSearch,
             TestClientTags,
             TestClientThreading,

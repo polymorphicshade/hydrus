@@ -32,6 +32,7 @@ from hydrus.client.gui import ClientGUIFunctions
 from hydrus.client.gui import ClientGUIMenus
 from hydrus.client.gui import ClientGUIPlaylists
 from hydrus.client.gui import ClientGUIRatings
+from hydrus.client.gui import ClientGUIScreenLocations
 from hydrus.client.gui import ClientGUIShortcuts
 from hydrus.client.gui import ClientGUITopLevelWindowsPanels
 from hydrus.client.gui.canvas import ClientGUICanvasHoverFrames
@@ -4727,6 +4728,20 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
         return ClientMediaPlaylists.GetPlaylistItemSpanFromABLoop( a_ms, b_ms )
         
     
+    def _MoveToScreenLocation( self ):
+        
+        try:
+            
+            screen_location = ClientGUIScreenLocations.SelectScreenLocation( self )
+            
+        except HydrusExceptions.CancelledException:
+            
+            return
+            
+        
+        ClientGUIScreenLocations.MoveWindowToScreenLocation( self, self.window(), screen_location )
+        
+    
     def _PausePlaySlideshow( self ):
         
         if self._slideshow_is_running:
@@ -5063,6 +5078,13 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
                 
                 ClientGUIMenus.AppendMenuItem( menu, 'go fullscreen', 'Make this media viewer a fullscreen window without borders.', self.ProcessApplicationCommand, CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_SWITCH_BETWEEN_FULLSCREEN_BORDERLESS_AND_REGULAR_FRAMED_WINDOW ) )
                 
+            
+            screen_menu = ClientGUIMenus.GenerateMenu( menu )
+            
+            ClientGUIMenus.AppendMenuItem( screen_menu, 'save location' + HC.UNICODE_ELLIPSIS, 'Give where this media viewer is on your screens, and its size, a name, so you can snap back to it later.', ClientGUIScreenLocations.SaveScreenLocationForWindow, self, self.window() )
+            ClientGUIMenus.AppendMenuItem( screen_menu, 'move to location' + HC.UNICODE_ELLIPSIS, 'Snap this media viewer to one of your saved screen locations, size and all.', self._MoveToScreenLocation )
+            
+            ClientGUIMenus.AppendMenu( menu, screen_menu, 'screen' )
             
             if self.SupportsSlideshow():
                 
