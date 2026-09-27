@@ -661,6 +661,26 @@ class TestClientDB( unittest.TestCase ):
         self.assertEqual( self._read( 'file_viewer_zoom', hash_b ), 0.25 )
         
     
+    def test_file_zoom_timestamps( self ):
+        
+        hash_a = os.urandom( 32 )
+        hash_b = os.urandom( 32 )
+        
+        self.assertEqual( self._read( 'file_zoom_timestamps', hash_a ), [] )
+        
+        self._write( 'file_zoom_timestamps', hash_a, [ ( 5000, 1.5 ), ( 0, 1.0 ), ( 13000, 0.7 ) ] )
+        self._write( 'file_zoom_timestamps', hash_b, [ ( 250, 2.0 ) ] )
+        
+        # they come back in timestamp order
+        self.assertEqual( self._read( 'file_zoom_timestamps', hash_a ), [ ( 0, 1.0 ), ( 5000, 1.5 ), ( 13000, 0.7 ) ] )
+        self.assertEqual( self._read( 'file_zoom_timestamps', hash_b ), [ ( 250, 2.0 ) ] )
+        
+        self._write( 'file_zoom_timestamps', hash_a, [] )
+        
+        self.assertEqual( self._read( 'file_zoom_timestamps', hash_a ), [] )
+        self.assertEqual( self._read( 'file_zoom_timestamps', hash_b ), [ ( 250, 2.0 ) ] )
+        
+    
     def test_file_query_ids( self ):
         
         TestClientDB._clear_db()

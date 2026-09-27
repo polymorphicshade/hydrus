@@ -53,6 +53,7 @@ from hydrus.client.db import ClientDBFilesTimestamps
 from hydrus.client.db import ClientDBFilesViewerZooms
 from hydrus.client.db import ClientDBFilesVirtualPaths
 from hydrus.client.db import ClientDBFilesViewingStats
+from hydrus.client.db import ClientDBFilesZoomTimestamps
 from hydrus.client.db import ClientDBMaintenance
 from hydrus.client.db import ClientDBMappingsCacheCombinedFilesDisplay
 from hydrus.client.db import ClientDBMappingsCacheCombinedFilesStorage
@@ -3957,6 +3958,7 @@ class DB( HydrusDB.HydrusDB ):
                 'file_query_ids' : self.modules_files_query.GetHashIdsFromQuery,
                 'file_relationships_for_api' : self.modules_files_duplicates_storage.GetFileRelationshipsForAPI,
                 'file_viewer_zoom' : self.modules_files_viewer_zooms.GetViewerZoom,
+                'file_zoom_timestamps' : self.modules_files_zoom_timestamps.GetZoomTimestamps,
                 'filter_existing_tags' : self.modules_mappings_counts_update.FilterExistingTags,
                 'filter_hashes' : self.modules_files_metadata_rich.FilterHashesByService,
                 'force_refresh_tags_managers' : self.modules_media_results.GetForceRefreshTagsManagers,
@@ -4100,6 +4102,7 @@ class DB( HydrusDB.HydrusDB ):
                 'file_maintenance_clear_jobs' : self.modules_files_maintenance.ClearJobs,
                 'file_playback_skips' : self.modules_files_playback_skips.SetPlaybackSkips,
                 'file_viewer_zoom' : self.modules_files_viewer_zooms.SetViewerZoom,
+                'file_zoom_timestamps' : self.modules_files_zoom_timestamps.SetZoomTimestamps,
                 'granularise' : self.modules_files_physical_storage.Granularise,
                 'ideal_client_files_locations' : self.modules_files_physical_storage.SetIdealClientFilesLocations,
                 'maintain_hashed_serialisables' : self.modules_serialisable.MaintainHashedStorage,
@@ -4278,6 +4281,10 @@ class DB( HydrusDB.HydrusDB ):
         self.modules_files_counters = ClientDBFilesCounters.ClientDBFilesCounters( self._c, self.modules_hashes_local_cache )
         
         self._modules.append( self.modules_files_counters )
+        
+        self.modules_files_zoom_timestamps = ClientDBFilesZoomTimestamps.ClientDBFilesZoomTimestamps( self._c, self.modules_hashes_local_cache )
+        
+        self._modules.append( self.modules_files_zoom_timestamps )
         
         self.modules_files_virtual_paths = ClientDBFilesVirtualPaths.ClientDBFilesVirtualPaths( self._c, self.modules_hashes_local_cache )
         

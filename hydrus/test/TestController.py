@@ -82,6 +82,7 @@ from hydrus.test import TestClientSearchQuickView
 from hydrus.test import TestClientSearchTagPresets
 from hydrus.test import TestClientTags
 from hydrus.test import TestClientThreading
+from hydrus.test import TestClientZoomTimestamps
 from hydrus.test import TestDialogs
 from hydrus.test import TestGlobals as TG
 from hydrus.test import TestHydrusData
@@ -936,7 +937,8 @@ class Controller( object ):
         
         module_lookup[ 'gui' ] = [
             TestDialogs,
-            TestClientListBoxes
+            TestClientListBoxes,
+            TestClientZoomTimestamps
         ]
         
         module_lookup[ 'client_api' ] = [

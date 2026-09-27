@@ -156,6 +156,25 @@ def MergePlaybackSkips( skips: list[ tuple[ int, int ] ] ) -> list[ tuple[ int, 
     return merged_skips
     
 
+def GetZoomTimestampAt( zoom_timestamps: list[ tuple[ int, float ] ], timestamp_ms: float ) -> tuple[ int, float ] | None:
+    
+    # the zoom timestamp that playback is under at this point, which is the last one at or before it. None means we are before the first one
+    
+    current_zoom_timestamp = None
+    
+    for zoom_timestamp in sorted( zoom_timestamps ):
+        
+        if zoom_timestamp[0] > timestamp_ms:
+            
+            break
+            
+        
+        current_zoom_timestamp = zoom_timestamp
+        
+    
+    return current_zoom_timestamp
+    
+
 def ReportSnapshotSaved( path: str ):
     
     job_status = ClientThreading.JobStatus()
@@ -1663,6 +1682,19 @@ class MediaContainer( QW.QWidget ):
         self._playback_skips_load_id = 0
         self._last_playback_skip_seek: tuple[ tuple[ int, int ], float ] | None = None
         
+        # zooms to change to at points in playback, as ( timestamp_ms, zoom ). each file has its own, saved in the db
+        # only the media viewer does them. the preview is too small, and the duplicate filter wants to keep the zoom the same between the files it compares
+        self._does_zoom_timestamps = self._canvas_type in ( CC.CANVAS_MEDIA_VIEWER, CC.CANVAS_MEDIA_VIEWER_ARCHIVE_DELETE )
+        self._zoom_timestamps: list[ tuple[ int, float ] ] = []
+        self._zoom_timestamps_load_id = 0
+        
+        # the zoom timestamp we last zoomed to. None means the zoom the file starts at
+        self._current_zoom_timestamp: tuple[ int, float ] | None = None
+        self._current_zoom_timestamp_needs_reapply = False
+        self._zoom_timestamps_last_check_was_playing = False
+        self._zoom_timestamps_stopped_at_end = False
+        self._zoom_timestamps_have_checked = False
+        
         # the zoom the user last set on the current file, which the media viewer opens it at next time. each file has its own, saved in the db
         # the duplicate filter is left out, since it wants to keep the zoom the same between the files it compares
         self._remembers_file_zooms = self._canvas_type in ( CC.CANVAS_MEDIA_VIEWER, CC.CANVAS_MEDIA_VIEWER_ARCHIVE_DELETE )
@@ -1777,6 +1809,7 @@ class MediaContainer( QW.QWidget ):
         CG.client_controller.sub( self, 'NotifyAudioVolumeOptionsChanged', 'new_audio_volume' )
         CG.client_controller.sub( self, 'Pause', 'pause_all_media' )
         CG.client_controller.sub( self, 'NotifyNewPlaybackSkips', 'new_file_playback_skips' )
+        CG.client_controller.sub( self, 'NotifyNewZoomTimestamps', 'new_file_zoom_timestamps' )
         
     
     def _CheckPlaybackSkips( self ):
@@ -1829,6 +1862,94 @@ class MediaContainer( QW.QWidget ):
                 
                 return
                 
+            
+        
+    
+    def _CheckZoomTimestamps( self ):
+        
+        if len( self._zoom_timestamps ) == 0 or self._media is None or not self.CurrentlyPresentingMediaWithDuration() or not self.IsZoomable():
+            
+            return
+            
+        
+        animation_bar_status = self._media_window.GetAnimationBarStatus()
+        
+        if animation_bar_status is None:
+            
+            return
+            
+        
+        ( current_frame_index, current_timestamp_ms, paused, buffer_indices ) = animation_bar_status
+        
+        if current_timestamp_ms is None:
+            
+            return
+            
+        
+        was_playing = self._zoom_timestamps_last_check_was_playing
+        
+        self._zoom_timestamps_last_check_was_playing = not paused
+        
+        # when media that plays a set number of times finishes, it stops on its last frame. media that loops goes back to the start, which the timestamps handle by themselves
+        num_frames = self._media.GetNumFrames()
+        
+        at_last_frame = num_frames is not None and num_frames > 1 and current_frame_index >= num_frames - 1
+        
+        if self._zoom_timestamps_stopped_at_end:
+            
+            if paused and at_last_frame:
+                
+                return
+                
+            
+            self._zoom_timestamps_stopped_at_end = False
+            
+        
+        if paused and was_playing and at_last_frame:
+            
+            # the end of playback, so back to the zoom the file started at
+            self._zoom_timestamps_stopped_at_end = True
+            
+            zoom_timestamp = None
+            
+        else:
+            
+            zoom_timestamp = GetZoomTimestampAt( self._zoom_timestamps, current_timestamp_ms )
+            
+            # the file opening counts as playback, even if it opens paused, so a zoom timestamp at the start still happens
+            first_check = not self._zoom_timestamps_have_checked
+            
+            self._zoom_timestamps_have_checked = True
+            
+            if paused and not first_check:
+                
+                # we only zoom in normal playback. while paused, e.g. when the user drags the scanbar (which pauses), we just keep up with where we are
+                # when playback carries on, the zoom stays as it is until playback gets to the next zoom timestamp
+                self._current_zoom_timestamp = zoom_timestamp
+                
+                # but a resize resets the zoom, so that still puts the one we are in back on. if we are not in one, the resize already did what we would
+                if self._current_zoom_timestamp_needs_reapply:
+                    
+                    if zoom_timestamp is None:
+                        
+                        self._current_zoom_timestamp_needs_reapply = False
+                        
+                    else:
+                        
+                        self._ZoomToZoomTimestamp( zoom_timestamp )
+                        
+                    
+                
+                return
+                
+            
+        
+        # the zoom the file starts at does not need putting back after a resize, since the resize already did that
+        needs_reapply = self._current_zoom_timestamp_needs_reapply and zoom_timestamp is not None
+        
+        if zoom_timestamp != self._current_zoom_timestamp or needs_reapply:
+            
+            self._ZoomToZoomTimestamp( zoom_timestamp )
             
         
     
@@ -2108,6 +2229,51 @@ class MediaContainer( QW.QWidget ):
                 
                 self.ResetCenterPosition()
                 
+                # a zoom timestamp we are already in wins over this
+                self._current_zoom_timestamp_needs_reapply = True
+                
+            
+        
+        job = ClientGUIAsync.AsyncQtJob( self, work_callable, publish_callable )
+        
+        job.start()
+        
+    
+    def _LoadZoomTimestamps( self ):
+        
+        self._zoom_timestamps_load_id += 1
+        
+        load_id = self._zoom_timestamps_load_id
+        
+        self._SetZoomTimestamps( [] )
+        
+        self._current_zoom_timestamp = None
+        self._current_zoom_timestamp_needs_reapply = False
+        self._zoom_timestamps_last_check_was_playing = False
+        self._zoom_timestamps_stopped_at_end = False
+        self._zoom_timestamps_have_checked = False
+        
+        if self._media is None or not self._does_zoom_timestamps or not MediaHasPlayback( self._media ):
+            
+            return
+            
+        
+        hash = self._media.GetHash()
+        
+        def work_callable():
+            
+            return CG.client_controller.Read( 'file_zoom_timestamps', hash )
+            
+        
+        def publish_callable( zoom_timestamps ):
+            
+            # the media changed, or the zoom timestamps were edited, while we were waiting
+            if load_id != self._zoom_timestamps_load_id:
+                
+                return
+                
+            
+            self._SetZoomTimestamps( zoom_timestamps )
             
         
         job = ClientGUIAsync.AsyncQtJob( self, work_callable, publish_callable )
@@ -2339,6 +2505,26 @@ class MediaContainer( QW.QWidget ):
         CG.client_controller.Write( 'file_viewer_zoom', self._media.GetHash(), zoom )
         
     
+    def _SaveZoomTimestamps( self, zoom_timestamps: list[ tuple[ int, float ] ] ):
+        
+        if self._media is None:
+            
+            return
+            
+        
+        hash = self._media.GetHash()
+        
+        # anything we are still loading is now out of date
+        self._zoom_timestamps_load_id += 1
+        
+        self._SetZoomTimestamps( zoom_timestamps )
+        
+        CG.client_controller.Write( 'file_zoom_timestamps', hash, self._zoom_timestamps )
+        
+        # other media viewers may be showing this file too
+        CG.client_controller.pub( 'new_file_zoom_timestamps', hash, self._zoom_timestamps )
+        
+    
     def _SeekPastPlaybackSkip( self, end_ms: int ):
         
         if isinstance( self._media_window, Animation ):
@@ -2364,15 +2550,14 @@ class MediaContainer( QW.QWidget ):
         self._playback_skips = [ tuple( skip ) for skip in skips ]
         self._last_playback_skip_seek = None
         
-        # we only need to watch playback when there is something to skip
-        if len( self._playback_skips ) > 0:
-            
-            CG.client_controller.gui.RegisterAnimationUpdateWindow( self )
-            
-        else:
-            
-            CG.client_controller.gui.UnregisterAnimationUpdateWindow( self )
-            
+        self._UpdateAnimationUpdateRegistration()
+        
+    
+    def _SetZoomTimestamps( self, zoom_timestamps: list[ tuple[ int, float ] ] ):
+        
+        self._zoom_timestamps = sorted( tuple( zoom_timestamp ) for zoom_timestamp in zoom_timestamps )
+        
+        self._UpdateAnimationUpdateRegistration()
         
     
     def _SetZoom( self, zoom: float, move_delta = None ):
@@ -2658,6 +2843,43 @@ class MediaContainer( QW.QWidget ):
             
         
     
+    def _ZoomToZoomTimestamp( self, zoom_timestamp: tuple[ int, float ] | None ):
+        
+        # we do not save the pan, so the media is centered, the same every time
+        if zoom_timestamp is None:
+            
+            # the zoom the file starts at
+            self.ZoomReinit()
+            
+        else:
+            
+            ( timestamp_ms, zoom ) = zoom_timestamp
+            
+            self._SetZoom( zoom )
+            
+        
+        self.ResetCenterPosition()
+        
+        self.update()
+        
+        # after ZoomReinit, which asks for a reapply
+        self._current_zoom_timestamp = zoom_timestamp
+        self._current_zoom_timestamp_needs_reapply = False
+        
+    
+    def _UpdateAnimationUpdateRegistration( self ):
+        
+        # we only need to watch playback when there is something to skip or zoom
+        if len( self._playback_skips ) > 0 or len( self._zoom_timestamps ) > 0:
+            
+            CG.client_controller.gui.RegisterAnimationUpdateWindow( self )
+            
+        else:
+            
+            CG.client_controller.gui.UnregisterAnimationUpdateWindow( self )
+            
+        
+    
     def _UpdateMediaWindowAudioEffects( self ):
         
         # only mpv can do audio effects
@@ -2770,6 +2992,8 @@ class MediaContainer( QW.QWidget ):
         
         self._LoadSavedZoom()
         
+        self._LoadZoomTimestamps()
+        
         self._animation_bar.ClearMedia()
         
         self._controls_bar.hide()
@@ -2800,9 +3024,38 @@ class MediaContainer( QW.QWidget ):
         self._SavePlaybackSkips( [] )
         
     
+    def ClearZoomTimestamps( self ):
+        
+        self._SaveZoomTimestamps( [] )
+        
+        # the zoom stays where it is. it goes back to normal next time the file is opened
+        self._current_zoom_timestamp = None
+        
+    
     def CurrentlyPresentingMediaWithDuration( self ):
         
         return isinstance( self._media_window, ( Animation, ClientGUIMPV.MPVWidget, ClientGUIQtMediaPlayer.QtMediaPlayer ) )
+        
+    
+    def DeleteZoomTimestamp( self, timestamp_ms: int ):
+        
+        self._SaveZoomTimestamps( [ zoom_timestamp for zoom_timestamp in self._zoom_timestamps if zoom_timestamp[0] != timestamp_ms ] )
+        
+        # the zoom stays where it is, like a clear. we note which one we are under now, so the next check does not zoom to it
+        current_zoom_timestamp = None
+        
+        if self.CurrentlyPresentingMediaWithDuration():
+            
+            animation_bar_status = self._media_window.GetAnimationBarStatus()
+            
+            if animation_bar_status is not None and animation_bar_status[1] is not None:
+                
+                current_zoom_timestamp = GetZoomTimestampAt( self._zoom_timestamps, animation_bar_status[1] )
+                
+            
+        
+        self._current_zoom_timestamp = current_zoom_timestamp
+        self._current_zoom_timestamp_needs_reapply = False
         
     
     def DoEdgePan( self, pan_type: int ):
@@ -3008,6 +3261,11 @@ class MediaContainer( QW.QWidget ):
         return list( self._playback_skips )
         
     
+    def GetZoomTimestamps( self ) -> list[ tuple[ int, float ] ]:
+        
+        return list( self._zoom_timestamps )
+        
+    
     def GetTieMediaWindowOnTopToPausePlayState( self ):
         
         return self._tie_media_window_to_pauseplay_state
@@ -3192,6 +3450,16 @@ class MediaContainer( QW.QWidget ):
             self._playback_skips_load_id += 1
             
             self._SetPlaybackSkips( skips )
+            
+        
+    
+    def NotifyNewZoomTimestamps( self, hash: bytes, zoom_timestamps: list[ tuple[ int, float ] ] ):
+        
+        if self._media is not None and self._media.GetHash() == hash and self._does_zoom_timestamps:
+            
+            self._zoom_timestamps_load_id += 1
+            
+            self._SetZoomTimestamps( zoom_timestamps )
             
         
     
@@ -3445,6 +3713,8 @@ class MediaContainer( QW.QWidget ):
         
         # this clears the last file's zoom before we set up the new one, and then the new file's zoom comes in a moment later
         self._LoadSavedZoom()
+        
+        self._LoadZoomTimestamps()
         
         if maintain_zoom and previous_media is not None:
             
@@ -4017,6 +4287,9 @@ class MediaContainer( QW.QWidget ):
             return
             
         
+        # this is a resize or a new file. if we are in a zoom timestamp, it needs to go back on
+        self._current_zoom_timestamp_needs_reapply = True
+        
         canvas_size = self.parentWidget().size()
         my_dpr = self.devicePixelRatio()
         
@@ -4183,6 +4456,51 @@ class MediaContainer( QW.QWidget ):
         self._SetZoom( self._zoom_types_to_zooms[ self._current_zoom_type ] )
         
     
+    def SaveZoomTimestamp( self ) -> bool:
+        
+        # the current zoom, at the current point in playback. returns False if we are not at a point in playback
+        if self._media is None or not self._does_zoom_timestamps or not self.CurrentlyPresentingMediaWithDuration():
+            
+            return False
+            
+        
+        animation_bar_status = self._media_window.GetAnimationBarStatus()
+        
+        if animation_bar_status is None:
+            
+            return False
+            
+        
+        ( current_frame_index, current_timestamp_ms, paused, buffer_indices ) = animation_bar_status
+        
+        if current_timestamp_ms is None:
+            
+            return False
+            
+        
+        timestamp_ms = int( current_timestamp_ms )
+        
+        zoom_timestamp = ( timestamp_ms, self._current_zoom )
+        
+        # one at the same point is replaced
+        zoom_timestamps = [ existing for existing in self._zoom_timestamps if existing[0] != timestamp_ms ]
+        
+        zoom_timestamps.append( zoom_timestamp )
+        
+        self._SaveZoomTimestamps( zoom_timestamps )
+        
+        # we are already there, so there is nothing to zoom to
+        self._current_zoom_timestamp = zoom_timestamp
+        self._current_zoom_timestamp_needs_reapply = False
+        
+        return True
+        
+    
+    def SupportsZoomTimestamps( self ) -> bool:
+        
+        return self._media is not None and self._does_zoom_timestamps and MediaHasPlayback( self._media )
+        
+    
     def TakeSnapshot( self, path: str ):
         
         if not self.CanTakeSnapshot():
@@ -4202,6 +4520,8 @@ class MediaContainer( QW.QWidget ):
     def TIMERAnimationUpdate( self ):
         
         self._CheckPlaybackSkips()
+        
+        self._CheckZoomTimestamps()
         
     
     def TIMERUIUpdate( self ):

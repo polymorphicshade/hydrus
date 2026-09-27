@@ -2513,6 +2513,20 @@ class CanvasWithHovers( Canvas ):
         self._media_container.ClearPlaybackSkips()
         
     
+    def _DeleteZoomTimestamp( self, zoom_timestamp: tuple[ int, float ] ):
+        
+        ( timestamp_ms, zoom ) = zoom_timestamp
+        
+        message = f'Delete the zoom timestamp at {ClientGUICanvasMedia.ConvertPlaybackTimestampToString( timestamp_ms )}, which zooms to {ClientData.ConvertZoomToPercentage( zoom )}?'
+        
+        result = ClientGUIDialogsQuick.GetYesNo( self, message, title = 'Delete zoom timestamp?', yes_label = 'delete it', no_label = 'keep it' )
+        
+        if result == QW.QDialog.DialogCode.Accepted:
+            
+            self._media_container.DeleteZoomTimestamp( timestamp_ms )
+            
+        
+    
     def _DoShowHideWindowFrame( self ):
         
         window_real_geom = self.window().geometry()
@@ -3231,6 +3245,14 @@ class CanvasWithHovers( Canvas ):
         self._last_cursor_autohide_touch_time = HydrusTime.GetNowFloat()
         
         self._cursor_autohide_timer.start( 100 )
+        
+    
+    def _SaveZoomTimestamp( self ):
+        
+        if not self._media_container.SaveZoomTimestamp():
+            
+            ClientGUIDialogsMessage.ShowWarning( self, 'Sorry, could not work out where playback is right now! If the file is still loading, give it a moment and try again.' )
+            
         
     
     def _SetCounter( self, counter_id: bytes, count: int ):
@@ -5065,6 +5087,30 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
                 if not self._media_container.IsAtMaxZoom():
                     
                     ClientGUIMenus.AppendMenuItem( zoom_menu, 'zoom to max', 'Set the zoom to the maximum possible.', self._media_container.ZoomMax )
+                    
+                
+                if self._media_container.SupportsZoomTimestamps():
+                    
+                    ClientGUIMenus.AppendSeparator( zoom_menu )
+                    
+                    ClientGUIMenus.AppendMenuItem( zoom_menu, 'save current zoom at timestamp', 'Save the current zoom at this point in playback. Every time playback gets here, the media viewer zooms to it, and stays there until the next zoom timestamp, or until playback ends, when it goes back to the zoom the file started at.', self._SaveZoomTimestamp )
+                    ClientGUIMenus.AppendMenuItem( zoom_menu, 'clear zoom timestamps', 'Remove all of this file\'s zoom timestamps.', self._media_container.ClearZoomTimestamps )
+                    
+                    zoom_timestamps = self._media_container.GetZoomTimestamps()
+                    
+                    if len( zoom_timestamps ) > 0:
+                        
+                        ClientGUIMenus.AppendSeparator( zoom_menu )
+                        
+                        for zoom_timestamp in zoom_timestamps:
+                            
+                            ( timestamp_ms, zoom ) = zoom_timestamp
+                            
+                            label = f'{ClientGUICanvasMedia.ConvertPlaybackTimestampToString( timestamp_ms )}: {ClientData.ConvertZoomToPercentage( zoom )}'
+                            
+                            ClientGUIMenus.AppendMenuItem( zoom_menu, label, 'Delete this zoom timestamp. You will be asked to confirm.', self._DeleteZoomTimestamp, zoom_timestamp )
+                            
+                        
                     
                 
                 if self._media_container.HasSavedZoom():
