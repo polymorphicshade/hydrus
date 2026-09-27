@@ -4417,6 +4417,9 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
         self._normal_slideshow_period = 0.0
         self._special_slideshow_period_for_current_media = None
         
+        # while a sub-window like manage tags is open, the slideshow holds still. this is when that started
+        self._slideshow_paused_for_sub_window_since: float | None = None
+        
         self._slideshow_is_shuffling = CG.client_controller.new_options.GetBoolean( 'slideshows_progress_randomly' )
         self._slideshow_is_playing_once_through = CG.client_controller.new_options.GetBoolean( 'slideshow_always_play_duration_media_once_through' )
         
@@ -4551,6 +4554,24 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
                 return
                 
             
+            if self._SubWindowIsOpen():
+                
+                if self._slideshow_paused_for_sub_window_since is None:
+                    
+                    self._slideshow_paused_for_sub_window_since = HydrusTime.GetNowFloat()
+                    
+                
+                return
+                
+            
+            if self._slideshow_paused_for_sub_window_since is not None:
+                
+                # the time the sub-window was open does not count, so the user gets the rest of this slide once they are done
+                self._last_slideshow_switch_time += HydrusTime.GetNowFloat() - self._slideshow_paused_for_sub_window_since
+                
+                self._slideshow_paused_for_sub_window_since = None
+                
+            
             if CGC.core().MenuIsOpen():
                 
                 return
@@ -4631,6 +4652,9 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
             
             self._last_slideshow_switch_time = HydrusTime.GetNowFloat()
             
+            # any pause so far was for the previous slide
+            self._slideshow_paused_for_sub_window_since = None
+            
             self._special_slideshow_period_for_current_media = None
             
             self._CalculateAnySpecialSlideshowPeriodForCurrentMedia()
@@ -4686,9 +4710,45 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
             
             self._slideshow_is_running = False
             self._special_slideshow_period_for_current_media = None
+            self._slideshow_paused_for_sub_window_since = None
             
             self._media_container.StopForSlideshow( False )
             
+        
+    
+    def _SubWindowIsOpen( self ) -> bool:
+        
+        # manage tags, notes, ratings, and so on are all windows that belong to this media viewer's window
+        # menus and tooltips are windows too, but they are not the sort we care about here
+        
+        my_window = self.window()
+        
+        for window in QW.QApplication.topLevelWidgets():
+            
+            if window is my_window or not window.isVisible():
+                
+                continue
+                
+            
+            if window.windowType() not in ( QC.Qt.WindowType.Window, QC.Qt.WindowType.Dialog, QC.Qt.WindowType.Tool ):
+                
+                continue
+                
+            
+            parent = window.parentWidget()
+            
+            while parent is not None:
+                
+                if parent is my_window:
+                    
+                    return True
+                    
+                
+                parent = parent.parentWidget()
+                
+            
+        
+        return False
         
     
     def SlideshowIsShuffling( self ):
