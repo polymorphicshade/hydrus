@@ -82,6 +82,7 @@ PREDICATE_TYPE_SYSTEM_HAS_IPTC = 68
 PREDICATE_TYPE_SYSTEM_HAS_SOFTWARE_SOURCE = 69
 PREDICATE_TYPE_SYSTEM_COUNTER = 1001 # not an official hydrus predicate, so it is well away from hydev's numbers
 PREDICATE_TYPE_SYSTEM_VIRTUAL_PATH = 1002
+PREDICATE_TYPE_SYSTEM_TAG_PRESET = 1003 # never searched on--the search box swaps it for the preset's own predicates
 
 SYSTEM_PREDICATE_TYPES = {
     PREDICATE_TYPE_SYSTEM_EVERYTHING,
@@ -124,6 +125,7 @@ SYSTEM_PREDICATE_TYPES = {
     PREDICATE_TYPE_SYSTEM_HAS_NOTE_NAME,
     PREDICATE_TYPE_SYSTEM_COUNTER,
     PREDICATE_TYPE_SYSTEM_VIRTUAL_PATH,
+    PREDICATE_TYPE_SYSTEM_TAG_PRESET,
     PREDICATE_TYPE_SYSTEM_FILE_SERVICE,
     PREDICATE_TYPE_SYSTEM_NUM_PIXELS,
     PREDICATE_TYPE_SYSTEM_DIMENSIONS,
@@ -2175,6 +2177,15 @@ class Predicate( HydrusSerialisable.SerialisableBase ):
                     ( counter_name, number_test ) = self._value
                     
                     base = f'counter {counter_name} {number_test.ToString()}'
+                    
+                
+            elif self._predicate_type == PREDICATE_TYPE_SYSTEM_TAG_PRESET:
+                
+                base = 'presets'
+                
+                if self._value is not None:
+                    
+                    base = f'presets {self._value}'
                     
                 
             elif self._predicate_type == PREDICATE_TYPE_SYSTEM_VIRTUAL_PATH:

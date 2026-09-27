@@ -28,6 +28,7 @@ FLESH_OUT_SYSTEM_PRED_TYPES = {
     ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_NUM_TAGS,
     ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_COUNTER,
     ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_VIRTUAL_PATH,
+    ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_TAG_PRESET,
     ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_LIMIT,
     ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_SIZE,
     ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_FILE_PROPERTIES,
@@ -852,6 +853,11 @@ class FleshOutPredicatePanel( ClientGUIScrolledPanels.EditPanel ):
         elif predicate_type == ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_VIRTUAL_PATH:
             
             editable_pred_panels.append( self._PredOKPanel( self, ClientGUIPredicatesSingle.PanelPredicateSystemVirtualPath, predicate ) )
+            
+        elif predicate_type == ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_TAG_PRESET:
+            
+            # each button enters that preset's tags
+            static_pred_buttons.extend( ( ClientGUIPredicatesSingle.StaticSystemPredicateButton( self, ( ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_TAG_PRESET, name ), ), show_remove_button = False ) for ( name, entries ) in CG.client_controller.new_options.GetTagPresets() ) )
             
         elif predicate_type == ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_RATING:
             

@@ -3710,6 +3710,31 @@ class ListBoxTags( ListBox ):
         
         ClientGUIMenus.AppendMenu( menu, copy_menu, 'copy' )
         
+        if len( selected_actual_tags ) > 0:
+            
+            from hydrus.client.gui.search import ClientGUITagPresets
+            
+            tags = sorted( selected_actual_tags )
+            
+            tag_presets_menu = ClientGUIMenus.GenerateMenu( menu )
+            
+            tag_presets = CG.client_controller.new_options.GetTagPresets()
+            
+            for ( name, entries ) in tag_presets:
+                
+                ClientGUIMenus.AppendMenuItem( tag_presets_menu, name, f'Add the selected tags to the "{name}" tag preset.', ClientGUITagPresets.AddTagsToTagPreset, self, name, tags )
+                
+            
+            if len( tag_presets ) > 0:
+                
+                ClientGUIMenus.AppendSeparator( tag_presets_menu )
+                
+            
+            ClientGUIMenus.AppendMenuItem( tag_presets_menu, 'new tag preset' + HC.UNICODE_ELLIPSIS, 'Make a new tag preset with the selected tags.', ClientGUITagPresets.AddTagsToNewTagPreset, self, tags )
+            
+            ClientGUIMenus.AppendMenu( menu, tag_presets_menu, 'add to tag preset' )
+            
+        
         #
         
         can_launch_sibling_and_parent_dialogs = len( selected_actual_tags ) > 0 and self.can_spawn_new_windows

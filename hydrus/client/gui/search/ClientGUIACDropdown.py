@@ -43,6 +43,7 @@ from hydrus.client.search import ClientSearchAutocomplete
 from hydrus.client.search import ClientSearchParseSystemPredicates
 from hydrus.client.search import ClientSearchPredicate
 from hydrus.client.search import ClientSearchTagContext
+from hydrus.client.search import ClientSearchTagPresets
 
 from hydrus.external import LogicExpressionQueryParser
 
@@ -3241,6 +3242,41 @@ class ListBoxTagsActiveSearchPredicates( ClientGUIListBoxes.ListBoxTagsPredicate
             return
             
         
+        # a tag preset goes in as its own entries, as if the user had typed each one. they only go in--one that is already there stays
+        add_only_predicates = set()
+        
+        preset_predicates = [ predicate for predicate in predicates if predicate.GetType() == ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_TAG_PRESET ]
+        
+        if len( preset_predicates ) > 0:
+            
+            predicates = [ predicate for predicate in predicates if predicate.GetType() != ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_TAG_PRESET ]
+            
+            tag_service_key = self._my_ac_parent.GetFileSearchContext().GetTagContext().service_key
+            
+            tag_autocomplete_options = CG.client_controller.tag_display_manager.GetTagAutocompleteOptions( tag_service_key )
+            
+            ( preset_expansion, missing_names ) = ClientSearchTagPresets.ExpandTagPresetPredicates( preset_predicates, CG.client_controller.new_options.GetTagPresets(), tag_autocomplete_options )
+            
+            if len( missing_names ) > 0:
+                
+                missing_names_string = ', '.join( f'"{name}"' for name in missing_names )
+                
+                ClientGUIDialogsMessage.ShowWarning( self, f'There is no tag preset called {missing_names_string}! You can make and edit them under options->tag presets.' )
+                
+            
+            if permit_add:
+                
+                predicates.extend( preset_expansion )
+                
+                add_only_predicates.update( preset_expansion )
+                
+            
+            if len( predicates ) == 0:
+                
+                return
+                
+            
+        
         if start_or_predicate:
             
             or_based_predicates = { ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_OR_CONTAINER, value = list( predicates ) ) }
@@ -3271,13 +3307,15 @@ class ListBoxTagsActiveSearchPredicates( ClientGUIListBoxes.ListBoxTagsPredicate
         
         for predicate in predicates:
             
+            add_only = predicate in add_only_predicates
+            
             predicate = predicate.GetCountlessCopy()
             
             term = self._GenerateTermFromPredicate( predicate )
             
             if term in self._terms_to_logical_indices:
                 
-                if permit_remove:
+                if permit_remove and not add_only:
                     
                     terms_to_be_removed.add( term )
                     

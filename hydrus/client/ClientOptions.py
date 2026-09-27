@@ -755,6 +755,9 @@ class ClientOptions( HydrusSerialisable.SerialisableBase ):
         
         # named spots on a monitor that a media viewer can snap to. ( name, screen_name, x, y, width, height )
         self._dictionary[ 'screen_locations' ] = []
+        
+        # named lists of search entries, for 'system:presets name'. ( name, entries )
+        self._dictionary[ 'tag_presets' ] = []
         self._dictionary[ 'mimes_to_launch_file_executable_ids_and_names' ] = HydrusSerialisable.SerialisableDictionary( { HC.GENERAL_FILE : HydrusSerialisable.SerialisableList() } )
         
         #
@@ -2086,6 +2089,15 @@ class ClientOptions( HydrusSerialisable.SerialisableBase ):
             
         
     
+    def GetTagPresets( self ) -> list[ tuple[ str, list[ str ] ] ]:
+        
+        with self._lock:
+            
+            # they come back from the db as lists
+            return [ ( name, list( entries ) ) for ( name, entries ) in self._dictionary[ 'tag_presets' ] ]
+            
+        
+    
     def GetTagSummaryGenerator( self, name ):
         
         with self._lock:
@@ -2541,6 +2553,14 @@ class ClientOptions( HydrusSerialisable.SerialisableBase ):
             service_key_hex = service_key.hex()
             
             self._dictionary[ 'suggested_tags' ][ 'favourites' ][ service_key_hex ] = list( tags )
+            
+        
+    
+    def SetTagPresets( self, tag_presets: list[ tuple[ str, list[ str ] ] ] ):
+        
+        with self._lock:
+            
+            self._dictionary[ 'tag_presets' ] = [ ( name, list( entries ) ) for ( name, entries ) in tag_presets ]
             
         
     

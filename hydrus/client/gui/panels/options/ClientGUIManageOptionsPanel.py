@@ -50,6 +50,7 @@ from hydrus.client.gui.panels.options import SystemPanel
 from hydrus.client.gui.panels.options import SystemTrayPanel
 from hydrus.client.gui.panels.options import TagEditingPanel
 from hydrus.client.gui.panels.options import TagPresentationPanel
+from hydrus.client.gui.panels.options import TagPresetsPanel
 from hydrus.client.gui.panels.options import TagSortPanel
 from hydrus.client.gui.panels.options import TagsPanel
 from hydrus.client.gui.panels.options import TagSuggestionsPanel
@@ -110,6 +111,7 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
         self._listbook.AddPage( 'system tray', SystemTrayPanel.SystemTrayPanel( self._listbook, self._new_options ) )
         self._listbook.AddPage( 'tag editing', TagEditingPanel.TagEditingPanel( self._listbook, self._new_options ) )
         self._listbook.AddPage( 'tag presentation', TagPresentationPanel.TagPresentationPanel( self._listbook, self._new_options ) )
+        self._listbook.AddPage( 'tag presets', TagPresetsPanel.TagPresetsPanel( self._listbook, self._new_options ) )
         self._listbook.AddPage( 'tag sort', TagSortPanel.TagSortPanel( self._listbook, self._new_options ) )
         self._listbook.AddPage( 'tag suggestions', TagSuggestionsPanel.TagSuggestionsPanel( self._listbook, self._new_options ) )
         self._listbook.AddPage( 'tag autocomplete tabs', TagsPanel.TagsPanel( self._listbook, self._new_options ) )

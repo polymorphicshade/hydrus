@@ -187,6 +187,7 @@ class Predicate( Enum ):
     NO_NOTE_NAME = auto()
     COUNTER = auto()
     VIRTUAL_PATH = auto()
+    TAG_PRESET = auto()
     RATING_SPECIFIC_NUMERICAL = auto()
     RATING_SPECIFIC_LIKE_DISLIKE = auto()
     RATING_SPECIFIC_INCDEC = auto()
@@ -350,6 +351,7 @@ SYSTEM_PREDICATES = {
     # before the ratings, which would otherwise read 'counter' as 'count'
     'counter': (Predicate.COUNTER, None, Value.COUNTER_NAME_AND_NUMBER_TEST, None ),
     'path': (Predicate.VIRTUAL_PATH, Operators.EQUAL, Value.ANY_STRING, None ),
+    'presets?': (Predicate.TAG_PRESET, None, Value.ANY_STRING, None ),
     'has( a)? (rating|count)( for)?': (Predicate.HAS_RATING, None, Value.ANY_STRING, None ),
     '((has )?no|does not have( a)?|doesn\'t have( a)?) (rating|count)( for)?': (Predicate.NO_RATING, None, Value.ANY_STRING, None ),
     r'(rating|count)( for)?(?=.+?\d+/\d+$)': (Predicate.RATING_SPECIFIC_NUMERICAL, Operators.RELATIONAL_FOR_RATING_SERVICE, Value.RATING_SERVICE_NAME_AND_NUMERICAL_VALUE, None ),

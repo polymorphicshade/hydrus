@@ -78,6 +78,7 @@ from hydrus.test import TestClientNetworkingSettings
 from hydrus.test import TestClientParsing
 from hydrus.test import TestClientScreenLocations
 from hydrus.test import TestClientSearch
+from hydrus.test import TestClientSearchTagPresets
 from hydrus.test import TestClientTags
 from hydrus.test import TestClientThreading
 from hydrus.test import TestDialogs
@@ -970,6 +971,7 @@ class Controller( object ):
         
         module_lookup[ 'search' ] = [
             TestClientSearch,
+            TestClientSearchTagPresets,
             TestClientMetadataConditional
         ]
         

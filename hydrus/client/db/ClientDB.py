@@ -2418,6 +2418,11 @@ class DB( HydrusDB.HydrusDB ):
             blank_pred_types.add( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_COUNTER )
             
         
+        if len( self._controller.new_options.GetTagPresets() ) > 0:
+            
+            blank_pred_types.add( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_TAG_PRESET )
+            
+        
         if self.modules_files_virtual_paths.HasPaths():
             
             blank_pred_types.add( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_VIRTUAL_PATH )
