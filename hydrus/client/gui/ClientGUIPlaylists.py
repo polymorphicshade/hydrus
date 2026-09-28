@@ -117,6 +117,24 @@ def SelectPlaylist( win: QW.QWidget, title: str, playlists: list[ ClientMediaPla
         
     
 
+def SelectPlaylistOrNewPlaylist( win: QW.QWidget, title: str, playlists: list[ ClientMediaPlaylists.PlaylistSummary ] ) -> int | str:
+    
+    # an existing playlist's id, or the name for a new one. raises CancelledException if the user backs out
+    with ClientGUITopLevelWindowsPanels.DialogEdit( win, title, frame_key = 'quick_select_dialog' ) as dlg:
+        
+        panel = SelectPlaylistPanel( dlg, playlists, allow_new_playlist = True )
+        
+        dlg.SetPanel( panel )
+        
+        if dlg.exec() == QW.QDialog.DialogCode.Accepted:
+            
+            return panel.GetValue()
+            
+        
+        raise HydrusExceptions.CancelledException( 'Dialog cancelled.' )
+        
+    
+
 class EditPlaylistsPanel( ClientGUIScrolledPanels.EditPanel ):
     
     def __init__( self, parent: QW.QWidget, playlists: list[ ClientMediaPlaylists.PlaylistSummary ] ):
@@ -571,16 +589,22 @@ class EditPlaylistItemsPanel( ClientGUIScrolledPanels.EditPanel ):
 
 class SelectPlaylistPanel( ClientGUIScrolledPanels.EditPanel ):
     
-    def __init__( self, parent: QW.QWidget, playlists: list[ ClientMediaPlaylists.PlaylistSummary ] ):
+    def __init__( self, parent: QW.QWidget, playlists: list[ ClientMediaPlaylists.PlaylistSummary ], allow_new_playlist: bool = False ):
         
         super().__init__( parent )
         
         self._playlists = playlists
         
+        # when the user makes a new playlist here, this is its name, and we are done
+        self._new_playlist_name: str | None = None
+        
         self._filter = QW.QLineEdit( self )
         self._filter.setPlaceholderText( 'filter by name' )
         
         self._playlists_list = ClientGUIListBoxes.BetterQListWidget( self )
+        
+        self._new_playlist_button = ClientGUICommon.BetterButton( self, 'new playlist' + HC.UNICODE_ELLIPSIS, self._NewPlaylist )
+        self._new_playlist_button.setToolTip( 'Make a new playlist, and use that.' )
         
         #
         
@@ -592,13 +616,54 @@ class SelectPlaylistPanel( ClientGUIScrolledPanels.EditPanel ):
         
         QP.AddToLayout( vbox, self._filter, CC.FLAGS_EXPAND_PERPENDICULAR )
         QP.AddToLayout( vbox, self._playlists_list, CC.FLAGS_EXPAND_BOTH_WAYS )
+        QP.AddToLayout( vbox, self._new_playlist_button, CC.FLAGS_EXPAND_PERPENDICULAR )
         
         self.widget().setLayout( vbox )
+        
+        self._new_playlist_button.setVisible( allow_new_playlist )
         
         self._filter.textChanged.connect( self._RefreshList )
         self._playlists_list.itemDoubleClicked.connect( self._OKParent )
         
         self.setFocusProxy( self._filter )
+        
+    
+    def _NewPlaylist( self ):
+        
+        try:
+            
+            name = ClientGUIDialogsQuick.EnterText( self, 'Enter a name for the new playlist.', default = self._filter.text().strip(), title = 'new playlist' )
+            
+        except HydrusExceptions.CancelledException:
+            
+            return
+            
+        
+        name = ClientMediaPlaylists.NormalisePlaylistName( name )
+        
+        if name == '':
+            
+            return
+            
+        
+        for playlist in self._playlists:
+            
+            if playlist[1].lower() == name.lower():
+                
+                # we already have one called that, so we just use it
+                self._filter.clear()
+                
+                self._playlists_list.SelectData( [ playlist ] )
+                
+                self._OKParent()
+                
+                return
+                
+            
+        
+        self._new_playlist_name = name
+        
+        self._OKParent()
         
     
     def _RefreshList( self ):
@@ -614,7 +679,13 @@ class SelectPlaylistPanel( ClientGUIScrolledPanels.EditPanel ):
             
         
     
-    def GetValue( self ) -> int:
+    def GetValue( self ) -> int | str:
+        
+        # a playlist id, or the name of a new playlist
+        if self._new_playlist_name is not None:
+            
+            return self._new_playlist_name
+            
         
         selected_playlists = self._playlists_list.GetData( only_selected = True )
         

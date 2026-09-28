@@ -78,6 +78,7 @@ from hydrus.test import TestClientNetworkingSettings
 from hydrus.test import TestClientParsing
 from hydrus.test import TestClientPlaybackPoints
 from hydrus.test import TestClientPlaylistItems
+from hydrus.test import TestClientPlaylistSelect
 from hydrus.test import TestClientScreenLocations
 from hydrus.test import TestClientScriptedEvents
 from hydrus.test import TestClientSearch
@@ -943,6 +944,7 @@ class Controller( object ):
             TestClientListBoxes,
             TestClientPlaybackPoints,
             TestClientPlaylistItems,
+            TestClientPlaylistSelect,
             TestClientScriptedEvents,
             TestClientZoomTimestamps
         ]

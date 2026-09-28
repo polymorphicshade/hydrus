@@ -4682,16 +4682,26 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
             title = f'add {ClientGUICanvasMedia.ConvertPlaybackTimestampToString( start_ms )} - {ClientGUICanvasMedia.ConvertPlaybackTimestampToString( end_ms )} to playlist'
             
         
+        # the dialog is modal, but a slideshow can move us on to another file while it is open
+        hash = self._current_media.GetHash()
+        
         try:
             
-            playlist_id = ClientGUIPlaylists.SelectPlaylist( self, title, playlists )
+            playlist_id_or_new_name = ClientGUIPlaylists.SelectPlaylistOrNewPlaylist( self, title, playlists )
             
         except HydrusExceptions.CancelledException:
             
             return
             
         
-        CG.client_controller.Write( 'playlist_add_item', playlist_id, self._current_media.GetHash(), start_ms, end_ms )
+        if isinstance( playlist_id_or_new_name, str ):
+            
+            CG.client_controller.Write( 'playlist_add_item_to_new_playlist', playlist_id_or_new_name, hash, start_ms, end_ms )
+            
+        else:
+            
+            CG.client_controller.Write( 'playlist_add_item', playlist_id_or_new_name, hash, start_ms, end_ms )
+            
         
     
     def _AppendPlaylistMenu( self, menu: QW.QMenu ):
