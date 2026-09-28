@@ -23,16 +23,17 @@ class ClientDBFilesZoomTimestamps( ClientDBModule.ClientDBModule ):
         
         # zoom is relative to the zoom that fits the file in the media viewer window, so it follows the window's size
         # zoom_is_relative is 0 for rows from before that, which are the plain zoom
+        # center_x and center_y are the point of the file in the middle of the window, as a fraction of the file's width and height, so they follow the window's size too. they are NULL for rows from before we saved them, which are centered
         return {
-            'main.file_zoom_timestamps' : ( 'CREATE TABLE IF NOT EXISTS {} ( hash_id INTEGER, timestamp_ms INTEGER, zoom REAL, zoom_is_relative INTEGER NOT NULL DEFAULT 0, PRIMARY KEY ( hash_id, timestamp_ms ) );', 688 )
+            'main.file_zoom_timestamps' : ( 'CREATE TABLE IF NOT EXISTS {} ( hash_id INTEGER, timestamp_ms INTEGER, zoom REAL, zoom_is_relative INTEGER NOT NULL DEFAULT 0, center_x REAL, center_y REAL, PRIMARY KEY ( hash_id, timestamp_ms ) );', 688 )
         }
         
     
-    def GetZoomTimestamps( self, hash: bytes ) -> list[ tuple[ int, float, bool ] ]:
+    def GetZoomTimestamps( self, hash: bytes ) -> list[ tuple[ int, float, bool, float | None, float | None ] ]:
         
         hash_id = self.modules_hashes_local_cache.GetHashId( hash )
         
-        return [ ( timestamp_ms, zoom, bool( zoom_is_relative ) ) for ( timestamp_ms, zoom, zoom_is_relative ) in self._Execute( 'SELECT timestamp_ms, zoom, zoom_is_relative FROM file_zoom_timestamps WHERE hash_id = ? ORDER BY timestamp_ms;', ( hash_id, ) ) ]
+        return [ ( timestamp_ms, zoom, bool( zoom_is_relative ), center_x, center_y ) for ( timestamp_ms, zoom, zoom_is_relative, center_x, center_y ) in self._Execute( 'SELECT timestamp_ms, zoom, zoom_is_relative, center_x, center_y FROM file_zoom_timestamps WHERE hash_id = ? ORDER BY timestamp_ms;', ( hash_id, ) ) ]
         
     
     def GetTablesAndColumnsThatUseDefinitions( self, content_type: int ) -> list[ tuple[ str, str ] ]:
@@ -60,18 +61,27 @@ class ClientDBFilesZoomTimestamps( ClientDBModule.ClientDBModule ):
             self._Execute( 'ALTER TABLE file_zoom_timestamps ADD COLUMN zoom_is_relative INTEGER NOT NULL DEFAULT 0;' )
             
         
+        for column_name in ( 'center_x', 'center_y' ):
+            
+            if column_name not in column_names:
+                
+                # the table is from before zoom timestamps saved where the file was panned to. what is in it stays centered
+                self._Execute( f'ALTER TABLE file_zoom_timestamps ADD COLUMN {column_name} REAL;' )
+                
+            
+        
         cursor_transaction_wrapper.CommitAndBegin()
         
         super().Repair( current_db_version, cursor_transaction_wrapper )
         
     
-    def SetZoomTimestamps( self, hash: bytes, zoom_timestamps: list[ tuple[ int, float ] ] ):
+    def SetZoomTimestamps( self, hash: bytes, zoom_timestamps: list[ tuple[ int, float, float | None, float | None ] ] ):
         
-        # these are always relative zooms
+        # ( timestamp_ms, zoom, center_x, center_y ). these are always relative zooms
         hash_id = self.modules_hashes_local_cache.GetHashId( hash )
         
         self._Execute( 'DELETE FROM file_zoom_timestamps WHERE hash_id = ?;', ( hash_id, ) )
         
-        self._ExecuteMany( 'INSERT OR REPLACE INTO file_zoom_timestamps ( hash_id, timestamp_ms, zoom, zoom_is_relative ) VALUES ( ?, ?, ?, ? );', ( ( hash_id, timestamp_ms, zoom, 1 ) for ( timestamp_ms, zoom ) in zoom_timestamps ) )
+        self._ExecuteMany( 'INSERT OR REPLACE INTO file_zoom_timestamps ( hash_id, timestamp_ms, zoom, zoom_is_relative, center_x, center_y ) VALUES ( ?, ?, ?, ?, ?, ? );', ( ( hash_id, timestamp_ms, zoom, 1, center_x, center_y ) for ( timestamp_ms, zoom, center_x, center_y ) in zoom_timestamps ) )
         
     

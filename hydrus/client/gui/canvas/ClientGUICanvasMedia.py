@@ -201,7 +201,11 @@ def GetFrameIndexAtPlaybackPoint( point_ms: float, num_frames: int, get_frame_st
     return lo
     
 
-def ConvertZoomTimestampRowsToRelative( rows: list[ tuple[ int, float, bool ] ], canvas_zoom: float ) -> tuple[ list[ tuple[ int, float ] ], bool ]:
+# ( timestamp_ms, relative_zoom, center_x, center_y ). relative_zoom is relative to the zoom that fits the file in the window
+# center_x and center_y are the point of the file in the middle of the window, as a fraction of its width and height. None for both means centered
+ZoomTimestamp = tuple[ int, float, float | None, float | None ]
+
+def ConvertZoomTimestampRowsToRelative( rows: list[ tuple[ int, float, bool, float | None, float | None ] ], canvas_zoom: float ) -> tuple[ list[ ZoomTimestamp ], bool ]:
     
     # zoom timestamps are relative to the zoom that fits the file in the window. ones from before that are the plain zoom, which we take as being for the window as it is now
     # returns the zoom timestamps, and whether any needed converting
@@ -209,7 +213,7 @@ def ConvertZoomTimestampRowsToRelative( rows: list[ tuple[ int, float, bool ] ],
     
     converted_some = False
     
-    for ( timestamp_ms, zoom, zoom_is_relative ) in rows:
+    for ( timestamp_ms, zoom, zoom_is_relative, center_x, center_y ) in rows:
         
         if not zoom_is_relative:
             
@@ -218,19 +222,42 @@ def ConvertZoomTimestampRowsToRelative( rows: list[ tuple[ int, float, bool ] ],
             converted_some = True
             
         
-        zoom_timestamps.append( ( timestamp_ms, zoom ) )
+        zoom_timestamps.append( ( timestamp_ms, zoom, center_x, center_y ) )
         
     
     return ( zoom_timestamps, converted_some )
     
 
-def GetZoomTimestampAt( zoom_timestamps: list[ tuple[ int, float ] ], timestamp_ms: float ) -> tuple[ int, float ] | None:
+def GetMediaPosForZoomCenter( canvas_size: tuple[ int, int ], media_size: tuple[ int, int ], center: tuple[ float, float ] ) -> tuple[ int, int ]:
+    
+    # where the media goes so the point of it at center, as a fraction of its width and height, is in the middle of the canvas
+    ( canvas_width, canvas_height ) = canvas_size
+    ( media_width, media_height ) = media_size
+    ( center_x, center_y ) = center
+    
+    return ( round( ( canvas_width / 2 ) - ( center_x * media_width ) ), round( ( canvas_height / 2 ) - ( center_y * media_height ) ) )
+    
+
+def GetZoomCenter( canvas_size: tuple[ int, int ], media_pos: tuple[ int, int ], media_size: tuple[ int, int ] ) -> tuple[ float, float ]:
+    
+    # the point of the media in the middle of the canvas, as a fraction of its width and height. zoom timestamps save their pan like this, so it follows the window's size like their zoom does
+    ( canvas_width, canvas_height ) = canvas_size
+    ( media_x, media_y ) = media_pos
+    ( media_width, media_height ) = media_size
+    
+    center_x = 0.5 if media_width <= 0 else ( ( canvas_width / 2 ) - media_x ) / media_width
+    center_y = 0.5 if media_height <= 0 else ( ( canvas_height / 2 ) - media_y ) / media_height
+    
+    return ( center_x, center_y )
+    
+
+def GetZoomTimestampAt( zoom_timestamps: list[ ZoomTimestamp ], timestamp_ms: float ) -> ZoomTimestamp | None:
     
     # the zoom timestamp that playback is under at this point, which is the last one at or before it. None means we are before the first one
     
     current_zoom_timestamp = None
     
-    for zoom_timestamp in sorted( zoom_timestamps ):
+    for zoom_timestamp in sorted( zoom_timestamps, key = lambda zoom_timestamp: zoom_timestamp[0] ):
         
         if zoom_timestamp[0] > timestamp_ms:
             
@@ -1756,14 +1783,14 @@ class MediaContainer( QW.QWidget ):
         self._playback_skips_load_id = 0
         self._last_playback_skip_seek: tuple[ tuple[ int, int ], float ] | None = None
         
-        # zooms to change to at points in playback, as ( timestamp_ms, relative_zoom ), where relative_zoom is relative to the zoom that fits the file in the window. each file has its own, saved in the db
+        # zooms, and pans, to change to at points in playback. each file has its own, saved in the db
         # only the media viewer does them. the preview is too small, and the duplicate filter wants to keep the zoom the same between the files it compares
         self._does_zoom_timestamps = self._canvas_type in ( CC.CANVAS_MEDIA_VIEWER, CC.CANVAS_MEDIA_VIEWER_ARCHIVE_DELETE )
-        self._zoom_timestamps: list[ tuple[ int, float ] ] = []
+        self._zoom_timestamps: list[ ZoomTimestamp ] = []
         self._zoom_timestamps_load_id = 0
         
         # the zoom timestamp we last zoomed to. None means the zoom the file starts at
-        self._current_zoom_timestamp: tuple[ int, float ] | None = None
+        self._current_zoom_timestamp: ZoomTimestamp | None = None
         self._current_zoom_timestamp_needs_reapply = False
         self._zoom_timestamps_last_check_was_playing = False
         self._zoom_timestamps_stopped_at_end = False
@@ -2513,7 +2540,7 @@ class MediaContainer( QW.QWidget ):
             else:
                 
                 # we cannot work out what old ones should be yet, so we leave them in the db for next time
-                zoom_timestamps = [ ( timestamp_ms, zoom ) for ( timestamp_ms, zoom, zoom_is_relative ) in rows if zoom_is_relative ]
+                zoom_timestamps = [ ( timestamp_ms, zoom, center_x, center_y ) for ( timestamp_ms, zoom, zoom_is_relative, center_x, center_y ) in rows if zoom_is_relative ]
                 
             
             self._SetZoomTimestamps( zoom_timestamps )
@@ -2675,6 +2702,24 @@ class MediaContainer( QW.QWidget ):
         self.move( self.pos() + delta )
         
     
+    def _MoveToZoomCenter( self, center: tuple[ float, float ] ):
+        
+        canvas_size = self.parentWidget().size()
+        my_size = self.sizeHint()
+        
+        ( x, y ) = GetMediaPosForZoomCenter( ( canvas_size.width(), canvas_size.height() ), ( my_size.width(), my_size.height() ), center )
+        
+        ideal_pos = QC.QPoint( x, y )
+        
+        if ideal_pos != self.pos():
+            
+            self.move( ideal_pos )
+            
+        
+        # a window of a very different shape could leave the file off the side
+        self.RescueIfOffScreen()
+        
+    
     def _NotifyMPVInitialised( self ):
         
         if self._deferred_set_media_call is not None:
@@ -2750,7 +2795,7 @@ class MediaContainer( QW.QWidget ):
         CG.client_controller.Write( 'file_viewer_zoom', self._media.GetHash(), zoom )
         
     
-    def _SaveZoomTimestamps( self, zoom_timestamps: list[ tuple[ int, float ] ] ):
+    def _SaveZoomTimestamps( self, zoom_timestamps: list[ ZoomTimestamp ] ):
         
         if self._media is None:
             
@@ -2805,9 +2850,9 @@ class MediaContainer( QW.QWidget ):
         self._UpdateAnimationUpdateRegistration()
         
     
-    def _SetZoomTimestamps( self, zoom_timestamps: list[ tuple[ int, float ] ] ):
+    def _SetZoomTimestamps( self, zoom_timestamps: list[ ZoomTimestamp ] ):
         
-        self._zoom_timestamps = sorted( tuple( zoom_timestamp ) for zoom_timestamp in zoom_timestamps )
+        self._zoom_timestamps = sorted( ( tuple( zoom_timestamp ) for zoom_timestamp in zoom_timestamps ), key = lambda zoom_timestamp: zoom_timestamp[0] )
         
         self._UpdateAnimationUpdateRegistration()
         
@@ -3095,25 +3140,35 @@ class MediaContainer( QW.QWidget ):
             
         
     
-    def _ZoomToZoomTimestamp( self, zoom_timestamp: tuple[ int, float ] | None ):
+    def _ZoomToZoomTimestamp( self, zoom_timestamp: ZoomTimestamp | None ):
         
-        # we do not save the pan, so the media is centered, the same every time
         if zoom_timestamp is None:
             
-            # the zoom the file starts at
+            # the zoom the file starts at, centered
             self.ZoomReinit()
+            
+            self.ResetCenterPosition()
             
         else:
             
-            ( timestamp_ms, relative_zoom ) = zoom_timestamp
+            ( timestamp_ms, relative_zoom, center_x, center_y ) = zoom_timestamp
             
             # relative to the zoom that fits the file in the window, so a smaller window gets a smaller zoom. a resize puts it back on, at the new size
             zoom = relative_zoom * self._zoom_types_to_zooms[ MEDIA_VIEWER_ZOOM_TYPE_CANVAS ]
             
             self._SetZoom( self._GetZoomWithinMaxDimension( zoom ) )
             
-        
-        self.ResetCenterPosition()
+            if center_x is None or center_y is None:
+                
+                # from before we saved the pan
+                self.ResetCenterPosition()
+                
+            else:
+                
+                # the same part of the file in the middle of the window, whatever its size
+                self._MoveToZoomCenter( ( center_x, center_y ) )
+                
+            
         
         self.update()
         
@@ -3538,7 +3593,7 @@ class MediaContainer( QW.QWidget ):
         return list( self._scripted_events )
         
     
-    def GetZoomTimestamps( self ) -> list[ tuple[ int, float ] ]:
+    def GetZoomTimestamps( self ) -> list[ ZoomTimestamp ]:
         
         return list( self._zoom_timestamps )
         
@@ -3741,7 +3796,7 @@ class MediaContainer( QW.QWidget ):
             
         
     
-    def NotifyNewZoomTimestamps( self, hash: bytes, zoom_timestamps: list[ tuple[ int, float ] ] ):
+    def NotifyNewZoomTimestamps( self, hash: bytes, zoom_timestamps: list[ ZoomTimestamp ] ):
         
         if self._media is not None and self._media.GetHash() == hash and self._does_zoom_timestamps:
             
@@ -4803,8 +4858,14 @@ class MediaContainer( QW.QWidget ):
             return False
             
         
-        # saved relative to the zoom that fits the file in the window, so it follows the window's size
-        zoom_timestamp = ( timestamp_ms, self._current_zoom / canvas_zoom )
+        # saved relative to the zoom that fits the file in the window, and with the pan as the part of the file in the middle of the window, so it follows the window's size
+        canvas_size = self.parentWidget().size()
+        my_pos = self.pos()
+        my_size = self.size()
+        
+        ( center_x, center_y ) = GetZoomCenter( ( canvas_size.width(), canvas_size.height() ), ( my_pos.x(), my_pos.y() ), ( my_size.width(), my_size.height() ) )
+        
+        zoom_timestamp = ( timestamp_ms, self._current_zoom / canvas_zoom, center_x, center_y )
         
         # one at the same point is replaced
         zoom_timestamps = [ existing for existing in self._zoom_timestamps if existing[0] != timestamp_ms ]

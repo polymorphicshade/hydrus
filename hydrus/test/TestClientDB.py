@@ -862,17 +862,17 @@ class TestClientDB( unittest.TestCase ):
         
         self.assertEqual( self._read( 'file_zoom_timestamps', hash_a ), [] )
         
-        self._write( 'file_zoom_timestamps', hash_a, [ ( 5000, 1.5 ), ( 0, 1.0 ), ( 13000, 0.7 ) ] )
-        self._write( 'file_zoom_timestamps', hash_b, [ ( 250, 2.0 ) ] )
+        self._write( 'file_zoom_timestamps', hash_a, [ ( 5000, 1.5, 0.25, 0.75 ), ( 0, 1.0, None, None ), ( 13000, 0.7, 0.5, 0.5 ) ] )
+        self._write( 'file_zoom_timestamps', hash_b, [ ( 250, 2.0, 0.1, 0.9 ) ] )
         
-        # they come back in timestamp order, marked as relative to the zoom that fits the window
-        self.assertEqual( self._read( 'file_zoom_timestamps', hash_a ), [ ( 0, 1.0, True ), ( 5000, 1.5, True ), ( 13000, 0.7, True ) ] )
-        self.assertEqual( self._read( 'file_zoom_timestamps', hash_b ), [ ( 250, 2.0, True ) ] )
+        # they come back in timestamp order, marked as relative to the zoom that fits the window, with their pan
+        self.assertEqual( self._read( 'file_zoom_timestamps', hash_a ), [ ( 0, 1.0, True, None, None ), ( 5000, 1.5, True, 0.25, 0.75 ), ( 13000, 0.7, True, 0.5, 0.5 ) ] )
+        self.assertEqual( self._read( 'file_zoom_timestamps', hash_b ), [ ( 250, 2.0, True, 0.1, 0.9 ) ] )
         
         self._write( 'file_zoom_timestamps', hash_a, [] )
         
         self.assertEqual( self._read( 'file_zoom_timestamps', hash_a ), [] )
-        self.assertEqual( self._read( 'file_zoom_timestamps', hash_b ), [ ( 250, 2.0, True ) ] )
+        self.assertEqual( self._read( 'file_zoom_timestamps', hash_b ), [ ( 250, 2.0, True, 0.1, 0.9 ) ] )
         
     
     def test_file_query_ids( self ):
