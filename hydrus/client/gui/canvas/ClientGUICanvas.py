@@ -47,6 +47,7 @@ from hydrus.client.gui.media import ClientGUIMediaSimpleActions
 from hydrus.client.gui.media import ClientGUIMediaModalActions
 from hydrus.client.gui.media import ClientGUIMediaAudioEffects
 from hydrus.client.gui.media import ClientGUIMediaControls
+from hydrus.client.gui.media import ClientGUIMediaCounters
 from hydrus.client.gui.media import ClientGUIMediaMenus
 from hydrus.client.gui.media import ClientGUIMediaScriptedEvents
 from hydrus.client.gui.metadata import ClientGUIManageTags
@@ -3338,28 +3339,6 @@ class CanvasWithHovers( Canvas ):
         CG.client_controller.Write( 'file_counter_set', self._current_media.GetHash(), counter_id, count )
         
     
-    def _SetCounterByHand( self, counter_id: bytes, counter_name: str, current_count: int ):
-        
-        if self._current_media is None:
-            
-            return
-            
-        
-        media = self._current_media
-        
-        try:
-            
-            count = ClientGUIDialogsQuick.EnterNumber( self, f'Enter this file\'s "{counter_name}" count.', default = current_count, min_value = 0, max_value = 1000000, title = 'set count' )
-            
-        except HydrusExceptions.CancelledException:
-            
-            return
-            
-        
-        # the dialog is modal, but a slideshow can move us on to another file while it is open
-        CG.client_controller.Write( 'file_counter_set', media.GetHash(), counter_id, count )
-        
-    
     def _ShowAudioEffects( self ):
         
         for child in self.window().children():
@@ -4892,6 +4871,40 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
         return ClientMediaPlaylists.GetPlaylistItemSpanFromABLoop( a_ms, b_ms )
         
     
+    def _ManageCounters( self ):
+        
+        if self._current_media is None:
+            
+            return
+            
+        
+        counters = CG.client_controller.new_options.GetCounters()
+        
+        if len( counters ) == 0:
+            
+            return
+            
+        
+        # the dialog is modal, but a slideshow can move us on to another file while it is open
+        hash = self._current_media.GetHash()
+        
+        counter_ids_to_counts = CG.client_controller.Read( 'file_counters', hash )
+        
+        try:
+            
+            changed_counter_ids_to_counts = ClientGUIMediaCounters.ManageFileCounters( self, counters, counter_ids_to_counts )
+            
+        except HydrusExceptions.CancelledException:
+            
+            return
+            
+        
+        for ( counter_id, count ) in changed_counter_ids_to_counts.items():
+            
+            CG.client_controller.Write( 'file_counter_set', hash, counter_id, count )
+            
+        
+    
     def _MoveToScreenLocation( self ):
         
         try:
@@ -5387,16 +5400,7 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
                 
                 ClientGUIMenus.AppendSeparator( counters_menu )
                 
-                set_menu = ClientGUIMenus.GenerateMenu( counters_menu )
-                
-                for counter in counters:
-                    
-                    count = counter_ids_to_counts.get( counter.object_id, 0 )
-                    
-                    ClientGUIMenus.AppendMenuItem( set_menu, f'{counter.name}{HC.UNICODE_ELLIPSIS}', f'Type in a number for this file\'s "{counter.name}" count.', self._SetCounterByHand, counter.object_id, counter.name, count )
-                    
-                
-                ClientGUIMenus.AppendMenu( counters_menu, set_menu, 'set count' )
+                ClientGUIMenus.AppendMenuItem( counters_menu, 'manage' + HC.UNICODE_ELLIPSIS, 'Set any of this file\'s counts to whatever number you like, all in one place.', self._ManageCounters )
                 
                 # for mis-clicks
                 if len( counted_counters ) > 0:

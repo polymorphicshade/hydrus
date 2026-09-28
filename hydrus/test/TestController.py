@@ -64,6 +64,7 @@ from hydrus.test import TestClientDBDuplicates
 from hydrus.test import TestClientDBDuplicatesAutoResolution
 from hydrus.test import TestClientDBTags
 from hydrus.test import TestClientDuplicatesAutoResolution
+from hydrus.test import TestClientFileCounters
 from hydrus.test import TestClientFileStorage
 from hydrus.test import TestClientImageHandling
 from hydrus.test import TestClientImportObjects
@@ -942,6 +943,7 @@ class Controller( object ):
         module_lookup[ 'gui' ] = [
             TestDialogs,
             TestClientListBoxes,
+            TestClientFileCounters,
             TestClientPlaybackPoints,
             TestClientPlaylistItems,
             TestClientPlaylistSelect,

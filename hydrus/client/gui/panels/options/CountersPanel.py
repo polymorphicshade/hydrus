@@ -21,7 +21,7 @@ class CountersPanel( ClientGUIOptionsPanelBase.OptionsPagePanel ):
         
         self._original_counters = self._new_options.GetCounters()
         
-        help_text = 'Counters are tallies you keep for each file, like how many times you have watched it. In the media viewer, right-click->counters and click one to add one to that file\'s count, or use \'set count\' to type in any number.'
+        help_text = 'Counters are tallies you keep for each file, like how many times you have watched it. In the media viewer, right-click->counters and click one to add one to that file\'s count, or use \'manage\' to set any of its counts to whatever number you like.'
         help_text += '\n' * 2
         help_text += 'You can search for them with system:counter, for instance "system:counter tally > 2". Names are not case-sensitive.'
         help_text += '\n' * 2
