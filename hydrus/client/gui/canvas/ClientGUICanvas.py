@@ -5492,6 +5492,13 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         
         self._playlist_index = 0
         
+        # when randomize is on, we play the items in this order, as indices into the playlist items. None when it is off
+        self._playlist_shuffle_order: list[ int ] | None = None
+        self._playlist_shuffle_position = 0
+        
+        # the item we were on when randomize went on, which we go back to when it goes off
+        self._playlist_shuffle_return_index = 0
+        
         # when we reach the end and are not looping, we hold on the last item
         self._playlist_finished = False
         
@@ -5504,7 +5511,7 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
     
     def _AdvancePlaylist( self ):
         
-        next_index = ClientMediaPlaylists.GetNextPlaylistIndex( self._playlist_index, len( self._playlist_items ), 1, self._playlist_loop )
+        next_index = self._GetNextPlaylistItemIndex( 1, self._playlist_loop )
         
         if next_index is None:
             
@@ -5642,9 +5649,70 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         self._playlist_loop = CG.client_controller.new_options.FlipBoolean( 'playlists_loop' )
         
     
+    def _FlipPlaylistRandomize( self ):
+        
+        if self._playlist_shuffle_order is None:
+            
+            # the item we are on carries on, and everything after it comes in a random order
+            self._playlist_shuffle_return_index = self._playlist_index
+            
+            self._playlist_shuffle_order = ClientMediaPlaylists.GenerateShuffledPlaylistOrder( len( self._playlist_items ), first_index = self._playlist_index )
+            self._playlist_shuffle_position = 0
+            
+            CG.client_controller.pub( 'canvas_new_index_string', self._canvas_key, self._GetIndexString() )
+            
+        else:
+            
+            self._playlist_shuffle_order = None
+            
+            # back to the item we were on when randomize went on, and in order from there
+            if self._playlist_shuffle_return_index == self._playlist_index:
+                
+                CG.client_controller.pub( 'canvas_new_index_string', self._canvas_key, self._GetIndexString() )
+                
+            else:
+                
+                self._ShowPlaylistItem( self._playlist_shuffle_return_index )
+                
+            
+        
+    
     def _GetIndexString( self ):
         
-        return f'{self._playlist_name}: {HydrusNumbers.ValueRangeToPrettyString( self._playlist_index + 1, len( self._playlist_items ) )}'
+        index_string = f'{self._playlist_name}: {HydrusNumbers.ValueRangeToPrettyString( self._playlist_index + 1, len( self._playlist_items ) )}'
+        
+        if self._playlist_shuffle_order is not None:
+            
+            index_string += ' (randomized)'
+            
+        
+        return index_string
+        
+    
+    def _GetNextPlaylistItemIndex( self, direction: int, loop: bool ) -> int | None:
+        
+        # the item that comes next in the play order. None means we ran off the end and are not looping
+        if self._playlist_shuffle_order is None:
+            
+            return ClientMediaPlaylists.GetNextPlaylistIndex( self._playlist_index, len( self._playlist_items ), direction, loop )
+            
+        
+        num_items = len( self._playlist_shuffle_order )
+        
+        next_position = ClientMediaPlaylists.GetNextPlaylistIndex( self._playlist_shuffle_position, num_items, direction, loop )
+        
+        if next_position is None:
+            
+            return None
+            
+        
+        if direction > 0 and next_position < self._playlist_shuffle_position:
+            
+            # we went round the end, so a fresh random order for the next time through
+            self._playlist_shuffle_order = ClientMediaPlaylists.GenerateShuffledPlaylistOrder( num_items, avoid_first_index = self._playlist_index )
+            
+        
+        return self._playlist_shuffle_order[ next_position ]
         
     
     def _GetPlaylistStillPeriod( self ) -> float:
@@ -5657,6 +5725,17 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
             
         
         return PLAYLIST_DEFAULT_STILL_PERIOD_S
+        
+    
+    def _GetPlayOrder( self ) -> list[ int ]:
+        
+        # the playlist items, as indices, in the order we play them
+        if self._playlist_shuffle_order is None:
+            
+            return list( range( len( self._playlist_items ) ) )
+            
+        
+        return self._playlist_shuffle_order
         
     
     def _GetPrefetchNeighboursInPreferenceOrder( self ) -> list[ ClientMediaResult.MediaResult ]:
@@ -5676,11 +5755,15 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         
         media_looked_at = { self._current_media }
         
+        play_order = self._GetPlayOrder()
+        
+        position = self._playlist_index if self._playlist_shuffle_order is None else self._playlist_shuffle_position
+        
         to_render = []
         
         for offset in offsets:
             
-            ( media, start_ms, end_ms ) = self._playlist_items[ ( self._playlist_index + offset ) % num_items ]
+            ( media, start_ms, end_ms ) = self._playlist_items[ play_order[ ( position + offset ) % num_items ] ]
             
             if media not in media_looked_at:
                 
@@ -5709,6 +5792,7 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         ClientGUIMenus.AppendMenuLabel( playlist_menu, f'playing {self._GetIndexString()}' )
         
         ClientGUIMenus.AppendMenuCheckItem( playlist_menu, 'loop playlist', 'When the playlist ends, start it again from the top.', self._playlist_loop, self._FlipPlaylistLoop )
+        ClientGUIMenus.AppendMenuCheckItem( playlist_menu, 'randomize', 'Play everything after this item in a random order. Turn it off to go back to the item you turned it on at, and carry on in order from there.', self._playlist_shuffle_order is not None, self._FlipPlaylistRandomize )
         
         ClientGUIMenus.AppendSeparator( playlist_menu )
         
@@ -5730,9 +5814,9 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         
         ( current_media, current_start_ms, current_end_ms ) = self._playlist_items[ self._playlist_index ]
         
-        num_removed_before_current = len( [ media for ( media, start_ms, end_ms ) in self._playlist_items[ : self._playlist_index ] if media in medias ] )
+        kept_indices = [ index for ( index, ( media, start_ms, end_ms ) ) in enumerate( self._playlist_items ) if media not in medias ]
         
-        self._playlist_items = [ ( media, start_ms, end_ms ) for ( media, start_ms, end_ms ) in self._playlist_items if media not in medias ]
+        self._playlist_items = [ self._playlist_items[ index ] for index in kept_indices ]
         
         if len( self._playlist_items ) == 0:
             
@@ -5741,7 +5825,18 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
             return
             
         
-        new_index = self._playlist_index - num_removed_before_current
+        if self._playlist_shuffle_order is None:
+            
+            new_index = ClientMediaPlaylists.GetPlaylistIndexAfterRemoval( self._playlist_index, kept_indices )
+            
+        else:
+            
+            ( self._playlist_shuffle_order, self._playlist_shuffle_position ) = ClientMediaPlaylists.RemapPlaylistOrderAfterRemoval( self._playlist_shuffle_order, self._playlist_shuffle_position, kept_indices )
+            
+            self._playlist_shuffle_return_index = ClientMediaPlaylists.GetPlaylistIndexAfterRemoval( self._playlist_shuffle_return_index, kept_indices )
+            
+            new_index = self._playlist_shuffle_order[ self._playlist_shuffle_position ]
+            
         
         if current_media in medias:
             
@@ -5774,18 +5869,18 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
     
     def _ShowFirst( self ):
         
-        self._ShowPlaylistItem( 0 )
+        self._ShowPlaylistItem( self._GetPlayOrder()[0] )
         
     
     def _ShowLast( self ):
         
-        self._ShowPlaylistItem( len( self._playlist_items ) - 1 )
+        self._ShowPlaylistItem( self._GetPlayOrder()[-1] )
         
     
     def _ShowNext( self ):
         
         # like the normal media viewer, the user can always step round the ends
-        self._ShowPlaylistItem( ClientMediaPlaylists.GetNextPlaylistIndex( self._playlist_index, len( self._playlist_items ), 1, True ) )
+        self._ShowPlaylistItem( self._GetNextPlaylistItemIndex( 1, True ) )
         
     
     def _ShowPlaylistItem( self, index: int | None ):
@@ -5799,6 +5894,12 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         
         self._playlist_index = index
         self._playlist_finished = False
+        
+        if self._playlist_shuffle_order is not None:
+            
+            # a jump straight to an item carries on in the random order from there
+            self._playlist_shuffle_position = self._playlist_shuffle_order.index( index )
+            
         
         ( media, start_ms, end_ms ) = self._playlist_items[ index ]
         
@@ -5817,7 +5918,7 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
     
     def _ShowPrevious( self ):
         
-        self._ShowPlaylistItem( ClientMediaPlaylists.GetNextPlaylistIndex( self._playlist_index, len( self._playlist_items ), -1, True ) )
+        self._ShowPlaylistItem( self._GetNextPlaylistItemIndex( -1, True ) )
         
     
     def _ShowRandom( self ):

@@ -1,4 +1,6 @@
+import bisect
 import collections.abc
+import random
 
 # playlists are named, ordered lists of files. each item is a whole file, or just the span between two timestamps of it
 # they live in the db. these are the bits of logic the gui and the db share
@@ -44,6 +46,35 @@ def GetNextPlaylistIndex( index: int, num_items: int, direction: int, loop: bool
     return next_index % num_items
     
 
+def GenerateShuffledPlaylistOrder( num_items: int, first_index: int | None = None, avoid_first_index: int | None = None ) -> list[ int ]:
+    
+    # a random order to play the items in, as indices into the playlist. first_index, if given, goes first
+    # otherwise, we try not to start on avoid_first_index, so going round again does not play the same item twice in a row
+    order = list( range( num_items ) )
+    
+    random.shuffle( order )
+    
+    if first_index is not None:
+        
+        order.remove( first_index )
+        order.insert( 0, first_index )
+        
+    elif avoid_first_index is not None and num_items > 1 and order[0] == avoid_first_index:
+        
+        swap_position = random.randrange( 1, num_items )
+        
+        ( order[0], order[ swap_position ] ) = ( order[ swap_position ], order[0] )
+        
+    
+    return order
+    
+
+def GetPlaylistIndexAfterRemoval( index: int, kept_indices: list[ int ] ) -> int:
+    
+    # where an index ends up once only the kept_indices (sorted) are left. if it went, it is whatever came after it, round to the start at the end
+    return bisect.bisect_left( kept_indices, index ) % len( kept_indices )
+    
+
 def GetPlaylistItemSpanFromABLoop( a_ms: int | None, b_ms: int | None ) -> tuple[ int | None, int | None ]:
     
     # an A-B repeat is only running once B is set, and a missing A means the start of the file
@@ -65,6 +96,18 @@ def GetPlaylistItemSpanFromABLoop( a_ms: int | None, b_ms: int | None ) -> tuple
 def NormalisePlaylistName( name: str ) -> str:
     
     return ' '.join( name.split() )
+    
+
+def RemapPlaylistOrderAfterRemoval( order: list[ int ], position: int, kept_indices: list[ int ] ) -> tuple[ list[ int ], int ]:
+    
+    # a play order, and our position in it, once only the kept_indices (sorted) are left. if the item at the position went, the position is whatever came after it, round to the start at the end
+    old_indices_to_new_indices = { old_index : new_index for ( new_index, old_index ) in enumerate( kept_indices ) }
+    
+    new_order = [ old_indices_to_new_indices[ index ] for index in order if index in old_indices_to_new_indices ]
+    
+    new_position = len( [ index for index in order[ : position ] if index in old_indices_to_new_indices ] ) % len( new_order )
+    
+    return ( new_order, new_position )
     
 
 def PlaylistSeekHasLanded( current_timestamp_ms: int, target_ms: int ) -> bool:

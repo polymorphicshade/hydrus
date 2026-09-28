@@ -715,6 +715,42 @@ class TestClientDB( unittest.TestCase ):
         
         self.assertEqual( ClientMediaPlaylists.NormalisePlaylistName( '  road   trip ' ), 'road trip' )
         
+        # randomize: every item once, with the one we were on first
+        
+        for i in range( 20 ):
+            
+            order = ClientMediaPlaylists.GenerateShuffledPlaylistOrder( 6, first_index = 3 )
+            
+            self.assertEqual( sorted( order ), list( range( 6 ) ) )
+            self.assertEqual( order[0], 3 )
+            
+            # going round again does not start on the item we just played
+            order = ClientMediaPlaylists.GenerateShuffledPlaylistOrder( 6, avoid_first_index = 3 )
+            
+            self.assertEqual( sorted( order ), list( range( 6 ) ) )
+            self.assertNotEqual( order[0], 3 )
+            
+        
+        self.assertEqual( ClientMediaPlaylists.GenerateShuffledPlaylistOrder( 1, avoid_first_index = 0 ), [ 0 ] )
+        self.assertEqual( ClientMediaPlaylists.GenerateShuffledPlaylistOrder( 0 ), [] )
+        
+        # removing items: of 0-5, 1 and 4 go
+        
+        kept_indices = [ 0, 2, 3, 5 ]
+        
+        self.assertEqual( ClientMediaPlaylists.GetPlaylistIndexAfterRemoval( 3, kept_indices ), 2 )
+        # a removed item becomes whatever came after it
+        self.assertEqual( ClientMediaPlaylists.GetPlaylistIndexAfterRemoval( 1, kept_indices ), 1 )
+        # and round to the start at the end
+        self.assertEqual( ClientMediaPlaylists.GetPlaylistIndexAfterRemoval( 4, kept_indices ), 3 )
+        self.assertEqual( ClientMediaPlaylists.GetPlaylistIndexAfterRemoval( 5, [ 0, 2 ] ), 0 )
+        
+        # in a random order, we keep our place
+        self.assertEqual( ClientMediaPlaylists.RemapPlaylistOrderAfterRemoval( [ 3, 1, 5, 0, 4, 2 ], 2, kept_indices ), ( [ 2, 3, 0, 1 ], 1 ) )
+        # the item we were on went, so we are on whatever came after it in the order
+        self.assertEqual( ClientMediaPlaylists.RemapPlaylistOrderAfterRemoval( [ 3, 1, 5, 0, 4, 2 ], 1, kept_indices ), ( [ 2, 3, 0, 1 ], 1 ) )
+        self.assertEqual( ClientMediaPlaylists.RemapPlaylistOrderAfterRemoval( [ 3, 1, 5, 0, 2, 4 ], 5, kept_indices ), ( [ 2, 3, 0, 1 ], 0 ) )
+        
         # a fresh file sitting at the start has not reached a span that starts later
         self.assertFalse( ClientMediaPlaylists.PlaylistSeekHasLanded( 0, 1000 ) )
         self.assertTrue( ClientMediaPlaylists.PlaylistSeekHasLanded( 0, 0 ) )
