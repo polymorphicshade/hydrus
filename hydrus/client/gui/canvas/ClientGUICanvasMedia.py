@@ -19,7 +19,6 @@ from hydrus.client import ClientApplicationCommand as CAC
 from hydrus.client import ClientConstants as CC
 from hydrus.client import ClientGlobals as CG
 from hydrus.client import ClientRendering
-from hydrus.client import ClientThreading
 from hydrus.client import ClientUgoiraHandling
 from hydrus.client.gui import ClientGUIAsync
 from hydrus.client.gui import ClientGUIExceptionHandling
@@ -113,21 +112,6 @@ def ConvertPlaybackTimestampToString( timestamp_ms: int ) -> str:
     return f'{minutes}:{seconds:0>2}.{milliseconds:0>3}'
     
 
-def GenerateSnapshotFilename( media: ClientMediaSingle.MediaSingle, timestamp_ms: int | None ) -> str:
-    
-    hash_hex = media.GetHash().hex()[:16]
-    
-    if timestamp_ms is None:
-        
-        return f'{hash_hex}.png'
-        
-    
-    ( minutes, remainder_ms ) = divmod( int( timestamp_ms ), 60000 )
-    ( seconds, milliseconds ) = divmod( remainder_ms, 1000 )
-    
-    return f'{hash_hex} {minutes}m{seconds:0>2}.{milliseconds:0>3}s.png'
-    
-
 def MediaHasPlayback( media: ClientMediaSingle.MediaSingle ):
     
     return media.HasDuration() or media.GetMime() == HC.ANIMATION_UGOIRA
@@ -211,17 +195,6 @@ def GetZoomTimestampAt( zoom_timestamps: list[ tuple[ int, float ] ], timestamp_
         
     
     return current_zoom_timestamp
-    
-
-def ReportSnapshotSaved( path: str ):
-    
-    job_status = ClientThreading.JobStatus()
-    
-    job_status.SetStatusText( f'snapshot saved to {path}' )
-    
-    CG.client_controller.pub( 'message', job_status )
-    
-    job_status.FinishAndDismiss( 5 )
     
 
 def CalculateCanvasMediaSize( media, canvas_size: QC.QSize, show_action ):
@@ -1058,9 +1031,12 @@ class Animation( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         return self._num_frames
         
     
-    def TakeSnapshot( self, path: str ):
+    def TakeSnapshot( self, path: str, callback: typing.Callable[ [ Exception | None ], None ] ):
         
+        # rendering the frame again takes a moment, so this works in the background and calls back from there, with an error if it did not work
         if self._media is None:
+            
+            CG.client_controller.CallToThread( callback, Exception( 'There is no frame to take a snapshot of!' ) )
             
             return
             
@@ -1084,7 +1060,7 @@ class Animation( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
                         
                         if HG.started_shutdown:
                             
-                            return
+                            raise Exception( 'The client is shutting down!' )
                             
                         
                         if HydrusTime.TimeHasPassedFloat( give_up_time ):
@@ -1107,13 +1083,14 @@ class Animation( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
                     video_container.Stop()
                     
                 
-                ReportSnapshotSaved( path )
-                
             except Exception as e:
                 
-                HydrusData.ShowText( 'Could not take a snapshot:' )
-                HydrusData.ShowException( e )
+                callback( e )
                 
+                return
+                
+            
+            callback( None )
             
         
         CG.client_controller.CallToThread( do_it )
@@ -4639,20 +4616,38 @@ class MediaContainer( QW.QWidget ):
         return self._media is not None and self._does_zoom_timestamps and MediaHasPlayback( self._media )
         
     
-    def TakeSnapshot( self, path: str ):
+    def TakeSnapshot( self, path: str, callback: typing.Callable[ [ Exception | None ], None ] ):
         
+        # saves the current frame to path as a png. callback is called from a worker thread when that is done, with an error if it did not work
         if not self.CanTakeSnapshot():
             
-            raise Exception( 'This media has no frame to take a snapshot of!' )
+            CG.client_controller.CallToThread( callback, Exception( 'This media has no frame to take a snapshot of!' ) )
+            
+            return
             
         
-        self._media_window.TakeSnapshot( path )
+        if isinstance( self._media_window, Animation ):
+            
+            # the native renderer works in the background and calls back for itself
+            self._media_window.TakeSnapshot( path, callback )
+            
+            return
+            
         
-        # the native renderer works in the background and reports for itself
-        if not isinstance( self._media_window, Animation ):
+        # mpv and Qt are quick, so they save it right now, while this frame is still up
+        try:
             
-            ReportSnapshotSaved( path )
+            self._media_window.TakeSnapshot( path )
             
+        except Exception as e:
+            
+            CG.client_controller.CallToThread( callback, e )
+            
+            return
+            
+        
+        CG.client_controller.CallToThread( callback, None )
+        
         
     
     def TIMERAnimationUpdate( self ):

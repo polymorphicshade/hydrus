@@ -48,6 +48,7 @@ from hydrus.client.db import ClientDBFilesMetadataRich
 from hydrus.client.db import ClientDBFilesPhysicalStorage
 from hydrus.client.db import ClientDBFilesPlaybackSkips
 from hydrus.client.db import ClientDBFilesSearch
+from hydrus.client.db import ClientDBFilesSnapshots
 from hydrus.client.db import ClientDBFilesStorage
 from hydrus.client.db import ClientDBFilesTimestamps
 from hydrus.client.db import ClientDBFilesViewerZooms
@@ -3943,6 +3944,7 @@ class DB( HydrusDB.HydrusDB ):
                 'duplicates_auto_resolution_rules_with_counts' : self.modules_files_duplicates_auto_resolution_storage.GetRulesWithCounts,
                 'file_duplicate_hashes' : self.modules_files_duplicates_storage.GetFileHashesByDuplicateType,
                 'file_counters' : self.modules_files_counters.GetCounts,
+                'file_snapshots' : self.modules_files_snapshots.GetSnapshotHashes,
                 'file_virtual_paths' : self.modules_files_virtual_paths.GetPaths,
                 'all_file_virtual_paths' : self.modules_files_virtual_paths.GetAllPaths,
                 'playlist_items' : self.modules_playlists.GetPlaylistItems,
@@ -4092,6 +4094,7 @@ class DB( HydrusDB.HydrusDB ):
                 'delete_file_counters' : self.modules_files_counters.DeleteCounters,
                 'file_counter_increment' : self.modules_files_counters.IncrementCount,
                 'file_counter_set' : self.modules_files_counters.SetCount,
+                'file_snapshot_add' : self.modules_files_snapshots.AddSnapshot,
                 'file_virtual_paths' : self.modules_files_virtual_paths.SetPaths,
                 'playlist_add_item' : self.modules_playlists.AddPlaylistItem,
                 'playlist_add_item_to_new_playlist' : self.modules_playlists.AddPlaylistItemToNewPlaylist,
@@ -4294,6 +4297,10 @@ class DB( HydrusDB.HydrusDB ):
         self.modules_playlists = ClientDBPlaylists.ClientDBPlaylists( self._c, self.modules_hashes_local_cache )
         
         self._modules.append( self.modules_playlists )
+        
+        self.modules_files_snapshots = ClientDBFilesSnapshots.ClientDBFilesSnapshots( self._c, self.modules_hashes_local_cache, self.modules_files_storage )
+        
+        self._modules.append( self.modules_files_snapshots )
         
         #
         

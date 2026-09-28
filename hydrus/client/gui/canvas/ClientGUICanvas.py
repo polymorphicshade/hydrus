@@ -10,9 +10,12 @@ from qtpy import QtGui as QG
 from hydrus.core import HydrusConstants as HC
 from hydrus.core import HydrusData
 from hydrus.core import HydrusExceptions
+from hydrus.core import HydrusGlobals as HG
 from hydrus.core import HydrusLists
 from hydrus.core import HydrusNumbers
+from hydrus.core import HydrusPaths
 from hydrus.core import HydrusTags
+from hydrus.core import HydrusTemp
 from hydrus.core import HydrusTime
 
 from hydrus.client import ClientApplicationCommand as CAC
@@ -21,9 +24,9 @@ from hydrus.client import ClientData
 from hydrus.client import ClientGlobals as CG
 from hydrus.client import ClientLocation
 from hydrus.client import ClientServices
+from hydrus.client import ClientSnapshots
 from hydrus.client import ClientThreading
 from hydrus.client.gui import ClientGUICore as CGC
-from hydrus.client.gui import ClientGUIDialogsFiles
 from hydrus.client.gui import ClientGUIDialogsManage
 from hydrus.client.gui import ClientGUIDialogsMessage
 from hydrus.client.gui import ClientGUIDialogsQuick
@@ -3312,6 +3315,25 @@ class CanvasWithHovers( Canvas ):
         self.canvasWithHoversExiting.connect( frame.close )
         
     
+    def _ShowSnapshots( self ):
+        
+        if self._current_media is None:
+            
+            return
+            
+        
+        location_context = ClientSnapshots.GetSnapshotsLocationContext()
+        
+        if location_context is None:
+            
+            return
+            
+        
+        hashes = CG.client_controller.Read( 'file_snapshots', self._current_media.GetHash(), location_context )
+        
+        CG.client_controller.pub( 'new_page_query', location_context, initial_hashes = hashes, page_name = 'snapshots' )
+        
+    
     def _TakeSnapshot( self ):
         
         if self._current_media is None or not self._media_container.CanTakeSnapshot():
@@ -3319,41 +3341,40 @@ class CanvasWithHovers( Canvas ):
             return
             
         
-        # hold the frame still while the user picks where to put it
-        was_paused = self._media_container.IsPaused()
+        hash = self._current_media.GetHash()
+        timestamp_ms = self._media_container.GetCurrentPlaybackTimestampMS()
         
-        self._media_container.Pause()
+        temp_dir = HydrusTemp.GetSubTempDir( prefix = 'snapshot' )
         
-        try:
+        path = os.path.join( temp_dir, 'snapshot.png' )
+        
+        def callback( error: Exception | None ):
             
-            default_filename = ClientGUICanvasMedia.GenerateSnapshotFilename( self._current_media, self._media_container.GetCurrentPlaybackTimestampMS() )
-            
-            with ClientGUIDialogsFiles.FileDialog( self, 'save snapshot', acceptMode = QW.QFileDialog.AcceptMode.AcceptSave, fileMode = QW.QFileDialog.FileMode.AnyFile, default_filename = default_filename, default_directory = os.getcwd(), wildcard = 'PNG (*.png)', defaultSuffix = 'png' ) as dlg:
-                
-                if dlg.exec() != QW.QDialog.DialogCode.Accepted:
-                    
-                    return
-                    
-                
-                path = dlg.GetPath()
-                
-            
+            # this is in a worker thread. the snapshot goes in the db quietly, and it is under right-click->snapshots from then on
             try:
                 
-                self._media_container.TakeSnapshot( path )
+                if error is not None:
+                    
+                    raise error
+                    
+                
+                ClientSnapshots.ImportSnapshot( path, hash, timestamp_ms )
                 
             except Exception as e:
                 
-                ClientGUIDialogsMessage.ShowWarning( self, f'Could not take a snapshot: {e}' )
+                if not HG.started_shutdown:
+                    
+                    HydrusData.ShowText( 'Could not take a snapshot:' )
+                    HydrusData.ShowException( e )
+                    
+                
+            finally:
+                
+                HydrusPaths.DeletePath( temp_dir )
                 
             
-        finally:
-            
-            if not was_paused:
-                
-                self._media_container.PausePlay()
-                
-            
+        
+        self._media_container.TakeSnapshot( path, callback )
         
     
     def _TryToCloseWindow( self ):
@@ -5223,9 +5244,27 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
                 ClientGUIMenus.AppendMenu( menu, skips_menu, f'skips ({len( playback_skips )})' if len( playback_skips ) > 0 else 'skips' )
                 
             
+            snapshots_location_context = ClientSnapshots.GetSnapshotsLocationContext()
+            
+            if snapshots_location_context is None:
+                
+                num_snapshots = 0
+                
+            else:
+                
+                num_snapshots = len( CG.client_controller.Read( 'file_snapshots', self._current_media.GetHash(), snapshots_location_context ) )
+                
+            
+            if self._media_container.CanTakeSnapshot() or num_snapshots > 0:
+                
+                snapshots_menu_item = ClientGUIMenus.AppendMenuItem( menu, f'snapshots ({HydrusNumbers.ToHumanInt( num_snapshots )})', 'Open a new page with the snapshots taken from this file.', self._ShowSnapshots )
+                
+                snapshots_menu_item.setEnabled( num_snapshots > 0 )
+                
+            
             if self._media_container.CanTakeSnapshot():
                 
-                ClientGUIMenus.AppendMenuItem( menu, 'take snapshot', 'Save the current frame as a png.', self._TakeSnapshot )
+                ClientGUIMenus.AppendMenuItem( menu, 'take snapshot', 'Import the current frame as a png into your snapshots, which you can see under \'snapshots\' here.', self._TakeSnapshot )
                 
             
             counters_menu = ClientGUIMenus.GenerateMenu( menu )

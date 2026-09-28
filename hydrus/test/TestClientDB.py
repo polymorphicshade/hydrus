@@ -3,6 +3,8 @@ import time
 import typing
 import unittest
 
+from unittest import mock
+
 from hydrus.core import HydrusConstants as HC
 from hydrus.core import HydrusData
 from hydrus.core import HydrusNumbers
@@ -17,6 +19,7 @@ from hydrus.client import ClientConstants as CC
 from hydrus.client import ClientDefaults
 from hydrus.client import ClientLocation
 from hydrus.client import ClientServices
+from hydrus.client import ClientSnapshots
 from hydrus.client.db import ClientDB
 from hydrus.client.exporting import ClientExportingFiles
 from hydrus.client.files import ClientFilesPhysical
@@ -28,6 +31,7 @@ from hydrus.client.importing import ClientImportFiles
 from hydrus.client.importing.options import ImportOptionsConstants as IOC
 from hydrus.client.importing.options import ImportOptionsContainer
 from hydrus.client.importing.options import ImportOptionsManager
+from hydrus.client.importing.options import LocationImportOptions
 from hydrus.client.media import ClientMediaPlaylists
 from hydrus.client.metadata import ClientContentUpdates
 from hydrus.client.metadata import ClientTags
@@ -388,6 +392,91 @@ class TestClientDB( unittest.TestCase ):
         
         self.assertEqual( self._read( 'file_playback_skips', hash_a ), [] )
         self.assertEqual( self._read( 'file_playback_skips', hash_b ), [ ( 0, 500 ) ] )
+        
+    
+    def test_file_snapshots( self ):
+        
+        TestClientDB._clear_db()
+        
+        # snapshots go in a local file domain of their own
+        
+        services = self._read( 'services' )
+        
+        self.assertEqual( ClientSnapshots.GetUnusedServiceName( 'snapshots', { service.GetName() for service in services } ), 'snapshots' )
+        self.assertEqual( ClientSnapshots.GetUnusedServiceName( 'snapshots', { 'Snapshots', 'snapshots (2)' } ), 'snapshots (3)' )
+        
+        snapshots_service_key = HydrusData.GenerateKey()
+        
+        self._write( 'update_services', services + [ ClientServices.GenerateService( snapshots_service_key, HC.LOCAL_FILE_DOMAIN, 'snapshots' ) ] )
+        
+        snapshots_location_context = ClientLocation.LocationContext.STATICCreateSimple( snapshots_service_key )
+        my_files_location_context = ClientLocation.LocationContext.STATICCreateSimple( CC.LOCAL_FILE_SERVICE_KEY )
+        all_known_files_location_context = ClientLocation.LocationContext.STATICCreateSimple( CC.COMBINED_FILE_SERVICE_KEY )
+        
+        location_import_options = LocationImportOptions.LocationImportOptions()
+        
+        location_import_options.SetDestinationLocationContext( snapshots_location_context )
+        
+        import_options_container = ImportOptionsContainer.ImportOptionsContainer()
+        
+        import_options_container.SetImportOptions( location_import_options )
+        
+        full_import_options_container = ImportOptionsManager.ImportOptionsManager.STATICGetDefaultInitialisedManager().GenerateFullImportOptionsContainer( import_options_container, IOC.IMPORT_OPTIONS_CALLER_TYPE_LOCAL_IMPORT )
+        
+        file_import_job = ClientImportFiles.FileImportJob( HydrusStaticDir.GetStaticPath( 'hydrus.png' ), full_import_options_container )
+        
+        file_import_job.GeneratePreImportHashAndStatus()
+        
+        file_import_job.GenerateInfo()
+        
+        # the import checks its destination against the services the client knows about. the test client does not know about the domain we just made in this db
+        real_valid_local_domains_filter = ClientLocation.ValidLocalDomainsFilter
+        
+        def valid_local_domains_filter( service_keys ):
+            
+            return [ service_key for service_key in service_keys if service_key == snapshots_service_key ] + real_valid_local_domains_filter( service_keys )
+            
+        
+        with mock.patch.object( ClientLocation, 'ValidLocalDomainsFilter', side_effect = valid_local_domains_filter ):
+            
+            self._write( 'import_file', file_import_job )
+            
+        
+        snapshot_hash = file_import_job.GetHash()
+        
+        source_hash = os.urandom( 32 )
+        other_source_hash = os.urandom( 32 )
+        
+        self.assertEqual( self._read( 'file_snapshots', source_hash, snapshots_location_context ), [] )
+        
+        self._write( 'file_snapshot_add', source_hash, snapshot_hash, 5000 )
+        
+        self.assertEqual( self._read( 'file_snapshots', source_hash, snapshots_location_context ), [ snapshot_hash ] )
+        self.assertEqual( self._read( 'file_snapshots', other_source_hash, snapshots_location_context ), [] )
+        
+        # it is not in my files, so it stays out of the way
+        self.assertEqual( self._read( 'file_snapshots', source_hash, my_files_location_context ), [] )
+        
+        # they come in the order they are in the file, and the same frame taken again just moves
+        
+        early_hash = os.urandom( 32 )
+        late_hash = os.urandom( 32 )
+        no_timestamp_hash = os.urandom( 32 )
+        
+        self._write( 'file_snapshot_add', source_hash, late_hash, 9000 )
+        self._write( 'file_snapshot_add', source_hash, early_hash, 1000 )
+        self._write( 'file_snapshot_add', source_hash, no_timestamp_hash, None )
+        
+        self.assertEqual( self._read( 'file_snapshots', source_hash, all_known_files_location_context ), [ no_timestamp_hash, early_hash, snapshot_hash, late_hash ] )
+        
+        self._write( 'file_snapshot_add', source_hash, snapshot_hash, 10000 )
+        
+        self.assertEqual( self._read( 'file_snapshots', source_hash, all_known_files_location_context ), [ no_timestamp_hash, early_hash, late_hash, snapshot_hash ] )
+        
+        # ones that are not in the snapshots domain any more are left out
+        self.assertEqual( self._read( 'file_snapshots', source_hash, snapshots_location_context ), [ snapshot_hash ] )
+        
+        self._write( 'update_services', services )
         
     
     def test_file_virtual_paths( self ):
