@@ -37,6 +37,7 @@ from hydrus.client.gui.media import ClientGUIMediaControls
 from hydrus.client.gui.media import ClientGUIMediaVolume
 from hydrus.client.media import ClientMedia
 from hydrus.client.media import ClientMediaResult
+from hydrus.client.media import ClientMediaScriptedEvents
 from hydrus.client.media import ClientMediaSingle
 
 ZOOM_CENTERPOINT_MEDIA_CENTER = 0
@@ -110,6 +111,28 @@ def ConvertPlaybackTimestampToString( timestamp_ms: int ) -> str:
         
     
     return f'{minutes}:{seconds:0>2}.{milliseconds:0>3}'
+    
+
+def ParsePlaybackTimestampString( text: str ) -> int:
+    
+    # the other way from ConvertPlaybackTimestampToString. takes '1:02:03.456', '2:05.5', '75', and so on. raises ValueError
+    parts = text.strip().split( ':' )
+    
+    if len( parts ) > 3 or True in ( part.strip() == '' for part in parts ):
+        
+        raise ValueError( f'Could not parse "{text}" as a point in playback!' )
+        
+    
+    seconds = float( parts[-1] )
+    minutes = int( parts[-2] ) if len( parts ) >= 2 else 0
+    hours = int( parts[-3] ) if len( parts ) >= 3 else 0
+    
+    if not math.isfinite( seconds ) or seconds < 0 or minutes < 0 or hours < 0:
+        
+        raise ValueError( f'Could not parse "{text}" as a point in playback!' )
+        
+    
+    return int( round( ( ( ( hours * 60 ) + minutes ) * 60 + seconds ) * 1000 ) )
     
 
 def MediaHasPlayback( media: ClientMediaSingle.MediaSingle ):
@@ -1746,6 +1769,15 @@ class MediaContainer( QW.QWidget ):
         self._zoom_timestamps_stopped_at_end = False
         self._zoom_timestamps_have_checked = False
         
+        # shell commands to run at points in playback, as ( timestamp_ms, command ). each file has its own, saved in the db
+        # only the media viewer does them, not the preview or the duplicate filter
+        self._does_scripted_events = self._canvas_type in ( CC.CANVAS_MEDIA_VIEWER, CC.CANVAS_MEDIA_VIEWER_ARCHIVE_DELETE )
+        self._scripted_events: list[ ClientMediaScriptedEvents.ScriptedEvent ] = []
+        self._scripted_events_load_id = 0
+        
+        # where playback was at the last check, so we can see what it went past. None means we have not seen it playing yet
+        self._scripted_events_last_timestamp_ms: float | None = None
+        
         # the zoom the user last set on the current file, which the media viewer opens it at next time. each file has its own, saved in the db
         # the duplicate filter is left out, since it wants to keep the zoom the same between the files it compares
         self._remembers_file_zooms = self._canvas_type in ( CC.CANVAS_MEDIA_VIEWER, CC.CANVAS_MEDIA_VIEWER_ARCHIVE_DELETE )
@@ -1864,6 +1896,7 @@ class MediaContainer( QW.QWidget ):
         CG.client_controller.sub( self, 'Pause', 'pause_all_media' )
         CG.client_controller.sub( self, 'NotifyNewPlaybackSkips', 'new_file_playback_skips' )
         CG.client_controller.sub( self, 'NotifyNewZoomTimestamps', 'new_file_zoom_timestamps' )
+        CG.client_controller.sub( self, 'NotifyNewScriptedEvents', 'new_file_scripted_events' )
         
     
     def _CheckPlaybackSkips( self ):
@@ -1916,6 +1949,48 @@ class MediaContainer( QW.QWidget ):
                 
                 return
                 
+            
+        
+    
+    def _CheckScriptedEvents( self ):
+        
+        if len( self._scripted_events ) == 0 or self._media is None or not self.CurrentlyPresentingMediaWithDuration():
+            
+            return
+            
+        
+        animation_bar_status = self._media_window.GetAnimationBarStatus()
+        
+        if animation_bar_status is None:
+            
+            return
+            
+        
+        ( current_frame_index, current_timestamp_ms, paused, buffer_indices ) = animation_bar_status
+        
+        if current_timestamp_ms is None:
+            
+            return
+            
+        
+        if paused:
+            
+            # scanning around while paused does not run anything. playback carries on from wherever it is when it unpauses
+            if self._scripted_events_last_timestamp_ms is not None:
+                
+                self._scripted_events_last_timestamp_ms = current_timestamp_ms
+                
+            
+            return
+            
+        
+        last_timestamp_ms = self._scripted_events_last_timestamp_ms
+        
+        self._scripted_events_last_timestamp_ms = current_timestamp_ms
+        
+        for ( timestamp_ms, command ) in ClientMediaScriptedEvents.GetScriptedEventsToRun( self._scripted_events, last_timestamp_ms, current_timestamp_ms, self._media.GetDurationMS() ):
+            
+            ClientMediaScriptedEvents.RunScriptedEventCommand( command )
             
         
     
@@ -2349,6 +2424,44 @@ class MediaContainer( QW.QWidget ):
         job.start()
         
     
+    def _LoadScriptedEvents( self ):
+        
+        self._scripted_events_load_id += 1
+        
+        load_id = self._scripted_events_load_id
+        
+        self._SetScriptedEvents( [] )
+        
+        self._scripted_events_last_timestamp_ms = None
+        
+        if self._media is None or not self._does_scripted_events or not MediaHasPlayback( self._media ):
+            
+            return
+            
+        
+        hash = self._media.GetHash()
+        
+        def work_callable():
+            
+            return CG.client_controller.Read( 'file_scripted_events', hash )
+            
+        
+        def publish_callable( scripted_events ):
+            
+            # the media changed, or the scripted events were edited, while we were waiting
+            if load_id != self._scripted_events_load_id:
+                
+                return
+                
+            
+            self._SetScriptedEvents( scripted_events )
+            
+        
+        job = ClientGUIAsync.AsyncQtJob( self, work_callable, publish_callable )
+        
+        job.start()
+        
+    
     def _LoadZoomTimestamps( self ):
         
         self._zoom_timestamps_load_id += 1
@@ -2685,6 +2798,13 @@ class MediaContainer( QW.QWidget ):
         self._UpdateAnimationUpdateRegistration()
         
     
+    def _SetScriptedEvents( self, scripted_events: list[ ClientMediaScriptedEvents.ScriptedEvent ] ):
+        
+        self._scripted_events = sorted( tuple( scripted_event ) for scripted_event in scripted_events )
+        
+        self._UpdateAnimationUpdateRegistration()
+        
+    
     def _SetZoomTimestamps( self, zoom_timestamps: list[ tuple[ int, float ] ] ):
         
         self._zoom_timestamps = sorted( tuple( zoom_timestamp ) for zoom_timestamp in zoom_timestamps )
@@ -3004,8 +3124,8 @@ class MediaContainer( QW.QWidget ):
     
     def _UpdateAnimationUpdateRegistration( self ):
         
-        # we only need to watch playback when there is something to skip or zoom
-        if len( self._playback_skips ) > 0 or len( self._zoom_timestamps ) > 0:
+        # we only need to watch playback when there is something to skip, zoom, or run
+        if len( self._playback_skips ) > 0 or len( self._zoom_timestamps ) > 0 or len( self._scripted_events ) > 0:
             
             CG.client_controller.gui.RegisterAnimationUpdateWindow( self )
             
@@ -3124,6 +3244,8 @@ class MediaContainer( QW.QWidget ):
         self._SetABLoop( None, None )
         
         self._LoadPlaybackSkips()
+        
+        self._LoadScriptedEvents()
         
         self._LoadSavedZoom()
         
@@ -3380,6 +3502,21 @@ class MediaContainer( QW.QWidget ):
         return self._per_player_mute_state
         
     
+    def GetCurrentPlaybackPointMS( self ) -> int | None:
+        
+        # the start of the frame on screen, which is the point a zoom timestamp or scripted event made now goes at
+        frame_start_and_duration = self._GetCurrentFrameStartAndDurationMS()
+        
+        if frame_start_and_duration is None:
+            
+            return None
+            
+        
+        ( frame_start_ms, frame_duration_ms ) = frame_start_and_duration
+        
+        return ConvertFrameStartToPlaybackPointMS( frame_start_ms )
+        
+    
     def GetCurrentPlaybackTimestampMS( self ) -> int | None:
         
         return self._GetCurrentPlaybackTimestampMS()
@@ -3394,6 +3531,11 @@ class MediaContainer( QW.QWidget ):
     def GetPlaybackSkips( self ) -> list[ tuple[ int, int ] ]:
         
         return list( self._playback_skips )
+        
+    
+    def GetScriptedEvents( self ) -> list[ ClientMediaScriptedEvents.ScriptedEvent ]:
+        
+        return list( self._scripted_events )
         
     
     def GetZoomTimestamps( self ) -> list[ tuple[ int, float ] ]:
@@ -3585,6 +3727,17 @@ class MediaContainer( QW.QWidget ):
             self._playback_skips_load_id += 1
             
             self._SetPlaybackSkips( skips )
+            
+        
+    
+    def NotifyNewScriptedEvents( self, hash: bytes, scripted_events: list[ ClientMediaScriptedEvents.ScriptedEvent ] ):
+        
+        if self._media is not None and self._media.GetHash() == hash and self._does_scripted_events:
+            
+            self._scripted_events_load_id += 1
+            
+            # we carry on from where playback is, so a new one just behind us does not run until next time round
+            self._SetScriptedEvents( scripted_events )
             
         
     
@@ -3875,6 +4028,8 @@ class MediaContainer( QW.QWidget ):
         self._SetABLoop( None, None )
         
         self._LoadPlaybackSkips()
+        
+        self._LoadScriptedEvents()
         
         # this clears the last file's zoom before we set up the new one, and then the new file's zoom comes in a moment later
         self._LoadSavedZoom()
@@ -4665,6 +4820,11 @@ class MediaContainer( QW.QWidget ):
         return True
         
     
+    def SupportsScriptedEvents( self ) -> bool:
+        
+        return self._media is not None and self._does_scripted_events and MediaHasPlayback( self._media )
+        
+    
     def SupportsZoomTimestamps( self ) -> bool:
         
         return self._media is not None and self._does_zoom_timestamps and MediaHasPlayback( self._media )
@@ -4709,6 +4869,8 @@ class MediaContainer( QW.QWidget ):
         self._CheckPlaybackSkips()
         
         self._CheckZoomTimestamps()
+        
+        self._CheckScriptedEvents()
         
     
     def TIMERUIUpdate( self ):

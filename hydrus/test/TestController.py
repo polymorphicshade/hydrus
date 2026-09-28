@@ -79,6 +79,7 @@ from hydrus.test import TestClientParsing
 from hydrus.test import TestClientPlaybackPoints
 from hydrus.test import TestClientPlaylistItems
 from hydrus.test import TestClientScreenLocations
+from hydrus.test import TestClientScriptedEvents
 from hydrus.test import TestClientSearch
 from hydrus.test import TestClientSearchQuickView
 from hydrus.test import TestClientSearchTagPresets
@@ -942,6 +943,7 @@ class Controller( object ):
             TestClientListBoxes,
             TestClientPlaybackPoints,
             TestClientPlaylistItems,
+            TestClientScriptedEvents,
             TestClientZoomTimestamps
         ]
         

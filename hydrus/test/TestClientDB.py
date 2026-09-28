@@ -830,6 +830,31 @@ class TestClientDB( unittest.TestCase ):
         self.assertEqual( self._read( 'file_viewer_zoom', hash_b ), 0.25 )
         
     
+    def test_file_scripted_events( self ):
+        
+        hash_a = os.urandom( 32 )
+        hash_b = os.urandom( 32 )
+        
+        self.assertEqual( self._read( 'file_scripted_events', hash_a ), [] )
+        
+        # several at one point is fine, and an exact repeat is only kept once
+        self._write( 'file_scripted_events', hash_a, [ ( 60000, 'explorer C:\\' ), ( 0, 'echo start' ), ( 60000, 'echo one minute' ), ( 0, 'echo start' ) ] )
+        self._write( 'file_scripted_events', hash_b, [ ( 250, 'echo b' ) ] )
+        
+        self.assertEqual( self._read( 'file_scripted_events', hash_a ), [ ( 0, 'echo start' ), ( 60000, 'echo one minute' ), ( 60000, 'explorer C:\\' ) ] )
+        self.assertEqual( self._read( 'file_scripted_events', hash_b ), [ ( 250, 'echo b' ) ] )
+        
+        # setting them replaces them
+        self._write( 'file_scripted_events', hash_a, [ ( 5000, 'echo five' ) ] )
+        
+        self.assertEqual( self._read( 'file_scripted_events', hash_a ), [ ( 5000, 'echo five' ) ] )
+        
+        self._write( 'file_scripted_events', hash_a, [] )
+        
+        self.assertEqual( self._read( 'file_scripted_events', hash_a ), [] )
+        self.assertEqual( self._read( 'file_scripted_events', hash_b ), [ ( 250, 'echo b' ) ] )
+        
+    
     def test_file_zoom_timestamps( self ):
         
         hash_a = os.urandom( 32 )

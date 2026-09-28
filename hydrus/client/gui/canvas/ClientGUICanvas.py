@@ -48,6 +48,7 @@ from hydrus.client.gui.media import ClientGUIMediaModalActions
 from hydrus.client.gui.media import ClientGUIMediaAudioEffects
 from hydrus.client.gui.media import ClientGUIMediaControls
 from hydrus.client.gui.media import ClientGUIMediaMenus
+from hydrus.client.gui.media import ClientGUIMediaScriptedEvents
 from hydrus.client.gui.metadata import ClientGUIManageTags
 from hydrus.client.gui.panels import ClientGUIScrolledPanelsCommitFiltering
 from hydrus.client.gui.panels import ClientGUIScrolledPanelsEdit
@@ -2501,6 +2502,41 @@ class CanvasWithHovers( Canvas ):
         self._media_container.AddPlaybackSkip( a_ms, b_ms )
         
     
+    def _AddScriptedEvent( self ):
+        
+        if self._current_media is None or not self._media_container.SupportsScriptedEvents():
+            
+            return
+            
+        
+        timestamp_ms = self._media_container.GetCurrentPlaybackPointMS()
+        
+        if timestamp_ms is None:
+            
+            ClientGUIDialogsMessage.ShowWarning( self, 'Sorry, could not work out where playback is right now! If the file is still loading, give it a moment and try again.' )
+            
+            return
+            
+        
+        # the dialog is modal, but a slideshow can move us on to another file while it is open
+        media = self._current_media
+        
+        try:
+            
+            scripted_event = ClientGUIMediaScriptedEvents.EditScriptedEvent( self, 'add scripted event', ( timestamp_ms, '' ), media.GetDurationMS() )
+            
+        except HydrusExceptions.CancelledException:
+            
+            return
+            
+        
+        hash = media.GetHash()
+        
+        scripted_events = CG.client_controller.Read( 'file_scripted_events', hash )
+        
+        self._SaveScriptedEvents( hash, sorted( set( scripted_events ).union( [ scripted_event ] ) ) )
+        
+    
     def _ChangeCounter( self, counter_id: bytes, delta: int ):
         
         if self._current_media is None:
@@ -3248,6 +3284,40 @@ class CanvasWithHovers( Canvas ):
         self._last_cursor_autohide_touch_time = HydrusTime.GetNowFloat()
         
         self._cursor_autohide_timer.start( 100 )
+        
+    
+    def _ManageScriptedEvents( self ):
+        
+        if self._current_media is None or not self._media_container.SupportsScriptedEvents():
+            
+            return
+            
+        
+        # the dialog is modal, but a slideshow can move us on to another file while it is open
+        media = self._current_media
+        
+        hash = media.GetHash()
+        
+        scripted_events = CG.client_controller.Read( 'file_scripted_events', hash )
+        
+        try:
+            
+            scripted_events = ClientGUIMediaScriptedEvents.ManageScriptedEvents( self, scripted_events, media.GetDurationMS() )
+            
+        except HydrusExceptions.CancelledException:
+            
+            return
+            
+        
+        self._SaveScriptedEvents( hash, scripted_events )
+        
+    
+    def _SaveScriptedEvents( self, hash: bytes, scripted_events: list[ tuple[ int, str ] ] ):
+        
+        CG.client_controller.Write( 'file_scripted_events', hash, scripted_events )
+        
+        # this media viewer, and any others showing this file, pick them up
+        CG.client_controller.pub( 'new_file_scripted_events', hash, scripted_events )
         
     
     def _SaveZoomTimestamp( self ):
@@ -5242,6 +5312,18 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
                     
                 
                 ClientGUIMenus.AppendMenu( menu, skips_menu, f'skips ({len( playback_skips )})' if len( playback_skips ) > 0 else 'skips' )
+                
+            
+            if self._media_container.SupportsScriptedEvents():
+                
+                scripting_menu = ClientGUIMenus.GenerateMenu( menu )
+                
+                ClientGUIMenus.AppendMenuItem( scripting_menu, 'add' + HC.UNICODE_ELLIPSIS, 'Set a command to run whenever playback gets to this point in this file, like "explorer C:\\" to open an explorer window.', self._AddScriptedEvent )
+                ClientGUIMenus.AppendMenuItem( scripting_menu, 'manage' + HC.UNICODE_ELLIPSIS, 'See this file\'s scripted events, and edit, remove, or clear them.', self._ManageScriptedEvents )
+                
+                num_scripted_events = len( self._media_container.GetScriptedEvents() )
+                
+                ClientGUIMenus.AppendMenu( menu, scripting_menu, f'scripting ({num_scripted_events})' if num_scripted_events > 0 else 'scripting' )
                 
             
             snapshots_location_context = ClientSnapshots.GetSnapshotsLocationContext()
