@@ -2518,9 +2518,9 @@ class CanvasWithHovers( Canvas ):
     
     def _DeleteZoomTimestamp( self, zoom_timestamp: tuple[ int, float ] ):
         
-        ( timestamp_ms, zoom ) = zoom_timestamp
+        ( timestamp_ms, relative_zoom ) = zoom_timestamp
         
-        message = f'Delete the zoom timestamp at {ClientGUICanvasMedia.ConvertPlaybackTimestampToString( timestamp_ms )}, which zooms to {ClientData.ConvertZoomToPercentage( zoom )}?'
+        message = f'Delete the zoom timestamp at {ClientGUICanvasMedia.ConvertPlaybackTimestampToString( timestamp_ms )}, which zooms to {ClientData.ConvertZoomToPercentage( relative_zoom )} of the zoom that fits the window?'
         
         result = ClientGUIDialogsQuick.GetYesNo( self, message, title = 'Delete zoom timestamp?', yes_label = 'delete it', no_label = 'keep it' )
         
@@ -5158,7 +5158,7 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
                     
                     ClientGUIMenus.AppendSeparator( zoom_menu )
                     
-                    ClientGUIMenus.AppendMenuItem( zoom_menu, 'save current zoom at timestamp', 'Save the current zoom at this point in playback. Every time playback gets here, the media viewer zooms to it, and stays there until the next zoom timestamp, or until playback ends, when it goes back to the zoom the file started at.', self._SaveZoomTimestamp )
+                    ClientGUIMenus.AppendMenuItem( zoom_menu, 'save current zoom at timestamp', 'Save the current zoom at this point in playback. Every time playback gets here, the media viewer zooms to it, and stays there until the next zoom timestamp, or until playback ends, when it goes back to the zoom the file started at. It is saved relative to the zoom that fits the file in the window, so in a smaller window, it zooms less.', self._SaveZoomTimestamp )
                     ClientGUIMenus.AppendMenuItem( zoom_menu, 'clear zoom timestamps', 'Remove all of this file\'s zoom timestamps.', self._media_container.ClearZoomTimestamps )
                     
                     zoom_timestamps = self._media_container.GetZoomTimestamps()
@@ -5169,9 +5169,9 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
                         
                         for zoom_timestamp in zoom_timestamps:
                             
-                            ( timestamp_ms, zoom ) = zoom_timestamp
+                            ( timestamp_ms, relative_zoom ) = zoom_timestamp
                             
-                            label = f'{ClientGUICanvasMedia.ConvertPlaybackTimestampToString( timestamp_ms )}: {ClientData.ConvertZoomToPercentage( zoom )}'
+                            label = f'{ClientGUICanvasMedia.ConvertPlaybackTimestampToString( timestamp_ms )}: {ClientData.ConvertZoomToPercentage( relative_zoom )} of fit'
                             
                             ClientGUIMenus.AppendMenuItem( zoom_menu, label, 'Delete this zoom timestamp. You will be asked to confirm.', self._DeleteZoomTimestamp, zoom_timestamp )
                             

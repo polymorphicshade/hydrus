@@ -781,14 +781,14 @@ class TestClientDB( unittest.TestCase ):
         self._write( 'file_zoom_timestamps', hash_a, [ ( 5000, 1.5 ), ( 0, 1.0 ), ( 13000, 0.7 ) ] )
         self._write( 'file_zoom_timestamps', hash_b, [ ( 250, 2.0 ) ] )
         
-        # they come back in timestamp order
-        self.assertEqual( self._read( 'file_zoom_timestamps', hash_a ), [ ( 0, 1.0 ), ( 5000, 1.5 ), ( 13000, 0.7 ) ] )
-        self.assertEqual( self._read( 'file_zoom_timestamps', hash_b ), [ ( 250, 2.0 ) ] )
+        # they come back in timestamp order, marked as relative to the zoom that fits the window
+        self.assertEqual( self._read( 'file_zoom_timestamps', hash_a ), [ ( 0, 1.0, True ), ( 5000, 1.5, True ), ( 13000, 0.7, True ) ] )
+        self.assertEqual( self._read( 'file_zoom_timestamps', hash_b ), [ ( 250, 2.0, True ) ] )
         
         self._write( 'file_zoom_timestamps', hash_a, [] )
         
         self.assertEqual( self._read( 'file_zoom_timestamps', hash_a ), [] )
-        self.assertEqual( self._read( 'file_zoom_timestamps', hash_b ), [ ( 250, 2.0 ) ] )
+        self.assertEqual( self._read( 'file_zoom_timestamps', hash_b ), [ ( 250, 2.0, True ) ] )
         
     
     def test_file_query_ids( self ):

@@ -30,3 +30,22 @@ class TestZoomTimestamps( unittest.TestCase ):
         self.assertEqual( ClientGUICanvasMedia.GetZoomTimestampAt( [ ( 0, 2.0 ) ], 0 ), ( 0, 2.0 ) )
         
     
+    def test_relative_zoom_timestamps( self ):
+        
+        # the window fits the file at 50%. an old one at a plain 150% is three times that
+        rows = [ ( 0, 1.0, True ), ( 5000, 1.5, False ), ( 13000, 0.7, True ) ]
+        
+        ( zoom_timestamps, converted_some ) = ClientGUICanvasMedia.ConvertZoomTimestampRowsToRelative( rows, 0.5 )
+        
+        self.assertEqual( zoom_timestamps, [ ( 0, 1.0 ), ( 5000, 3.0 ), ( 13000, 0.7 ) ] )
+        self.assertTrue( converted_some )
+        
+        # relative ones are left alone
+        ( zoom_timestamps, converted_some ) = ClientGUICanvasMedia.ConvertZoomTimestampRowsToRelative( [ ( 5000, 1.5, True ) ], 0.5 )
+        
+        self.assertEqual( zoom_timestamps, [ ( 5000, 1.5 ) ] )
+        self.assertFalse( converted_some )
+        
+        self.assertEqual( ClientGUICanvasMedia.ConvertZoomTimestampRowsToRelative( [], 0.5 ), ( [], False ) )
+        
+    

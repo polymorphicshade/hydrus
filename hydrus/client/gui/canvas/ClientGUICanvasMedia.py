@@ -178,6 +178,29 @@ def GetFrameIndexAtPlaybackPoint( point_ms: float, num_frames: int, get_frame_st
     return lo
     
 
+def ConvertZoomTimestampRowsToRelative( rows: list[ tuple[ int, float, bool ] ], canvas_zoom: float ) -> tuple[ list[ tuple[ int, float ] ], bool ]:
+    
+    # zoom timestamps are relative to the zoom that fits the file in the window. ones from before that are the plain zoom, which we take as being for the window as it is now
+    # returns the zoom timestamps, and whether any needed converting
+    zoom_timestamps = []
+    
+    converted_some = False
+    
+    for ( timestamp_ms, zoom, zoom_is_relative ) in rows:
+        
+        if not zoom_is_relative:
+            
+            zoom = zoom / canvas_zoom
+            
+            converted_some = True
+            
+        
+        zoom_timestamps.append( ( timestamp_ms, zoom ) )
+        
+    
+    return ( zoom_timestamps, converted_some )
+    
+
 def GetZoomTimestampAt( zoom_timestamps: list[ tuple[ int, float ] ], timestamp_ms: float ) -> tuple[ int, float ] | None:
     
     # the zoom timestamp that playback is under at this point, which is the last one at or before it. None means we are before the first one
@@ -1710,7 +1733,7 @@ class MediaContainer( QW.QWidget ):
         self._playback_skips_load_id = 0
         self._last_playback_skip_seek: tuple[ tuple[ int, int ], float ] | None = None
         
-        # zooms to change to at points in playback, as ( timestamp_ms, zoom ). each file has its own, saved in the db
+        # zooms to change to at points in playback, as ( timestamp_ms, relative_zoom ), where relative_zoom is relative to the zoom that fits the file in the window. each file has its own, saved in the db
         # only the media viewer does them. the preview is too small, and the duplicate filter wants to keep the zoom the same between the files it compares
         self._does_zoom_timestamps = self._canvas_type in ( CC.CANVAS_MEDIA_VIEWER, CC.CANVAS_MEDIA_VIEWER_ARCHIVE_DELETE )
         self._zoom_timestamps: list[ tuple[ int, float ] ] = []
@@ -2352,12 +2375,32 @@ class MediaContainer( QW.QWidget ):
             return CG.client_controller.Read( 'file_zoom_timestamps', hash )
             
         
-        def publish_callable( zoom_timestamps ):
+        def publish_callable( rows ):
             
             # the media changed, or the zoom timestamps were edited, while we were waiting
             if load_id != self._zoom_timestamps_load_id:
                 
                 return
+                
+            
+            canvas_zoom = self._zoom_types_to_zooms[ MEDIA_VIEWER_ZOOM_TYPE_CANVAS ]
+            
+            if self.IsZoomable() and canvas_zoom > 0:
+                
+                ( zoom_timestamps, converted_some ) = ConvertZoomTimestampRowsToRelative( rows, canvas_zoom )
+                
+                if converted_some:
+                    
+                    # old ones become relative once, for good
+                    self._SaveZoomTimestamps( zoom_timestamps )
+                    
+                    return
+                    
+                
+            else:
+                
+                # we cannot work out what old ones should be yet, so we leave them in the db for next time
+                zoom_timestamps = [ ( timestamp_ms, zoom ) for ( timestamp_ms, zoom, zoom_is_relative ) in rows if zoom_is_relative ]
                 
             
             self._SetZoomTimestamps( zoom_timestamps )
@@ -2942,9 +2985,12 @@ class MediaContainer( QW.QWidget ):
             
         else:
             
-            ( timestamp_ms, zoom ) = zoom_timestamp
+            ( timestamp_ms, relative_zoom ) = zoom_timestamp
             
-            self._SetZoom( zoom )
+            # relative to the zoom that fits the file in the window, so a smaller window gets a smaller zoom. a resize puts it back on, at the new size
+            zoom = relative_zoom * self._zoom_types_to_zooms[ MEDIA_VIEWER_ZOOM_TYPE_CANVAS ]
+            
+            self._SetZoom( self._GetZoomWithinMaxDimension( zoom ) )
             
         
         self.ResetCenterPosition()
@@ -4595,7 +4641,15 @@ class MediaContainer( QW.QWidget ):
         # the zoom happens as the frame on screen comes up
         timestamp_ms = ConvertFrameStartToPlaybackPointMS( frame_start_ms )
         
-        zoom_timestamp = ( timestamp_ms, self._current_zoom )
+        canvas_zoom = self._zoom_types_to_zooms[ MEDIA_VIEWER_ZOOM_TYPE_CANVAS ]
+        
+        if canvas_zoom <= 0:
+            
+            return False
+            
+        
+        # saved relative to the zoom that fits the file in the window, so it follows the window's size
+        zoom_timestamp = ( timestamp_ms, self._current_zoom / canvas_zoom )
         
         # one at the same point is replaced
         zoom_timestamps = [ existing for existing in self._zoom_timestamps if existing[0] != timestamp_ms ]
