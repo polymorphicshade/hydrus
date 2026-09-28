@@ -126,6 +126,24 @@ class ClientDBPlaylists( ClientDBModule.ClientDBModule ):
         super().Repair( current_db_version, cursor_transaction_wrapper )
         
     
+    def SetPlaylistItems( self, playlist_id: int, items: collections.abc.Sequence[ tuple[ bytes, int | None, int | None ] ] ):
+        
+        # the whole playlist, in order. this is how the playlist editor moves, duplicates, and removes items
+        result = self._Execute( 'SELECT 1 FROM playlists WHERE playlist_id = ?;', ( playlist_id, ) ).fetchone()
+        
+        if result is None:
+            
+            # it was deleted in the meantime
+            return
+            
+        
+        self._Execute( 'DELETE FROM playlist_items WHERE playlist_id = ?;', ( playlist_id, ) )
+        
+        rows = [ ( playlist_id, position, self.modules_hashes_local_cache.GetHashId( hash ), start_ms, end_ms ) for ( position, ( hash, start_ms, end_ms ) ) in enumerate( items ) ]
+        
+        self._ExecuteMany( 'INSERT INTO playlist_items ( playlist_id, position, hash_id, start_ms, end_ms ) VALUES ( ?, ?, ?, ?, ? );', rows )
+        
+    
     def SetPlaylists( self, playlists: collections.abc.Collection[ tuple[ int | None, str ] ] ):
         
         # ( playlist_id, name ), where a new playlist has no id yet. any existing playlist not in here is deleted, items and all

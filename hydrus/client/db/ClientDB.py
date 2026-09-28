@@ -4098,6 +4098,7 @@ class DB( HydrusDB.HydrusDB ):
                 'file_virtual_paths' : self.modules_files_virtual_paths.SetPaths,
                 'playlist_add_item' : self.modules_playlists.AddPlaylistItem,
                 'playlist_add_item_to_new_playlist' : self.modules_playlists.AddPlaylistItemToNewPlaylist,
+                'playlist_items' : self.modules_playlists.SetPlaylistItems,
                 'playlist_remove_file' : self.modules_playlists.RemoveFileFromPlaylist,
                 'playlists' : self.modules_playlists.SetPlaylists,
                 'file_maintenance_add_jobs' : self.modules_files_maintenance_queue.AddJobs,

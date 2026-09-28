@@ -656,6 +656,29 @@ class TestClientDB( unittest.TestCase ):
         
         self.assertEqual( self._read( 'playlist_items', chill_id ), [ ( hash_b, 1000, 5000 ), ( hash_a, None, None ) ] )
         
+        # the editor sets the whole list: reordered, with a repeat, and with the old hash_a item gone
+        
+        self._write( 'playlist_items', chill_id, [ ( hash_a, None, None ), ( hash_b, 1000, 5000 ), ( hash_a, None, None ) ] )
+        
+        self.assertEqual( self._read( 'playlist_items', chill_id ), [ ( hash_a, None, None ), ( hash_b, 1000, 5000 ), ( hash_a, None, None ) ] )
+        self.assertEqual( self._read( 'playlists_containing_file', hash_a ), [ ( chill_id, 'chill', 2 ), ( road_trip_id, 'road trip', 1 ) ] )
+        
+        # new items still go on the end
+        
+        self._write( 'playlist_add_item', chill_id, hash_b, None, None )
+        
+        self.assertEqual( self._read( 'playlist_items', chill_id ), [ ( hash_a, None, None ), ( hash_b, 1000, 5000 ), ( hash_a, None, None ), ( hash_b, None, None ) ] )
+        
+        self._write( 'playlist_items', chill_id, [] )
+        
+        self.assertEqual( self._read( 'playlist_items', chill_id ), [] )
+        
+        # a playlist that was deleted in the meantime is left alone
+        
+        self._write( 'playlist_items', 123456, [ ( hash_a, None, None ) ] )
+        
+        self.assertEqual( self._read( 'playlist_items', 123456 ), [] )
+        
         # deleting a playlist takes its items
         
         self._write( 'playlists', [ ( road_trip_id, 'road trip' ) ] )

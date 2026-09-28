@@ -1,5 +1,9 @@
+import collections.abc
+
+from qtpy import QtCore as QC
 from qtpy import QtWidgets as QW
 
+from hydrus.core import HydrusConstants as HC
 from hydrus.core import HydrusExceptions
 from hydrus.core import HydrusNumbers
 
@@ -9,10 +13,25 @@ from hydrus.client.gui import ClientGUIDialogsMessage
 from hydrus.client.gui import ClientGUIDialogsQuick
 from hydrus.client.gui import ClientGUITopLevelWindowsPanels
 from hydrus.client.gui import QtPorting as QP
+from hydrus.client.gui.canvas import ClientGUICanvasMedia
 from hydrus.client.gui.lists import ClientGUIListBoxes
 from hydrus.client.gui.panels import ClientGUIScrolledPanels
 from hydrus.client.gui.widgets import ClientGUICommon
 from hydrus.client.media import ClientMediaPlaylists
+from hydrus.client.media import ClientMediaSingle
+
+# ( hash, start_ms, end_ms )
+PlaylistItem = tuple[ bytes, int | None, int | None ]
+
+def ConvertPlaylistItemToPretty( name: str, start_ms: int | None, end_ms: int | None ) -> str:
+    
+    if start_ms is None or end_ms is None:
+        
+        return name
+        
+    
+    return f'{name} ({ClientGUICanvasMedia.ConvertPlaybackTimestampToString( start_ms )} - {ClientGUICanvasMedia.ConvertPlaybackTimestampToString( end_ms )})'
+    
 
 def ConvertPlaylistToPretty( playlist: ClientMediaPlaylists.PlaylistSummary ) -> str:
     
@@ -35,7 +54,49 @@ def EditPlaylists( win: QW.QWidget ):
             
             CG.client_controller.Write( 'playlists', panel.GetValue() )
             
+            for ( playlist_id, items ) in panel.GetEditedItems().items():
+                
+                CG.client_controller.Write( 'playlist_items', playlist_id, items )
+                
+            
         
+    
+
+def GetPlaylistItemNames( hashes: collections.abc.Collection[ bytes ] ) -> dict[ bytes, str ]:
+    
+    # something to know each file by in a list. its title tags if it has any, or its filetype and a bit of its hash
+    media_results = CG.client_controller.Read( 'media_results', hashes )
+    
+    hashes_to_names = {}
+    
+    for media_result in media_results:
+        
+        hash = media_result.GetHash()
+        
+        name = ClientMediaSingle.MediaSingle( media_result ).GetTitleString()
+        
+        if name == '':
+            
+            name = f'{HC.mime_string_lookup.get( media_result.GetMime(), "file" )} {hash.hex()[:12]}'
+            
+        
+        if not media_result.GetLocationsManager().IsLocal():
+            
+            name += ' (not in your files--it will be skipped)'
+            
+        
+        hashes_to_names[ hash ] = name
+        
+    
+    for hash in hashes:
+        
+        if hash not in hashes_to_names:
+            
+            hashes_to_names[ hash ] = f'unknown file {hash.hex()[:12]}'
+            
+        
+    
+    return hashes_to_names
     
 
 def SelectPlaylist( win: QW.QWidget, title: str, playlists: list[ ClientMediaPlaylists.PlaylistSummary ] ) -> int:
@@ -68,6 +129,8 @@ class EditPlaylistsPanel( ClientGUIScrolledPanels.EditPanel ):
         help_text = 'Playlists are named lists of files to play one after another. They do not have tags--you just find them by name.'
         help_text += '\n' * 2
         help_text += 'To put a file in a playlist, open it in the media viewer and right-click->playlist->add. If the A-B repeat points are set, only that part of the file goes in. To play a playlist, hit playlists->open.'
+        help_text += '\n' * 2
+        help_text += 'Hit \'edit items\' to change the order a playlist plays in, repeat items, or take them out.'
         
         st = ClientGUICommon.BetterStaticText( self, label = help_text )
         st.setWordWrap( True )
@@ -75,8 +138,12 @@ class EditPlaylistsPanel( ClientGUIScrolledPanels.EditPanel ):
         self._playlists_list = ClientGUIListBoxes.BetterQListWidget( self )
         self._playlists_list.setSelectionMode( QW.QAbstractItemView.SelectionMode.ExtendedSelection )
         
+        # playlist_id : items. these are written when this dialog is OKed
+        self._playlist_ids_to_edited_items: dict[ int, list[ PlaylistItem ] ] = {}
+        
         self._add_button = ClientGUICommon.BetterButton( self, 'add', self._Add )
         self._rename_button = ClientGUICommon.BetterButton( self, 'rename', self._Rename )
+        self._edit_items_button = ClientGUICommon.BetterButton( self, 'edit items' + HC.UNICODE_ELLIPSIS, self._EditItems )
         self._delete_button = ClientGUICommon.BetterButton( self, 'delete', self._Delete )
         
         #
@@ -89,6 +156,7 @@ class EditPlaylistsPanel( ClientGUIScrolledPanels.EditPanel ):
         
         QP.AddToLayout( button_hbox, self._add_button, CC.FLAGS_EXPAND_BOTH_WAYS )
         QP.AddToLayout( button_hbox, self._rename_button, CC.FLAGS_EXPAND_BOTH_WAYS )
+        QP.AddToLayout( button_hbox, self._edit_items_button, CC.FLAGS_EXPAND_BOTH_WAYS )
         QP.AddToLayout( button_hbox, self._delete_button, CC.FLAGS_EXPAND_BOTH_WAYS )
         
         vbox = QP.VBoxLayout()
@@ -151,6 +219,61 @@ class EditPlaylistsPanel( ClientGUIScrolledPanels.EditPanel ):
         self._playlists = [ playlist for playlist in self._playlists if playlist not in selected_playlists ]
         
         self._RefreshList()
+        
+    
+    def _EditItems( self ):
+        
+        selected_playlists = self._playlists_list.GetData( only_selected = True )
+        
+        if len( selected_playlists ) != 1:
+            
+            return
+            
+        
+        ( selected_playlist, ) = selected_playlists
+        
+        index = self._playlists.index( selected_playlist )
+        
+        ( playlist_id, name, num_items ) = self._playlists[ index ]
+        
+        if playlist_id is None:
+            
+            # a new playlist has nothing in it yet
+            return
+            
+        
+        if playlist_id in self._playlist_ids_to_edited_items:
+            
+            items = self._playlist_ids_to_edited_items[ playlist_id ]
+            
+        else:
+            
+            items = CG.client_controller.Read( 'playlist_items', playlist_id )
+            
+        
+        hashes_to_names = GetPlaylistItemNames( { hash for ( hash, start_ms, end_ms ) in items } )
+        
+        with ClientGUITopLevelWindowsPanels.DialogEdit( self, f'edit items: {name}' ) as dlg:
+            
+            panel = EditPlaylistItemsPanel( dlg, items, hashes_to_names )
+            
+            dlg.SetPanel( panel )
+            
+            if dlg.exec() != QW.QDialog.DialogCode.Accepted:
+                
+                return
+                
+            
+            items = panel.GetValue()
+            
+        
+        self._playlist_ids_to_edited_items[ playlist_id ] = items
+        
+        new_playlist = ( playlist_id, name, len( items ) )
+        
+        self._playlists[ index ] = new_playlist
+        
+        self._RefreshList( select_playlist = new_playlist )
         
     
     def _EnterName( self, default: str, playlist_being_edited: tuple[ int | None, str, int ] | None = None ) -> str:
@@ -237,10 +360,212 @@ class EditPlaylistsPanel( ClientGUIScrolledPanels.EditPanel ):
         self._rename_button.setEnabled( num_selected == 1 )
         self._delete_button.setEnabled( num_selected > 0 )
         
+        # a new playlist has no items to edit until it is saved and has had some added
+        selected_playlists = self._playlists_list.GetData( only_selected = True )
+        
+        self._edit_items_button.setEnabled( len( selected_playlists ) == 1 and selected_playlists[0][0] is not None )
+        
+    
+    def GetEditedItems( self ) -> dict[ int, list[ PlaylistItem ] ]:
+        
+        # the playlists whose items were edited, and are still here
+        kept_playlist_ids = { playlist_id for ( playlist_id, name, num_items ) in self._playlists }
+        
+        return { playlist_id : items for ( playlist_id, items ) in self._playlist_ids_to_edited_items.items() if playlist_id in kept_playlist_ids }
+        
     
     def GetValue( self ) -> list[ tuple[ int | None, str ] ]:
         
         return [ ( playlist_id, name ) for ( playlist_id, name, num_items ) in self._playlists ]
+        
+    
+
+class EditPlaylistItemsPanel( ClientGUIScrolledPanels.EditPanel ):
+    
+    def __init__( self, parent: QW.QWidget, items: list[ PlaylistItem ], hashes_to_names: dict[ bytes, str ] ):
+        
+        super().__init__( parent )
+        
+        self._hashes_to_names = hashes_to_names
+        
+        # the same item can be in here more than once, so each row gets its own key, and the list holds that
+        self._keys_to_items: dict[ int, PlaylistItem ] = {}
+        self._next_key = 0
+        
+        help_text = 'Drag and drop to change the order, or select some and move them up and down. Duplicate an item to have it play again somewhere else, and remove items you do not want.'
+        
+        st = ClientGUICommon.BetterStaticText( self, label = help_text )
+        st.setWordWrap( True )
+        
+        self._items_list = ClientGUIListBoxes.BetterQListWidget( self, delete_callable = self._Remove )
+        self._items_list.setSelectionMode( QW.QAbstractItemView.SelectionMode.ExtendedSelection )
+        self._items_list.setDragDropMode( QW.QAbstractItemView.DragDropMode.InternalMove )
+        self._items_list.setDefaultDropAction( QC.Qt.DropAction.MoveAction )
+        
+        self._move_up_button = ClientGUICommon.BetterButton( self, 'move up', self._Move, -1 )
+        self._move_down_button = ClientGUICommon.BetterButton( self, 'move down', self._Move, 1 )
+        self._duplicate_button = ClientGUICommon.BetterButton( self, 'duplicate', self._Duplicate )
+        self._remove_button = ClientGUICommon.BetterButton( self, 'remove', self._Remove )
+        
+        #
+        
+        for item in items:
+            
+            self._items_list.Append( '', self._AddItem( item ) )
+            
+        
+        self._UpdateLabels()
+        
+        #
+        
+        button_hbox = QP.HBoxLayout()
+        
+        QP.AddToLayout( button_hbox, self._move_up_button, CC.FLAGS_EXPAND_BOTH_WAYS )
+        QP.AddToLayout( button_hbox, self._move_down_button, CC.FLAGS_EXPAND_BOTH_WAYS )
+        QP.AddToLayout( button_hbox, self._duplicate_button, CC.FLAGS_EXPAND_BOTH_WAYS )
+        QP.AddToLayout( button_hbox, self._remove_button, CC.FLAGS_EXPAND_BOTH_WAYS )
+        
+        vbox = QP.VBoxLayout()
+        
+        QP.AddToLayout( vbox, st, CC.FLAGS_EXPAND_PERPENDICULAR )
+        QP.AddToLayout( vbox, self._items_list, CC.FLAGS_EXPAND_BOTH_WAYS )
+        QP.AddToLayout( vbox, button_hbox, CC.FLAGS_EXPAND_PERPENDICULAR )
+        
+        self.widget().setLayout( vbox )
+        
+        self._items_list.itemSelectionChanged.connect( self._UpdateButtons )
+        
+        # a drag and drop moves rows around by itself, so the numbers need catching up after
+        self._items_list.model().rowsMoved.connect( self._NotifyRowsChanged )
+        self._items_list.model().rowsInserted.connect( self._NotifyRowsChanged )
+        
+        self._UpdateButtons()
+        
+    
+    def _AddItem( self, item: PlaylistItem ) -> int:
+        
+        key = self._next_key
+        
+        self._next_key += 1
+        
+        self._keys_to_items[ key ] = item
+        
+        return key
+        
+    
+    def _Duplicate( self ):
+        
+        selected_indices = sorted( self._items_list.GetSelectedIndices() )
+        
+        if len( selected_indices ) == 0:
+            
+            return
+            
+        
+        keys = self._items_list.GetData()
+        
+        new_keys = []
+        
+        # each copy goes right after its original. going from the bottom up keeps the indices good
+        for index in reversed( selected_indices ):
+            
+            new_key = self._AddItem( self._keys_to_items[ keys[ index ] ] )
+            
+            list_widget_item = QW.QListWidgetItem()
+            
+            list_widget_item.setData( QC.Qt.ItemDataRole.UserRole, new_key )
+            
+            self._items_list.insertItem( index + 1, list_widget_item )
+            
+            new_keys.append( new_key )
+            
+        
+        self._items_list.SelectData( new_keys )
+        
+        self._UpdateLabels()
+        
+    
+    def _Move( self, direction: int ):
+        
+        selected_indices = self._items_list.GetSelectedIndices()
+        
+        if len( selected_indices ) == 0:
+            
+            return
+            
+        
+        # a selection already at the end stays together rather than squashing up
+        if direction < 0 and min( selected_indices ) == 0:
+            
+            return
+            
+        
+        if direction > 0 and max( selected_indices ) == self._items_list.count() - 1:
+            
+            return
+            
+        
+        self._items_list.MoveSelected( direction )
+        
+        self._UpdateLabels()
+        
+        self._UpdateButtons()
+        
+    
+    def _NotifyRowsChanged( self, *args ):
+        
+        # this can come in the middle of a drop, so we wait for it to finish
+        CG.client_controller.CallAfterQtSafe( self, self._UpdateLabels )
+        
+    
+    def _Remove( self ):
+        
+        if self._items_list.GetNumSelected() == 0:
+            
+            return
+            
+        
+        self._items_list.DeleteSelected()
+        
+        self._UpdateLabels()
+        
+    
+    def _UpdateButtons( self ):
+        
+        selected_indices = self._items_list.GetSelectedIndices()
+        
+        num_selected = len( selected_indices )
+        
+        self._move_up_button.setEnabled( num_selected > 0 and min( selected_indices ) > 0 )
+        self._move_down_button.setEnabled( num_selected > 0 and max( selected_indices ) < self._items_list.count() - 1 )
+        self._duplicate_button.setEnabled( num_selected > 0 )
+        self._remove_button.setEnabled( num_selected > 0 )
+        
+    
+    def _UpdateLabels( self ):
+        
+        for index in range( self._items_list.count() ):
+            
+            list_widget_item = self._items_list.item( index )
+            
+            key = list_widget_item.data( QC.Qt.ItemDataRole.UserRole )
+            
+            if key not in self._keys_to_items:
+                
+                continue
+                
+            
+            ( hash, start_ms, end_ms ) = self._keys_to_items[ key ]
+            
+            name = self._hashes_to_names.get( hash, hash.hex()[:12] )
+            
+            list_widget_item.setText( f'{HydrusNumbers.ToHumanInt( index + 1 )}. {ConvertPlaylistItemToPretty( name, start_ms, end_ms )}' )
+            
+        
+    
+    def GetValue( self ) -> list[ PlaylistItem ]:
+        
+        return [ self._keys_to_items[ key ] for key in self._items_list.GetData() ]
         
     
 
