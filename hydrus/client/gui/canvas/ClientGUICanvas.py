@@ -1718,6 +1718,12 @@ class Canvas( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
             
         
     
+    def ManualNavigationIsAllowed( self ) -> bool:
+        
+        # whether the user can go to the next/previous file themselves. the hover window's navigation buttons follow this
+        return True
+        
+    
     def SlideshowIsRunning( self ) -> bool:
         
         return False
@@ -5709,6 +5715,9 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
             
             self._media_container.Pause()
             
+            # the user can go where they like now, so the hover window's navigation buttons come back
+            CG.client_controller.pub( 'canvas_new_index_string', self._canvas_key, self._GetIndexString() )
+            
             return
             
         
@@ -5908,6 +5917,11 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         if self._playlist_shuffle_order is not None:
             
             index_string += ' (randomized)'
+            
+        
+        if self._playlist_finished:
+            
+            index_string += ' (finished)'
             
         
         return index_string
@@ -6157,15 +6171,30 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
     
     def _ShowFirst( self ):
         
+        if not self.ManualNavigationIsAllowed():
+            
+            return
+            
+        
         self._ShowPlaylistItem( self._GetPlayOrder()[0] )
         
     
     def _ShowLast( self ):
         
+        if not self.ManualNavigationIsAllowed():
+            
+            return
+            
+        
         self._ShowPlaylistItem( self._GetPlayOrder()[-1] )
         
     
     def _ShowNext( self ):
+        
+        if not self.ManualNavigationIsAllowed():
+            
+            return
+            
         
         # like the normal media viewer, the user can always step round the ends
         self._ShowPlaylistItem( self._GetNextPlaylistItemIndex( 1, True ) )
@@ -6212,10 +6241,20 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
     
     def _ShowPrevious( self ):
         
+        if not self.ManualNavigationIsAllowed():
+            
+            return
+            
+        
         self._ShowPlaylistItem( self._GetNextPlaylistItemIndex( -1, True ) )
         
     
     def _ShowRandom( self ):
+        
+        if not self.ManualNavigationIsAllowed():
+            
+            return
+            
         
         self._ShowPlaylistItem( random.randrange( len( self._playlist_items ) ) )
         
@@ -6228,6 +6267,12 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
     def _UndoRandom( self ):
         
         self._ShowPrevious()
+        
+    
+    def ManualNavigationIsAllowed( self ) -> bool:
+        
+        # while the playlist plays, it goes from item to item by itself. once it has finished, the user can go where they like, and it plays on from there
+        return self._playlist_finished
         
     
     def NotifyWeAreClosing( self ):

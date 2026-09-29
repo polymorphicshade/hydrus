@@ -1664,6 +1664,32 @@ class CanvasHoverFrameTopNavigable( CanvasHoverFrameTop ):
         QP.AddToLayout( self._top_left_hbox, self._next_button, CC.FLAGS_CENTER_PERPENDICULAR )
         
     
+    def _GetNavigationButtons( self ) -> list[ QW.QWidget ]:
+        
+        return [ self._previous_button, self._next_button ]
+        
+    
+    def _UpdateNavigationButtons( self ):
+        
+        # a playing playlist moves itself along, so these are greyed out until it finishes
+        allowed = self._my_canvas.ManualNavigationIsAllowed()
+        
+        for button in self._GetNavigationButtons():
+            
+            button.setEnabled( allowed )
+            
+        
+    
+    def SetIndexString( self, canvas_key, text ):
+        
+        super().SetIndexString( canvas_key, text )
+        
+        if canvas_key == self._canvas_key:
+            
+            self._UpdateNavigationButtons()
+            
+        
+    
 class CanvasHoverFrameTopDuplicatesFilter( CanvasHoverFrameTopNavigable ):
     
     def _PopulateLeftButtons( self ):
@@ -1745,6 +1771,11 @@ class CanvasHoverFrameTopNavigableList( CanvasHoverFrameTopNavigable ):
         self._slideshow_button.setVisible( self._my_canvas.SupportsSlideshow() )
         
         QP.AddToLayout( self._top_left_hbox, self._slideshow_button, CC.FLAGS_CENTER_PERPENDICULAR )
+        
+    
+    def _GetNavigationButtons( self ) -> list[ QW.QWidget ]:
+        
+        return [ self._first_button, self._previous_button, self._next_button, self._last_button, self._random_button ]
         
     
     def _ShowSlideshowMenu( self ):
