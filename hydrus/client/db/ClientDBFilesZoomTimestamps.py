@@ -29,6 +29,18 @@ class ClientDBFilesZoomTimestamps( ClientDBModule.ClientDBModule ):
         }
         
     
+    def ClearAllZoomTimestamps( self ):
+        
+        self._Execute( 'DELETE FROM file_zoom_timestamps;' )
+        
+    
+    def GetNumFilesWithZoomTimestamps( self ) -> int:
+        
+        ( num_files, ) = self._Execute( 'SELECT COUNT( DISTINCT hash_id ) FROM file_zoom_timestamps;' ).fetchone()
+        
+        return num_files
+        
+    
     def GetZoomTimestamps( self, hash: bytes ) -> list[ tuple[ int, float, bool, float | None, float | None ] ]:
         
         hash_id = self.modules_hashes_local_cache.GetHashId( hash )

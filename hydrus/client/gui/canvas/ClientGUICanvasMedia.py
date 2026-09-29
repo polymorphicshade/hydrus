@@ -1924,6 +1924,7 @@ class MediaContainer( QW.QWidget ):
         CG.client_controller.sub( self, 'NotifyNewPlaybackSkips', 'new_file_playback_skips' )
         CG.client_controller.sub( self, 'NotifyNewZoomTimestamps', 'new_file_zoom_timestamps' )
         CG.client_controller.sub( self, 'NotifyNewScriptedEvents', 'new_file_scripted_events' )
+        CG.client_controller.sub( self, 'NotifyAllSavedZoomsReset', 'reset_all_file_zooms' )
         
     
     def _CheckPlaybackSkips( self ):
@@ -3753,6 +3754,43 @@ class MediaContainer( QW.QWidget ):
     def MoveDelta( self, delta: QC.QPoint ):
         
         self._MoveDelta( delta )
+        
+    
+    def NotifyAllSavedZoomsReset( self, clear_file_viewer_zooms: bool, clear_zoom_timestamps: bool ):
+        
+        if self._media is None:
+            
+            return
+            
+        
+        if clear_file_viewer_zooms and self._remembers_file_zooms:
+            
+            # anything we are still loading is now out of date
+            self._saved_zoom_load_id += 1
+            
+            if self._saved_zoom is not None:
+                
+                self._saved_zoom = None
+                
+                # like 'forget this file's zoom', we go back to the normal default zoom
+                if self.IsZoomable():
+                    
+                    self.ZoomReinit()
+                    
+                    self.ResetCenterPosition()
+                    
+                
+            
+        
+        if clear_zoom_timestamps and self._does_zoom_timestamps:
+            
+            self._zoom_timestamps_load_id += 1
+            
+            self._SetZoomTimestamps( [] )
+            
+            # like 'clear zoom timestamps', the zoom stays where it is. it goes back to normal next time the file is opened
+            self._current_zoom_timestamp = None
+            
         
     
     def NotifyAudioMuteOptionsChanged( self ):

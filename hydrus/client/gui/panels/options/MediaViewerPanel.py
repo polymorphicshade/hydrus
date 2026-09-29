@@ -1,11 +1,13 @@
 from qtpy import QtWidgets as QW
 
+from hydrus.core import HydrusConstants as HC
 from hydrus.core import HydrusData
 
 from hydrus.client import ClientConstants as CC
 from hydrus.client import ClientGlobals as CG
 from hydrus.client.gui import ClientGUIFunctions
 from hydrus.client.gui import QtPorting as QP
+from hydrus.client.gui.media import ClientGUIMediaZooms
 from hydrus.client.gui.panels.options import ClientGUIOptionsPanelBase
 from hydrus.client.gui.widgets import ClientGUICommon
 
@@ -89,6 +91,13 @@ class MediaViewerPanel( ClientGUIOptionsPanelBase.OptionsPagePanel ):
         
         #
         
+        saved_zooms_panel = ClientGUICommon.StaticBox( self, 'saved zooms' )
+        
+        self._reset_all_saved_zooms = ClientGUICommon.BetterButton( saved_zooms_panel, 'reset all saved zooms' + HC.UNICODE_ELLIPSIS, ClientGUIMediaZooms.AskToResetAllSavedZooms, self )
+        self._reset_all_saved_zooms.setToolTip( ClientGUIFunctions.WrapToolTip( 'Forget the zoom every file was left at in the media viewer, and/or every file\'s zoom timestamps (the zooms and pans saved at points in playback). You will be told how many there are, and asked to confirm. This happens as soon as you confirm, not when you hit apply here.' ) )
+        
+        #
+        
         self._focus_media_tab_on_viewer_close_if_possible.setChecked( self._new_options.GetBoolean( 'focus_media_tab_on_viewer_close_if_possible' ) )
         self._focus_media_thumb_on_viewer_close.setChecked( self._new_options.GetBoolean( 'focus_media_thumb_on_viewer_close' ) )
         self._activate_main_gui_on_focusing_viewer_close.setChecked( self._new_options.GetBoolean( 'activate_main_gui_on_focusing_viewer_close' ) )
@@ -167,6 +176,14 @@ class MediaViewerPanel( ClientGUIOptionsPanelBase.OptionsPagePanel ):
         
         slideshow_panel.Add( slideshow_gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
         
+        label = 'The media viewer remembers the zoom you leave each file at, and you can save zoom timestamps on files with playback. This resets them for every file at once, so every file opens at your normal default zoom, centered.'
+        
+        st = ClientGUICommon.BetterStaticText( saved_zooms_panel, label = label )
+        st.setWordWrap( True )
+        
+        saved_zooms_panel.Add( st, CC.FLAGS_EXPAND_PERPENDICULAR )
+        saved_zooms_panel.Add( self._reset_all_saved_zooms, CC.FLAGS_ON_LEFT )
+        
         #
         
         vbox = QP.VBoxLayout()
@@ -174,6 +191,7 @@ class MediaViewerPanel( ClientGUIOptionsPanelBase.OptionsPagePanel ):
         QP.AddToLayout( vbox, mouse_panel, CC.FLAGS_EXPAND_PERPENDICULAR )
         QP.AddToLayout( vbox, seek_bar_panel, CC.FLAGS_EXPAND_PERPENDICULAR )
         QP.AddToLayout( vbox, slideshow_panel, CC.FLAGS_EXPAND_PERPENDICULAR )
+        QP.AddToLayout( vbox, saved_zooms_panel, CC.FLAGS_EXPAND_PERPENDICULAR )
         QP.AddToLayout( vbox, focus_panel, CC.FLAGS_EXPAND_PERPENDICULAR )
         vbox.addStretch( 0 )
         

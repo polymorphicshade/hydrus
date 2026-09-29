@@ -66,6 +66,7 @@ from hydrus.client.gui.executables import ClientGUIExecutableActions
 from hydrus.client.gui.exporting import ClientGUIExport
 from hydrus.client.gui.importing import ClientGUIImportFolders
 from hydrus.client.gui.media import ClientGUIMediaControls
+from hydrus.client.gui.media import ClientGUIMediaZooms
 from hydrus.client.gui.metadata import ClientGUITagDisplayMaintenanceEdit
 from hydrus.client.gui.metadata import ClientGUIManageTagParents
 from hydrus.client.gui.metadata import ClientGUIManageTagSiblings
@@ -3443,6 +3444,7 @@ ATTACH "client.mappings.db" as external_mappings;'''
         
         ClientGUIMenus.AppendMenuItem( clear_submenu, 'clear all file viewing statistics' + HC.UNICODE_ELLIPSIS, 'Delete all file viewing records from the database.', self._ClearFileViewingStats )
         ClientGUIMenus.AppendMenuItem( clear_submenu, 'cull file viewing statistics based on current min/max values' + HC.UNICODE_ELLIPSIS, 'Cull your file viewing statistics based on minimum and maximum permitted time deltas.', self._CullFileViewingStats )
+        ClientGUIMenus.AppendMenuItem( clear_submenu, 'reset all saved zooms' + HC.UNICODE_ELLIPSIS, 'Forget the zoom every file was left at in the media viewer, and/or every file\'s zoom timestamps (the zooms and pans saved at points in playback). You will be told how many there are, and asked to confirm.', ClientGUIMediaZooms.AskToResetAllSavedZooms, self )
         
         ClientGUIMenus.AppendMenu( menu, clear_submenu, 'clear' )
         

@@ -26,6 +26,19 @@ class ClientDBFilesViewerZooms( ClientDBModule.ClientDBModule ):
         }
         
     
+    def ClearAllViewerZooms( self ):
+        
+        # every file goes back to the normal default zoom
+        self._Execute( 'DELETE FROM file_viewer_zooms;' )
+        
+    
+    def GetNumViewerZooms( self ) -> int:
+        
+        ( num_zooms, ) = self._Execute( 'SELECT COUNT( * ) FROM file_viewer_zooms;' ).fetchone()
+        
+        return num_zooms
+        
+    
     def GetTablesAndColumnsThatUseDefinitions( self, content_type: int ) -> list[ tuple[ str, str ] ]:
         
         tables_and_columns = []

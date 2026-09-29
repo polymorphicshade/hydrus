@@ -875,6 +875,49 @@ class TestClientDB( unittest.TestCase ):
         self.assertEqual( self._read( 'file_zoom_timestamps', hash_b ), [ ( 250, 2.0, True, 0.1, 0.9 ) ] )
         
     
+    def test_file_zooms_reset_all( self ):
+        
+        hash_a = os.urandom( 32 )
+        hash_b = os.urandom( 32 )
+        hash_c = os.urandom( 32 )
+        
+        # other tests may have left some behind
+        num_zooms = self._read( 'num_file_viewer_zooms' )
+        num_files_with_zoom_timestamps = self._read( 'num_files_with_zoom_timestamps' )
+        
+        self._write( 'file_viewer_zoom', hash_a, 1.5 )
+        self._write( 'file_viewer_zoom', hash_b, 0.25 )
+        
+        # a file with several zoom timestamps is one file
+        self._write( 'file_zoom_timestamps', hash_a, [ ( 0, 1.0, None, None ), ( 5000, 1.5, 0.25, 0.75 ) ] )
+        self._write( 'file_zoom_timestamps', hash_c, [ ( 250, 2.0, 0.1, 0.9 ) ] )
+        
+        self.assertEqual( self._read( 'num_file_viewer_zooms' ), num_zooms + 2 )
+        self.assertEqual( self._read( 'num_files_with_zoom_timestamps' ), num_files_with_zoom_timestamps + 2 )
+        
+        # each can be reset on its own
+        self._write( 'clear_all_file_viewer_zooms' )
+        
+        self.assertEqual( self._read( 'num_file_viewer_zooms' ), 0 )
+        self.assertIsNone( self._read( 'file_viewer_zoom', hash_a ) )
+        self.assertIsNone( self._read( 'file_viewer_zoom', hash_b ) )
+        
+        self.assertEqual( self._read( 'num_files_with_zoom_timestamps' ), num_files_with_zoom_timestamps + 2 )
+        self.assertEqual( self._read( 'file_zoom_timestamps', hash_c ), [ ( 250, 2.0, True, 0.1, 0.9 ) ] )
+        
+        self._write( 'clear_all_file_zoom_timestamps' )
+        
+        self.assertEqual( self._read( 'num_files_with_zoom_timestamps' ), 0 )
+        self.assertEqual( self._read( 'file_zoom_timestamps', hash_a ), [] )
+        self.assertEqual( self._read( 'file_zoom_timestamps', hash_c ), [] )
+        
+        # and saving new ones afterwards works as normal
+        self._write( 'file_viewer_zoom', hash_b, 3.0 )
+        
+        self.assertEqual( self._read( 'file_viewer_zoom', hash_b ), 3.0 )
+        self.assertEqual( self._read( 'num_file_viewer_zooms' ), 1 )
+        
+    
     def test_file_query_ids( self ):
         
         TestClientDB._clear_db()

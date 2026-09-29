@@ -1,6 +1,7 @@
 import unittest
 
 from hydrus.client.gui.canvas import ClientGUICanvasMedia
+from hydrus.client.gui.media import ClientGUIMediaZooms
 
 class TestZoomTimestamps( unittest.TestCase ):
     
@@ -77,5 +78,27 @@ class TestZoomTimestamps( unittest.TestCase ):
         
         # the pan does not get in the way of finding which one we are in
         self.assertEqual( ClientGUICanvasMedia.GetZoomTimestampAt( [ ( 5000, 1.5, 0.2, 0.3 ), ( 0, 1.0, None, None ) ], 6000 ), ( 5000, 1.5, 0.2, 0.3 ) )
+        
+    
+    def test_reset_saved_zooms_question( self ):
+        
+        # with both, you can reset either or both
+        ( message, yes_tuples ) = ClientGUIMediaZooms.GetResetSavedZoomsQuestion( 1234, 5 )
+        
+        self.assertIn( '1,234 files open at a zoom', message )
+        self.assertIn( '5 files have zoom timestamps', message )
+        
+        self.assertEqual( [ value for ( label, value ) in yes_tuples ], [ ( True, True ), ( True, False ), ( False, True ) ] )
+        
+        # with just one kind, that is all that is offered
+        ( message, yes_tuples ) = ClientGUIMediaZooms.GetResetSavedZoomsQuestion( 3, 0 )
+        
+        self.assertNotIn( 'zoom timestamps,', message )
+        self.assertEqual( [ value for ( label, value ) in yes_tuples ], [ ( True, False ) ] )
+        
+        ( message, yes_tuples ) = ClientGUIMediaZooms.GetResetSavedZoomsQuestion( 0, 3 )
+        
+        self.assertNotIn( 'open at a zoom', message )
+        self.assertEqual( [ value for ( label, value ) in yes_tuples ], [ ( False, True ) ] )
         
     
