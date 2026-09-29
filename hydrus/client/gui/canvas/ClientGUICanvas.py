@@ -41,6 +41,7 @@ from hydrus.client.gui import ClientGUITopLevelWindowsPanels
 from hydrus.client.gui.canvas import ClientGUICanvasHoverFrames
 from hydrus.client.gui.canvas import ClientGUICanvasMedia
 from hydrus.client.gui.canvas import ClientGUICanvasMenus
+from hydrus.client.gui.canvas import ClientGUICanvasOverlays
 from hydrus.client.gui.duplicates import ClientGUIDuplicateActions
 from hydrus.client.gui.executables import ClientGUIExecutableActions
 from hydrus.client.gui.media import ClientGUIMediaSimpleActions
@@ -5378,6 +5379,8 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
             ClientGUIMenus.AppendMenuItem( screen_menu, 'move to location' + HC.UNICODE_ELLIPSIS, 'Snap this media viewer to one of your saved screen locations, size and all.', self._MoveToScreenLocation )
             
             ClientGUIMenus.AppendMenu( menu, screen_menu, 'screen' )
+            
+            ClientGUICanvasOverlays.AppendOverlaysMenu( menu, self )
             
             if self.SupportsSlideshow():
                 
