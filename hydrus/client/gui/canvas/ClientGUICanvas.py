@@ -5686,6 +5686,9 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         
         self._playlist_loop = CG.client_controller.new_options.GetBoolean( 'playlists_loop' )
         
+        # when locked, the user cannot go to the next/previous item themselves--the playlist moves itself along
+        self._playlist_lock_navigation = CG.client_controller.new_options.GetBoolean( 'playlists_lock_navigation' )
+        
         self._playlist_index = 0
         
         # when randomize is on, we play the items in this order, as indices into the playlist items. None when it is off
@@ -5714,9 +5717,6 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
             self._playlist_finished = True
             
             self._media_container.Pause()
-            
-            # the user can go where they like now, so the hover window's navigation buttons come back
-            CG.client_controller.pub( 'canvas_new_index_string', self._canvas_key, self._GetIndexString() )
             
             return
             
@@ -5871,6 +5871,14 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         ClientGUIPlaylists.ExportPlaylist( self, self._playlist_name, playlist_items )
         
     
+    def _FlipPlaylistLockNavigation( self ):
+        
+        self._playlist_lock_navigation = CG.client_controller.new_options.FlipBoolean( 'playlists_lock_navigation' )
+        
+        # the hover window's navigation buttons follow this
+        CG.client_controller.pub( 'canvas_new_index_string', self._canvas_key, self._GetIndexString() )
+        
+    
     def _FlipPlaylistLoop( self ):
         
         self._playlist_loop = CG.client_controller.new_options.FlipBoolean( 'playlists_loop' )
@@ -5917,11 +5925,6 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         if self._playlist_shuffle_order is not None:
             
             index_string += ' (randomized)'
-            
-        
-        if self._playlist_finished:
-            
-            index_string += ' (finished)'
             
         
         return index_string
@@ -6086,6 +6089,7 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         
         ClientGUIMenus.AppendMenuCheckItem( playlist_menu, 'loop playlist', 'When the playlist ends, start it again from the top.', self._playlist_loop, self._FlipPlaylistLoop )
         ClientGUIMenus.AppendMenuCheckItem( playlist_menu, 'randomize', 'Play everything after this item in a random order. Turn it off to go back to the item you turned it on at, and carry on in order from there.', self._playlist_shuffle_order is not None, self._FlipPlaylistRandomize )
+        ClientGUIMenus.AppendMenuCheckItem( playlist_menu, 'lock navigation', 'Stop next/previous/first/last/random from moving to another item, however you ask for them. The playlist still moves itself along.', self._playlist_lock_navigation, self._FlipPlaylistLockNavigation )
         
         ClientGUIMenus.AppendSeparator( playlist_menu )
         
@@ -6271,8 +6275,7 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
     
     def ManualNavigationIsAllowed( self ) -> bool:
         
-        # while the playlist plays, it goes from item to item by itself. once it has finished, the user can go where they like, and it plays on from there
-        return self._playlist_finished
+        return not self._playlist_lock_navigation
         
     
     def NotifyWeAreClosing( self ):

@@ -7,6 +7,7 @@ from qtpy import QtWidgets as QW
 
 from hydrus.core import HydrusConstants as HC
 
+from hydrus.client import ClientGlobals as CG
 from hydrus.client.gui import ClientGUIShortcuts
 from hydrus.client.gui.canvas import ClientGUICanvas
 from hydrus.client.gui.canvas import ClientGUICanvasHoverFrames
@@ -68,6 +69,7 @@ def GetPlaylistCanvas( num_items: int ):
     canvas._playlist_shuffle_order = None
     canvas._playlist_shuffle_position = 0
     canvas._playlist_finished = False
+    canvas._playlist_lock_navigation = True
     canvas._media_container = FakeMediaContainer()
     
     shown = []
@@ -87,7 +89,7 @@ def GetPlaylistCanvas( num_items: int ):
 
 class TestPlaylistNavigation( unittest.TestCase ):
     
-    def test_no_manual_navigation_while_playing( self ):
+    def test_no_manual_navigation_when_locked( self ):
         
         ( canvas, shown ) = GetPlaylistCanvas( 3 )
         
@@ -110,7 +112,23 @@ class TestPlaylistNavigation( unittest.TestCase ):
         self.assertEqual( shown, [ 2 ] )
         
     
-    def test_manual_navigation_once_finished( self ):
+    def test_manual_navigation_when_unlocked( self ):
+        
+        ( canvas, shown ) = GetPlaylistCanvas( 3 )
+        
+        canvas._playlist_lock_navigation = False
+        
+        self.assertTrue( canvas.ManualNavigationIsAllowed() )
+        
+        for ( show_call, expected_index ) in ( ( canvas._ShowNext, 1 ), ( canvas._ShowPrevious, 0 ), ( canvas._ShowLast, 2 ), ( canvas._ShowFirst, 0 ), ( canvas._ShowPrevious, 2 ) ):
+            
+            show_call()
+            
+            self.assertEqual( shown[-1], expected_index )
+            
+        
+    
+    def test_finishing_does_not_unlock( self ):
         
         ( canvas, shown ) = GetPlaylistCanvas( 3 )
         
@@ -121,30 +139,40 @@ class TestPlaylistNavigation( unittest.TestCase ):
         
         self.assertTrue( canvas._playlist_finished )
         self.assertTrue( canvas._media_container.paused )
-        self.assertTrue( canvas.ManualNavigationIsAllowed() )
-        self.assertTrue( canvas._GetIndexString().endswith( ' (finished)' ) )
+        self.assertFalse( canvas.ManualNavigationIsAllowed() )
+        
+        canvas._ShowPrevious()
         
         self.assertEqual( shown, [] )
         
-        # going back plays on from there, and then it is locked again
-        canvas._ShowPrevious()
+    
+    def test_lock_toggle( self ):
         
-        self.assertEqual( shown, [ 1 ] )
-        self.assertFalse( canvas.ManualNavigationIsAllowed() )
-        self.assertFalse( canvas._GetIndexString().endswith( ' (finished)' ) )
+        ( canvas, shown ) = GetPlaylistCanvas( 3 )
         
-        canvas._ShowNext()
+        new_options = CG.client_controller.new_options
         
-        self.assertEqual( shown, [ 1 ] )
+        original_value = new_options.GetBoolean( 'playlists_lock_navigation' )
         
-        # the other ways around work once it is finished, too
-        for ( show_call, expected_index ) in ( ( canvas._ShowFirst, 0 ), ( canvas._ShowLast, 2 ), ( canvas._ShowNext, 0 ) ):
+        canvas._playlist_lock_navigation = original_value
+        
+        try:
             
-            canvas._playlist_finished = True
+            # it is saved, so the next playlist starts the same way
+            canvas._FlipPlaylistLockNavigation()
             
-            show_call()
+            self.assertEqual( canvas._playlist_lock_navigation, not original_value )
+            self.assertEqual( new_options.GetBoolean( 'playlists_lock_navigation' ), not original_value )
+            self.assertEqual( canvas.ManualNavigationIsAllowed(), original_value )
             
-            self.assertEqual( shown[-1], expected_index )
+            canvas._FlipPlaylistLockNavigation()
+            
+            self.assertEqual( canvas._playlist_lock_navigation, original_value )
+            self.assertEqual( new_options.GetBoolean( 'playlists_lock_navigation' ), original_value )
+            
+        finally:
+            
+            new_options.SetBoolean( 'playlists_lock_navigation', original_value )
             
         
     
