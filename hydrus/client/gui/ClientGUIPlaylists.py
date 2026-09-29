@@ -1,4 +1,5 @@
 import collections.abc
+import os
 
 from qtpy import QtCore as QC
 from qtpy import QtWidgets as QW
@@ -6,9 +7,11 @@ from qtpy import QtWidgets as QW
 from hydrus.core import HydrusConstants as HC
 from hydrus.core import HydrusExceptions
 from hydrus.core import HydrusNumbers
+from hydrus.core import HydrusPaths
 
 from hydrus.client import ClientConstants as CC
 from hydrus.client import ClientGlobals as CG
+from hydrus.client.exporting import ClientExportingPlaylists
 from hydrus.client.gui import ClientGUIDialogsMessage
 from hydrus.client.gui import ClientGUIDialogsQuick
 from hydrus.client.gui import ClientGUITopLevelWindowsPanels
@@ -18,10 +21,14 @@ from hydrus.client.gui.lists import ClientGUIListBoxes
 from hydrus.client.gui.panels import ClientGUIScrolledPanels
 from hydrus.client.gui.widgets import ClientGUICommon
 from hydrus.client.media import ClientMediaPlaylists
+from hydrus.client.media import ClientMediaResult
 from hydrus.client.media import ClientMediaSingle
 
 # ( hash, start_ms, end_ms )
 PlaylistItem = tuple[ bytes, int | None, int | None ]
+
+# where the last playlist export went, this session, so the next one starts there
+LAST_PLAYLIST_EXPORT_DIR = None
 
 def ConvertPlaylistItemToPretty( name: str, start_ms: int | None, end_ms: int | None ) -> str:
     
@@ -62,6 +69,48 @@ def EditPlaylists( win: QW.QWidget ):
         
     
 
+def ExportPlaylist( win: QW.QWidget, playlist_name: str, playlist_items: list[ tuple[ ClientMediaResult.MediaResult, int | None, int | None ] ] ):
+    
+    # asks where to save the mp4, and then makes it in the background, with a popup to follow along
+    global LAST_PLAYLIST_EXPORT_DIR
+    
+    filename = HydrusPaths.SanitizeFilename( playlist_name, False ).strip()
+    
+    if filename == '':
+        
+        filename = 'playlist'
+        
+    
+    starting_dir = LAST_PLAYLIST_EXPORT_DIR if LAST_PLAYLIST_EXPORT_DIR is not None else os.path.expanduser( '~' )
+    
+    starting_path = os.path.join( starting_dir, filename + '.mp4' )
+    
+    options = QW.QFileDialog.Option.DontResolveSymlinks
+    
+    if CG.client_controller.new_options.GetBoolean( 'use_qt_file_dialogs' ):
+        
+        options |= QW.QFileDialog.Option.DontUseNativeDialog
+        
+    
+    wildcard = 'mp4 video (*.mp4)'
+    
+    path = QW.QFileDialog.getSaveFileName( win, 'export playlist as mp4', starting_path, filter = wildcard, selectedFilter = wildcard, options = options )[0]
+    
+    if path == '':
+        
+        return
+        
+    
+    if not path.lower().endswith( '.mp4' ):
+        
+        path += '.mp4'
+        
+    
+    LAST_PLAYLIST_EXPORT_DIR = os.path.dirname( path )
+    
+    ClientExportingPlaylists.StartPlaylistExport( playlist_name, playlist_items, path )
+    
+
 def GetPlaylistItemNames( hashes: collections.abc.Collection[ bytes ] ) -> dict[ bytes, str ]:
     
     # something to know each file by in a list. its title tags if it has any, or its filetype and a bit of its hash
@@ -97,6 +146,54 @@ def GetPlaylistItemNames( hashes: collections.abc.Collection[ bytes ] ) -> dict[
         
     
     return hashes_to_names
+    
+
+def PickAndExportPlaylist( win: QW.QWidget ):
+    
+    playlists = CG.client_controller.Read( 'playlists' )
+    
+    if len( playlists ) == 0:
+        
+        ClientGUIDialogsMessage.ShowInformation( win, 'You do not have any playlists yet! Make one under playlists->editor, or add this file to a new one with right-click->playlist->add.' )
+        
+        return
+        
+    
+    try:
+        
+        playlist_id = SelectPlaylist( win, 'export playlist', playlists )
+        
+    except HydrusExceptions.CancelledException:
+        
+        return
+        
+    
+    playlist_name = { playlist_id : name for ( playlist_id, name, num_items ) in playlists }[ playlist_id ]
+    
+    items = CG.client_controller.Read( 'playlist_items', playlist_id )
+    
+    if len( items ) == 0:
+        
+        ClientGUIDialogsMessage.ShowInformation( win, f'"{playlist_name}" is empty!' )
+        
+        return
+        
+    
+    media_results = CG.client_controller.Read( 'media_results', { hash for ( hash, start_ms, end_ms ) in items } )
+    
+    # a file that was deleted is skipped, like when the playlist plays
+    hashes_to_media_results = { media_result.GetHash() : media_result for media_result in media_results if media_result.GetLocationsManager().IsLocal() }
+    
+    playlist_items = [ ( hashes_to_media_results[ hash ], start_ms, end_ms ) for ( hash, start_ms, end_ms ) in items if hash in hashes_to_media_results ]
+    
+    if len( playlist_items ) == 0:
+        
+        ClientGUIDialogsMessage.ShowWarning( win, f'None of the files in "{playlist_name}" are in your files any more--they were probably deleted.' )
+        
+        return
+        
+    
+    ExportPlaylist( win, playlist_name, playlist_items )
     
 
 def SelectPlaylist( win: QW.QWidget, title: str, playlists: list[ ClientMediaPlaylists.PlaylistSummary ] ) -> int:

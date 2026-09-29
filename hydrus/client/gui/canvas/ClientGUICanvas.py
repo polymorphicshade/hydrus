@@ -4683,6 +4683,11 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
             
         
     
+    def _AppendPlaylistExportMenuItem( self, playlist_menu: QW.QMenu ):
+        
+        ClientGUIMenus.AppendMenuItem( playlist_menu, 'export' + HC.UNICODE_ELLIPSIS, 'Pick a playlist, and save everything in it, in order, as one mp4 video with sound. Parts of files are just those parts, and images stay up for as long as they do when the playlist plays.', ClientGUIPlaylists.PickAndExportPlaylist, self )
+        
+    
     def _AppendPlaylistMenu( self, menu: QW.QMenu ):
         
         playlist_menu = ClientGUIMenus.GenerateMenu( menu )
@@ -4967,6 +4972,10 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
         
         ClientGUIMenus.AppendMenuItem( playlist_menu, add_label + HC.UNICODE_ELLIPSIS, 'Add this file to a playlist. If the A-B repeat points are set, only that part of it goes in.', self._AddCurrentMediaToPlaylist )
         ClientGUIMenus.AppendMenuItem( playlist_menu, 'remove' + HC.UNICODE_ELLIPSIS, 'Remove this file from a playlist. Every part of it in that playlist goes.', self._RemoveCurrentMediaFromPlaylist )
+        
+        ClientGUIMenus.AppendSeparator( playlist_menu )
+        
+        self._AppendPlaylistExportMenuItem( playlist_menu )
         
     
     def _RegisterNextSlideshowPresentation( self ):
@@ -5621,6 +5630,11 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         self._ShowPlaylistItem( next_index )
         
     
+    def _AppendPlaylistExportMenuItem( self, playlist_menu: QW.QMenu ):
+        
+        ClientGUIMenus.AppendMenuItem( playlist_menu, 'export' + HC.UNICODE_ELLIPSIS, 'Save this playlist, in order, as one mp4 video with sound. It is what is playing now, so anything you removed from view is left out. Parts of files are just those parts, and images stay up for as long as they do here.', self._ExportPlayingPlaylist )
+        
+    
     def _DoPlaylistWork( self ):
         
         now = HydrusTime.GetNowPrecise()
@@ -5738,6 +5752,19 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
             
             self._AdvancePlaylist()
             
+        
+    
+    def _ExportPlayingPlaylist( self ):
+        
+        # in playlist order, even if it is playing randomized
+        playlist_items = [ ( media.GetMediaResult(), start_ms, end_ms ) for ( media, start_ms, end_ms ) in self._playlist_items ]
+        
+        if len( playlist_items ) == 0:
+            
+            return
+            
+        
+        ClientGUIPlaylists.ExportPlaylist( self, self._playlist_name, playlist_items )
         
     
     def _FlipPlaylistLoop( self ):
