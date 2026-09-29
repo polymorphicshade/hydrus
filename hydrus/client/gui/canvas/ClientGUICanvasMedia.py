@@ -1814,6 +1814,23 @@ class MediaContainer( QW.QWidget ):
         # after a move to a screen location, the file sits at the default zoom until the user zooms or we go to another file. its saved zoom stays in the db for next time
         self._holding_default_zoom = False
         
+        # where the next file should start playing, as ( media, start_ms ). a playlist sets this for a part of a file, so the player never shows what comes before it
+        self._next_media_start: tuple[ ClientMediaSingle.MediaSingle, int | None ] | None = None
+        
+        # a playlist can load what is coming next into a spare, hidden mpv player, paused at its start, so when it is time, we just swap it in and hit play
+        self._standby_mpv_widget: ClientGUIMPV.MPVWidget | None = None
+        self._standby_media: ClientMediaSingle.MediaSingle | None = None
+        self._standby_start_ms: int | None = None
+        
+        # the standby file's saved zoom and zoom timestamp rows, looked up ahead of time, so its zoom is right from the first frame. ( hash, saved_zoom, zoom_timestamp_rows ). None until they come back
+        self._standby_zoom_data: tuple[ bytes, float | None, list ] | None = None
+        self._standby_zoom_data_load_id = 0
+        self._standby_zoom_data_hash: bytes | None = None
+        
+        # what the new file got from that, waiting for its zoom to be set up. ( load_id, value )
+        self._saved_zoom_from_standby: tuple[ int, float | None ] | None = None
+        self._zoom_timestamp_rows_from_standby: tuple[ int, list ] | None = None
+        
         self._zoom_types_to_zooms = {
             MEDIA_VIEWER_ZOOM_TYPE_DEFAULT_FOR_FILETYPE : 1.0,
             MEDIA_VIEWER_ZOOM_TYPE_CANVAS : 1.0,
@@ -2404,6 +2421,223 @@ class MediaContainer( QW.QWidget ):
         job.start()
         
     
+    def _ApplyZoomDataFromStandby( self ):
+        
+        # the new file's zoom is set up now, so what we looked up ahead of time can go on, before it is shown
+        if self._saved_zoom_from_standby is not None:
+            
+            ( load_id, saved_zoom ) = self._saved_zoom_from_standby
+            
+            self._saved_zoom_from_standby = None
+            
+            if load_id == self._saved_zoom_load_id:
+                
+                self._SetLoadedSavedZoom( saved_zoom )
+                
+            
+        
+        if self._zoom_timestamp_rows_from_standby is not None:
+            
+            ( load_id, zoom_timestamp_rows ) = self._zoom_timestamp_rows_from_standby
+            
+            self._zoom_timestamp_rows_from_standby = None
+            
+            if load_id == self._zoom_timestamps_load_id:
+                
+                self._SetLoadedZoomTimestampRows( zoom_timestamp_rows )
+                
+            
+        
+    
+    def _ClearStandbyZoomData( self ):
+        
+        # anything still on its way is out of date
+        self._standby_zoom_data_load_id += 1
+        
+        self._standby_zoom_data = None
+        self._standby_zoom_data_hash = None
+        
+    
+    def _GetStandbyZoomData( self, hash: bytes ) -> tuple[ float | None, list ] | None:
+        
+        if self._standby_zoom_data is None:
+            
+            return None
+            
+        
+        ( standby_hash, saved_zoom, zoom_timestamp_rows ) = self._standby_zoom_data
+        
+        if standby_hash != hash:
+            
+            return None
+            
+        
+        return ( saved_zoom, zoom_timestamp_rows )
+        
+    
+    def _LoadStandbyZoomData( self, media: ClientMediaSingle.MediaSingle ):
+        
+        hash = media.GetHash()
+        
+        # we have them, or they are on their way
+        if self._standby_zoom_data_hash == hash:
+            
+            return
+            
+        
+        self._standby_zoom_data_load_id += 1
+        
+        load_id = self._standby_zoom_data_load_id
+        
+        self._standby_zoom_data = None
+        self._standby_zoom_data_hash = hash
+        
+        remembers_file_zooms = self._remembers_file_zooms
+        does_zoom_timestamps = self._does_zoom_timestamps and MediaHasPlayback( media )
+        
+        def work_callable():
+            
+            saved_zoom = CG.client_controller.Read( 'file_viewer_zoom', hash ) if remembers_file_zooms else None
+            zoom_timestamp_rows = CG.client_controller.Read( 'file_zoom_timestamps', hash ) if does_zoom_timestamps else []
+            
+            return ( saved_zoom, zoom_timestamp_rows )
+            
+        
+        def publish_callable( result ):
+            
+            # we moved on to something else while we were waiting
+            if load_id != self._standby_zoom_data_load_id:
+                
+                return
+                
+            
+            ( saved_zoom, zoom_timestamp_rows ) = result
+            
+            self._standby_zoom_data = ( hash, saved_zoom, zoom_timestamp_rows )
+            
+        
+        job = ClientGUIAsync.AsyncQtJob( self, work_callable, publish_callable )
+        
+        job.start()
+        
+    
+    def _PopNextMediaStartMS( self ) -> int | None:
+        
+        if self._next_media_start is None:
+            
+            return None
+            
+        
+        ( media, start_ms ) = self._next_media_start
+        
+        self._next_media_start = None
+        
+        if media != self._media:
+            
+            return None
+            
+        
+        return start_ms
+        
+    
+    def _ReleaseStandbyMPVWidget( self ):
+        
+        if self._standby_mpv_widget is None:
+            
+            return
+            
+        
+        mpv_widget = self._standby_mpv_widget
+        
+        self._standby_mpv_widget = None
+        self._standby_media = None
+        self._standby_start_ms = None
+        
+        # like any mpv window we are done with, it goes back in the pool, with nothing loaded
+        mpv_widget.ClearMedia()
+        
+        mpv_widget.hide()
+        
+        mpv_widget.SetAudioFilterGraph( '' )
+        
+        if CG.client_controller.new_options.GetBoolean( 'mpv_destruction_test' ):
+            
+            mpv_widget.StartCleanBeforeDestroy()
+            
+            self._closing_mpv_widgets.append( mpv_widget )
+            
+            mpv_widget.readyForDestruction.connect( self._CheckClosingWidgets )
+            
+        else:
+            
+            CG.client_controller.gui.ReleaseMPVWidget( mpv_widget )
+            
+        
+    
+    def _SetLoadedSavedZoom( self, zoom: float | None ):
+        
+        self._saved_zoom = zoom
+        
+        if self._saved_zoom is not None and self.IsZoomable() and not self._holding_default_zoom:
+            
+            self._SetZoom( self._GetZoomWithinMaxDimension( self._saved_zoom ) )
+            
+            self.ResetCenterPosition()
+            
+            # a zoom timestamp we are already in wins over this
+            self._current_zoom_timestamp_needs_reapply = True
+            
+        
+    
+    def _SetLoadedZoomTimestampRows( self, rows ):
+        
+        canvas_zoom = self._zoom_types_to_zooms[ MEDIA_VIEWER_ZOOM_TYPE_CANVAS ]
+        
+        if self.IsZoomable() and canvas_zoom > 0:
+            
+            ( zoom_timestamps, converted_some ) = ConvertZoomTimestampRowsToRelative( rows, canvas_zoom )
+            
+            if converted_some:
+                
+                # old ones become relative once, for good
+                self._SaveZoomTimestamps( zoom_timestamps )
+                
+                return
+                
+            
+        else:
+            
+            # we cannot work out what old ones should be yet, so we leave them in the db for next time
+            zoom_timestamps = [ ( timestamp_ms, zoom, center_x, center_y ) for ( timestamp_ms, zoom, zoom_is_relative, center_x, center_y ) in rows if zoom_is_relative ]
+            
+        
+        self._SetZoomTimestamps( zoom_timestamps )
+        
+    
+    def _TakeStandbyMPVWidget( self, media: ClientMediaSingle.MediaSingle, start_ms: int | None ) -> ClientGUIMPV.MPVWidget | None:
+        
+        # the standby player, if it has this file waiting at this start. if it has something else, that is no good to us now
+        if self._standby_mpv_widget is None:
+            
+            return None
+            
+        
+        if self._standby_media == media and ( self._standby_start_ms or 0 ) == ( start_ms or 0 ):
+            
+            mpv_widget = self._standby_mpv_widget
+            
+            self._standby_mpv_widget = None
+            self._standby_media = None
+            self._standby_start_ms = None
+            
+            return mpv_widget
+            
+        
+        self._ReleaseStandbyMPVWidget()
+        
+        return None
+        
+    
     def _LoadSavedZoom( self ):
         
         self._saved_zoom_load_id += 1
@@ -2411,6 +2645,7 @@ class MediaContainer( QW.QWidget ):
         load_id = self._saved_zoom_load_id
         
         self._saved_zoom = None
+        self._saved_zoom_from_standby = None
         
         self._holding_default_zoom = False
         
@@ -2420,6 +2655,18 @@ class MediaContainer( QW.QWidget ):
             
         
         hash = self._media.GetHash()
+        
+        standby_zoom_data = self._GetStandbyZoomData( hash )
+        
+        if standby_zoom_data is not None:
+            
+            # we looked it up ahead of time, so it goes on as soon as the new file's zoom is set up, before it is shown
+            ( saved_zoom, zoom_timestamp_rows ) = standby_zoom_data
+            
+            self._saved_zoom_from_standby = ( load_id, saved_zoom )
+            
+            return
+            
         
         def work_callable():
             
@@ -2434,17 +2681,7 @@ class MediaContainer( QW.QWidget ):
                 return
                 
             
-            self._saved_zoom = zoom
-            
-            if self._saved_zoom is not None and self.IsZoomable() and not self._holding_default_zoom:
-                
-                self._SetZoom( self._GetZoomWithinMaxDimension( self._saved_zoom ) )
-                
-                self.ResetCenterPosition()
-                
-                # a zoom timestamp we are already in wins over this
-                self._current_zoom_timestamp_needs_reapply = True
-                
+            self._SetLoadedSavedZoom( zoom )
             
         
         job = ClientGUIAsync.AsyncQtJob( self, work_callable, publish_callable )
@@ -2503,6 +2740,7 @@ class MediaContainer( QW.QWidget ):
         self._zoom_timestamps_last_check_was_playing = False
         self._zoom_timestamps_stopped_at_end = False
         self._zoom_timestamps_have_checked = False
+        self._zoom_timestamp_rows_from_standby = None
         
         if self._media is None or not self._does_zoom_timestamps or not MediaHasPlayback( self._media ):
             
@@ -2510,6 +2748,18 @@ class MediaContainer( QW.QWidget ):
             
         
         hash = self._media.GetHash()
+        
+        standby_zoom_data = self._GetStandbyZoomData( hash )
+        
+        if standby_zoom_data is not None:
+            
+            # we looked them up ahead of time. they go on once the new file's zoom is set up, since old ones are converted using it
+            ( saved_zoom, zoom_timestamp_rows ) = standby_zoom_data
+            
+            self._zoom_timestamp_rows_from_standby = ( load_id, zoom_timestamp_rows )
+            
+            return
+            
         
         def work_callable():
             
@@ -2524,27 +2774,7 @@ class MediaContainer( QW.QWidget ):
                 return
                 
             
-            canvas_zoom = self._zoom_types_to_zooms[ MEDIA_VIEWER_ZOOM_TYPE_CANVAS ]
-            
-            if self.IsZoomable() and canvas_zoom > 0:
-                
-                ( zoom_timestamps, converted_some ) = ConvertZoomTimestampRowsToRelative( rows, canvas_zoom )
-                
-                if converted_some:
-                    
-                    # old ones become relative once, for good
-                    self._SaveZoomTimestamps( zoom_timestamps )
-                    
-                    return
-                    
-                
-            else:
-                
-                # we cannot work out what old ones should be yet, so we leave them in the db for next time
-                zoom_timestamps = [ ( timestamp_ms, zoom, center_x, center_y ) for ( timestamp_ms, zoom, zoom_is_relative, center_x, center_y ) in rows if zoom_is_relative ]
-                
-            
-            self._SetZoomTimestamps( zoom_timestamps )
+            self._SetLoadedZoomTimestampRows( rows )
             
         
         job = ClientGUIAsync.AsyncQtJob( self, work_callable, publish_callable )
@@ -2621,9 +2851,26 @@ class MediaContainer( QW.QWidget ):
             
             # ok we are making a clever media player
             
+            start_ms = self._PopNextMediaStartMS()
+            
+            came_from_standby = False
+            
             if self._show_action == CC.MEDIA_VIEWER_ACTION_SHOW_WITH_MPV:
                 
-                if not CG.client_controller.new_options.GetBoolean( 'persist_media_window_mpv' ) or not isinstance( old_media_window, ClientGUIMPV.MPVWidget ):
+                standby_mpv_widget = self._TakeStandbyMPVWidget( self._media, start_ms )
+                
+                if standby_mpv_widget is not None:
+                    
+                    # this file is already loaded and sitting at its start, so there is nothing to wait for
+                    self._media_window = standby_mpv_widget
+                    
+                    self._media_window.SetMute( self._GetCurrentMuteState() )
+                    self._media_window.SetVolume( self._GetCurrentVolume() )
+                    self._media_window.SetAudioFilterGraph( self._audio_effects.GetFilterGraph() )
+                    
+                    came_from_standby = True
+                    
+                elif not CG.client_controller.new_options.GetBoolean( 'persist_media_window_mpv' ) or not isinstance( old_media_window, ClientGUIMPV.MPVWidget ):
                     
                     self._media_window = CG.client_controller.gui.GetMPVWidget( self )
                     
@@ -2635,7 +2882,7 @@ class MediaContainer( QW.QWidget ):
                     self._media_window.SetVolume( self._GetCurrentVolume() )
                     self._media_window.SetAudioFilterGraph( self._audio_effects.GetFilterGraph() )
                     
-                    self._media_window.SetMedia( self._media, start_paused = self._start_paused )
+                    self._media_window.SetMedia( self._media, start_paused = self._start_paused, start_ms = start_ms )
                     
                 
             elif self._show_action == CC.MEDIA_VIEWER_ACTION_SHOW_WITH_QTMEDIAPLAYER:
@@ -2651,7 +2898,20 @@ class MediaContainer( QW.QWidget ):
                     
                 
             
-            self._media_window.SetMedia( self._media, start_paused = self._start_paused )
+            if isinstance( self._media_window, ClientGUIMPV.MPVWidget ):
+                
+                # a standby player already has this file, so this does nothing
+                self._media_window.SetMedia( self._media, start_paused = self._start_paused, start_ms = start_ms )
+                
+            else:
+                
+                self._media_window.SetMedia( self._media, start_paused = self._start_paused )
+                
+            
+            if came_from_standby and not self._start_paused:
+                
+                self._media_window.Play()
+                
             
             self._media_window.lower()
             
@@ -3297,6 +3557,12 @@ class MediaContainer( QW.QWidget ):
         
         self._media = None
         
+        self._next_media_start = None
+        
+        self._ReleaseStandbyMPVWidget()
+        
+        self._ClearStandbyZoomData()
+        
         self._SetABLoop( None, None )
         
         self._LoadPlaybackSkips()
@@ -3843,6 +4109,12 @@ class MediaContainer( QW.QWidget ):
             self._SetZoomTimestamps( zoom_timestamps )
             
         
+        if self._standby_zoom_data_hash == hash:
+            
+            # what we looked up ahead of time is out of date. the file will look them up itself when it comes on
+            self._ClearStandbyZoomData()
+            
+        
     
     def Pause( self ):
         
@@ -3863,6 +4135,52 @@ class MediaContainer( QW.QWidget ):
                 
                 self._media_window.PausePlay()
             
+        
+    
+    def PreloadMedia( self, media: ClientMediaSingle.MediaSingle, start_ms: int | None ):
+        
+        # get what is coming next ready, so when it is time to show it, there is nothing to wait for
+        if media == self._media:
+            
+            return
+            
+        
+        self._LoadStandbyZoomData( media )
+        
+        if self._standby_media == media and ( self._standby_start_ms or 0 ) == ( start_ms or 0 ):
+            
+            return
+            
+        
+        self._ReleaseStandbyMPVWidget()
+        
+        ( show_action, start_paused, start_with_embed ) = ClientMedia.GetShowAction( media.GetMediaResult(), self._canvas_type )
+        
+        # only mpv can sit there with a file loaded, out of sight. the others are quick enough to load, or stay as they are
+        if show_action != CC.MEDIA_VIEWER_ACTION_SHOW_WITH_MPV or start_with_embed or not ClientGUIMPV.MPV_IS_AVAILABLE:
+            
+            return
+            
+        
+        # the first time, this makes a new mpv window, which takes a moment. after that, they come from the pool
+        mpv_widget = CG.client_controller.gui.GetMPVWidget( self )
+        
+        mpv_widget.hide()
+        
+        mpv_widget.amInitialised.connect( self._NotifyMPVInitialised )
+        
+        mpv_widget.SetCanvasType( self._canvas_type )
+        
+        # it sits paused at its start, and quiet, until it is swapped in
+        mpv_widget.SetMute( self._GetCurrentMuteState() )
+        mpv_widget.SetVolume( self._GetCurrentVolume() )
+        mpv_widget.SetAudioFilterGraph( self._audio_effects.GetFilterGraph() )
+        
+        mpv_widget.SetMedia( media, start_paused = True, start_ms = start_ms )
+        
+        self._standby_mpv_widget = mpv_widget
+        self._standby_media = media
+        self._standby_start_ms = start_ms
         
     
     def ReadyToDestroy( self ):
@@ -4117,6 +4435,8 @@ class MediaContainer( QW.QWidget ):
             self._MakeMediaWindow()
             
         
+        self._next_media_start = None
+        
         # loop points belong to the file they were marked on
         self._SetABLoop( None, None )
         
@@ -4147,6 +4467,11 @@ class MediaContainer( QW.QWidget ):
             self.ResetCenterPosition()
             
         
+        self._ApplyZoomDataFromStandby()
+        
+        # it was for this file, or it is out of date
+        self._ClearStandbyZoomData()
+        
         self._SizeAndPositionChildren()
         
         if self._media_window is not None:
@@ -4159,6 +4484,12 @@ class MediaContainer( QW.QWidget ):
         self.show()
         
         self._UpdateWindowAlwaysOnTop()
+        
+    
+    def SetNextMediaStartMS( self, media: ClientMediaSingle.MediaSingle, start_ms: int | None ):
+        
+        # the next time we get this file, start playing it here
+        self._next_media_start = ( media, start_ms )
         
     
     def ShouldHaveVolumeControl( self ):

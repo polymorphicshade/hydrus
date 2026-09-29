@@ -1,6 +1,7 @@
 import unittest
 
 from hydrus.client.gui.canvas import ClientGUICanvasMedia
+from hydrus.client.gui.canvas import ClientGUIMPV
 
 class TestPlaybackPoints( unittest.TestCase ):
     
@@ -131,5 +132,16 @@ class TestPlaybackPoints( unittest.TestCase ):
             
             self.assertEqual( ClientGUICanvasMedia.GetFrameIndexAtPlaybackPoint( old_point_ms, 200, get_frame_start_ms ), frame_index )
             
+        
+    
+    def test_mpv_start_option( self ):
+        
+        # a playlist item that starts part way in is loaded there, rather than seeked to after it starts
+        self.assertEqual( ClientGUIMPV.ConvertStartMSToMPVLoadFileOptions( 12345 ), 'start=12.345' )
+        self.assertEqual( ClientGUIMPV.ConvertStartMSToMPVLoadFileOptions( 1000 ), 'start=1.000' )
+        
+        # the start of the file needs no option
+        self.assertEqual( ClientGUIMPV.ConvertStartMSToMPVLoadFileOptions( 0 ), '' )
+        self.assertEqual( ClientGUIMPV.ConvertStartMSToMPVLoadFileOptions( None ), '' )
         
     

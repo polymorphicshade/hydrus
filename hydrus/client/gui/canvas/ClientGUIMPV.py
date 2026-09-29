@@ -297,6 +297,17 @@ def ConvertABLoopToMPVValues( a_s: float | None, b_s: float | None ):
 
 AUDIO_EFFECTS_FILTER_LABEL = '@hydrus_audio_effects'
 
+def ConvertStartMSToMPVLoadFileOptions( start_ms: int | None ) -> str:
+    
+    # the per-file options for loadfile, which mpv applies before the file starts
+    if start_ms is None or start_ms <= 0:
+        
+        return ''
+        
+    
+    return f'start={start_ms / 1000:.3f}'
+    
+
 def ConvertAudioFilterGraphToMPVAFArgs( graph: str ):
     
     # our effects go in as one labelled lavfi filter, so we don't stomp on any af line in the user's mpv.conf
@@ -344,7 +355,7 @@ class MPVMediator( object ):
         raise NotImplementedError()
         
     
-    def LoadFile( self, path ):
+    def LoadFile( self, path, start_ms: int | None = None ):
         
         raise NotImplementedError()
         
@@ -437,9 +448,18 @@ class MPVMediatorRude( MPVMediator ):
         self._mpv_player.input_vo_keyboard = False
         
     
-    def LoadFile( self, path ):
+    def LoadFile( self, path, start_ms: int | None = None ):
         
-        self._mpv_player.loadfile( path )
+        options = ConvertStartMSToMPVLoadFileOptions( start_ms )
+        
+        if options == '':
+            
+            self._mpv_player.loadfile( path )
+            
+        else:
+            
+            self._mpv_player.loadfile( path, start = options.split( '=', 1 )[1] )
+            
         
     
     def LooksLikeALoadError( self ) -> bool:
@@ -637,10 +657,12 @@ class MPVMediatorPolite( MPVMediator ):
             
         
     
-    def LoadFile( self, path ):
+    def LoadFile( self, path, start_ms: int | None = None ):
         
         mode = 'replace'
-        options = ''
+        
+        # starting the file where we want it means it never shows what comes before
+        options = ConvertStartMSToMPVLoadFileOptions( start_ms )
         
         fs_enc = mpv.fs_enc
         
@@ -1576,7 +1598,7 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
             
         
     
-    def SetMedia( self, media: ClientMediaSingle.MediaSingle | None, start_paused = False ):
+    def SetMedia( self, media: ClientMediaSingle.MediaSingle | None, start_paused = False, start_ms: int | None = None ):
         
         if media == self._media:
             
@@ -1700,7 +1722,7 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
                     
                     try:
                         
-                        self._mpv_mediator.LoadFile( path )
+                        self._mpv_mediator.LoadFile( path, start_ms = start_ms )
                         
                     except Exception as e:
                         

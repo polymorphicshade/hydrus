@@ -806,6 +806,37 @@ class TestClientDB( unittest.TestCase ):
             self.assertEqual( ClientMediaPlaylists.PlaylistItemIsDone( *args ), result, args )
             
         
+        # what comes next, to get ready, without changing anything
+        self.assertEqual( ClientMediaPlaylists.GetUpcomingPlaylistIndex( 0, 3, False, None, 0 ), 1 )
+        self.assertEqual( ClientMediaPlaylists.GetUpcomingPlaylistIndex( 2, 3, False, None, 0 ), None )
+        self.assertEqual( ClientMediaPlaylists.GetUpcomingPlaylistIndex( 2, 3, True, None, 0 ), 0 )
+        
+        # randomized, it is the next in the random order
+        self.assertEqual( ClientMediaPlaylists.GetUpcomingPlaylistIndex( 3, 4, True, [ 3, 0, 2, 1 ], 0 ), 0 )
+        self.assertEqual( ClientMediaPlaylists.GetUpcomingPlaylistIndex( 2, 4, True, [ 3, 0, 2, 1 ], 2 ), 1 )
+        # at the end of the random order, the next time round has not been drawn yet
+        self.assertEqual( ClientMediaPlaylists.GetUpcomingPlaylistIndex( 1, 4, True, [ 3, 0, 2, 1 ], 3 ), None )
+        
+        # how long a frame is
+        self.assertEqual( ClientMediaPlaylists.GetPlaylistFrameDurationMS( 3000, 90 ), 3000 / 90 )
+        self.assertEqual( ClientMediaPlaylists.GetPlaylistFrameDurationMS( None, None ), ClientMediaPlaylists.PLAYLIST_DEFAULT_FRAME_DURATION_MS )
+        self.assertEqual( ClientMediaPlaylists.GetPlaylistFrameDurationMS( 60000, 1 ), ClientMediaPlaylists.PLAYLIST_DEFAULT_FRAME_DURATION_MS )
+        self.assertEqual( ClientMediaPlaylists.GetPlaylistFrameDurationMS( 600000, 2 ), 1000.0 )
+        
+        # the last frame of a 3 second, 30fps file is up at 2966.7ms, and should stay up for the rest of its 33.3ms
+        frame_duration_ms = 1000 / 30
+        
+        self.assertIsNone( ClientMediaPlaylists.GetPlaylistItemLastFrameTimeLeftMS( 3000, 2933.3, frame_duration_ms ) )
+        self.assertAlmostEqual( ClientMediaPlaylists.GetPlaylistItemLastFrameTimeLeftMS( 3000, 2966.7, frame_duration_ms ), 33.3, places = 3 )
+        # a little early is still the last frame
+        self.assertIsNotNone( ClientMediaPlaylists.GetPlaylistItemLastFrameTimeLeftMS( 3000, 2963.0, frame_duration_ms ) )
+        # past the end is time to go
+        self.assertEqual( ClientMediaPlaylists.GetPlaylistItemLastFrameTimeLeftMS( 3000, 3010, frame_duration_ms ), 0.0 )
+        # a span's end works the same
+        self.assertAlmostEqual( ClientMediaPlaylists.GetPlaylistItemLastFrameTimeLeftMS( 5000, 4980, frame_duration_ms ), 20.0 )
+        # no end to go on
+        self.assertIsNone( ClientMediaPlaylists.GetPlaylistItemLastFrameTimeLeftMS( None, 4980, frame_duration_ms ) )
+        
     
     def test_file_viewer_zoom( self ):
         

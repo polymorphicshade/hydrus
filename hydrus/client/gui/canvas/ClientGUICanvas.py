@@ -5663,6 +5663,8 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
                 return
                 
             
+            self._MaintainPlaylistPreload()
+            
             # an image or similar stays up for a while
             self._playlist_item_still_time_s += tick_s
             
@@ -5722,6 +5724,9 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
             return
             
         
+        # this item is going properly, so we can get the next one ready
+        self._MaintainPlaylistPreload()
+        
         last_timestamp_ms = self._playlist_item_last_timestamp_ms
         
         self._playlist_item_last_timestamp_ms = current_timestamp_ms
@@ -5748,6 +5753,11 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
             self._media_container.HasPlayedOnceThrough()
         )
         
+        if not item_is_done:
+            
+            item_is_done = self._PlaylistItemLastFrameIsDone( end_ms, current_timestamp_ms, now )
+            
+        
         if item_is_done and not self._PlaylistIsHeld():
             
             self._AdvancePlaylist()
@@ -5771,8 +5781,14 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         
         self._playlist_loop = CG.client_controller.new_options.FlipBoolean( 'playlists_loop' )
         
+        # what comes next may have changed
+        self._playlist_item_preload_done = False
+        
     
     def _FlipPlaylistRandomize( self ):
+        
+        # what comes next is about to change
+        self._playlist_item_preload_done = False
         
         if self._playlist_shuffle_order is None:
             
@@ -5899,9 +5915,64 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         return to_render
         
     
+    def _MaintainPlaylistPreload( self ):
+        
+        if self._playlist_item_preload_done:
+            
+            return
+            
+        
+        self._playlist_item_preload_done = True
+        
+        num_items = len( self._playlist_items )
+        
+        upcoming_index = ClientMediaPlaylists.GetUpcomingPlaylistIndex( self._playlist_index, num_items, self._playlist_loop, self._playlist_shuffle_order, self._playlist_shuffle_position )
+        
+        if upcoming_index is None:
+            
+            return
+            
+        
+        ( media, start_ms, end_ms ) = self._playlist_items[ upcoming_index ]
+        
+        # the same file again just goes back to where it starts
+        if media == self._current_media:
+            
+            return
+            
+        
+        self._media_container.PreloadMedia( media, start_ms )
+        
+    
     def _PausePlaySlideshow( self ):
         
         pass
+        
+    
+    def _PlaylistItemLastFrameIsDone( self, end_ms: int | None, current_timestamp_ms: float, now: float ) -> bool:
+        
+        duration_ms = self._current_media.GetDurationMS()
+        
+        item_end_ms = end_ms if end_ms is not None else duration_ms
+        
+        frame_duration_ms = ClientMediaPlaylists.GetPlaylistFrameDurationMS( duration_ms, self._current_media.GetNumFrames() )
+        
+        time_left_ms = ClientMediaPlaylists.GetPlaylistItemLastFrameTimeLeftMS( item_end_ms, current_timestamp_ms, frame_duration_ms )
+        
+        if time_left_ms is None:
+            
+            # not there yet, or the user went back
+            self._playlist_item_last_frame_end_time = None
+            
+            return False
+            
+        
+        if self._playlist_item_last_frame_end_time is None:
+            
+            self._playlist_item_last_frame_end_time = now + ( time_left_ms / 1000 )
+            
+        
+        return now >= self._playlist_item_last_frame_end_time
         
     
     def _PlaylistIsHeld( self ) -> bool:
@@ -5940,6 +6011,9 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         kept_indices = [ index for ( index, ( media, start_ms, end_ms ) ) in enumerate( self._playlist_items ) if media not in medias ]
         
         self._playlist_items = [ self._playlist_items[ index ] for index in kept_indices ]
+        
+        # what comes next may have gone
+        self._playlist_item_preload_done = False
         
         if len( self._playlist_items ) == 0:
             
@@ -5987,6 +6061,12 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         
         self._playlist_item_still_time_s = 0.0
         
+        # whether we have got the next item ready yet
+        self._playlist_item_preload_done = False
+        
+        # when the last frame of this item is up, when it should come down. None until then
+        self._playlist_item_last_frame_end_time: float | None = None
+        
         self._playlist_last_tick_time = HydrusTime.GetNowPrecise()
         
     
@@ -6033,6 +6113,12 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
             
         
         self._ResetPlaylistItemState()
+        
+        if media != self._current_media:
+            
+            # a player that can start part way in never shows what comes before the part we want
+            self._media_container.SetNextMediaStartMS( media, start_ms )
+            
         
         self.SetMedia( media, start_paused = False )
         
