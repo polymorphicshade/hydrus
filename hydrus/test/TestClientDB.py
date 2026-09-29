@@ -886,6 +886,31 @@ class TestClientDB( unittest.TestCase ):
         self.assertEqual( self._read( 'file_scripted_events', hash_b ), [ ( 250, 'echo b' ) ] )
         
     
+    def test_file_segments( self ):
+        
+        hash_a = os.urandom( 32 )
+        hash_b = os.urandom( 32 )
+        
+        self.assertEqual( self._read( 'file_segments', hash_a ), [] )
+        
+        # several names at one point is fine, and an exact repeat is only kept once
+        self._write( 'file_segments', hash_a, [ ( 60000, 'verse' ), ( 0, 'intro' ), ( 60000, 'chorus' ), ( 0, 'intro' ) ] )
+        self._write( 'file_segments', hash_b, [ ( 250, 'b' ) ] )
+        
+        self.assertEqual( self._read( 'file_segments', hash_a ), [ ( 0, 'intro' ), ( 60000, 'chorus' ), ( 60000, 'verse' ) ] )
+        self.assertEqual( self._read( 'file_segments', hash_b ), [ ( 250, 'b' ) ] )
+        
+        # setting them replaces them
+        self._write( 'file_segments', hash_a, [ ( 5000, 'five' ) ] )
+        
+        self.assertEqual( self._read( 'file_segments', hash_a ), [ ( 5000, 'five' ) ] )
+        
+        self._write( 'file_segments', hash_a, [] )
+        
+        self.assertEqual( self._read( 'file_segments', hash_a ), [] )
+        self.assertEqual( self._read( 'file_segments', hash_b ), [ ( 250, 'b' ) ] )
+        
+    
     def test_file_zoom_timestamps( self ):
         
         hash_a = os.urandom( 32 )

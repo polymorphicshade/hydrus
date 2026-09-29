@@ -50,6 +50,7 @@ from hydrus.client.gui.media import ClientGUIMediaControls
 from hydrus.client.gui.media import ClientGUIMediaCounters
 from hydrus.client.gui.media import ClientGUIMediaMenus
 from hydrus.client.gui.media import ClientGUIMediaScriptedEvents
+from hydrus.client.gui.media import ClientGUIMediaSegments
 from hydrus.client.gui.metadata import ClientGUIManageTags
 from hydrus.client.gui.panels import ClientGUIScrolledPanelsCommitFiltering
 from hydrus.client.gui.panels import ClientGUIScrolledPanelsEdit
@@ -2538,6 +2539,41 @@ class CanvasWithHovers( Canvas ):
         self._SaveScriptedEvents( hash, sorted( set( scripted_events ).union( [ scripted_event ] ) ) )
         
     
+    def _AddSegment( self ):
+        
+        if self._current_media is None or not self._media_container.SupportsSegments():
+            
+            return
+            
+        
+        timestamp_ms = self._media_container.GetCurrentPlaybackPointMS()
+        
+        if timestamp_ms is None:
+            
+            ClientGUIDialogsMessage.ShowWarning( self, 'Sorry, could not work out where playback is right now! If the file is still loading, give it a moment and try again.' )
+            
+            return
+            
+        
+        # the dialog is modal, but a slideshow can move us on to another file while it is open
+        media = self._current_media
+        
+        try:
+            
+            segment = ClientGUIMediaSegments.EditSegment( self, 'add segment', ( timestamp_ms, '' ), media.GetDurationMS() )
+            
+        except HydrusExceptions.CancelledException:
+            
+            return
+            
+        
+        hash = media.GetHash()
+        
+        segments = CG.client_controller.Read( 'file_segments', hash )
+        
+        CG.client_controller.Write( 'file_segments', hash, ClientGUIMediaSegments.AddSegment( segments, segment ) )
+        
+    
     def _ChangeCounter( self, counter_id: bytes, delta: int ):
         
         if self._current_media is None:
@@ -3287,6 +3323,17 @@ class CanvasWithHovers( Canvas ):
         self._cursor_autohide_timer.start( 100 )
         
     
+    def _GoToSegment( self, hash: bytes, timestamp_ms: int ):
+        
+        # the menu was for this file, and a slideshow can move us on while it is open
+        if self._current_media is None or self._current_media.GetHash() != hash or not self._media_container.SupportsSegments():
+            
+            return
+            
+        
+        self._media_container.SeekTo( timestamp_ms )
+        
+    
     def _ManageScriptedEvents( self ):
         
         if self._current_media is None or not self._media_container.SupportsScriptedEvents():
@@ -3311,6 +3358,32 @@ class CanvasWithHovers( Canvas ):
             
         
         self._SaveScriptedEvents( hash, scripted_events )
+        
+    
+    def _ManageSegments( self ):
+        
+        if self._current_media is None or not self._media_container.SupportsSegments():
+            
+            return
+            
+        
+        # the dialog is modal, but a slideshow can move us on to another file while it is open
+        media = self._current_media
+        
+        hash = media.GetHash()
+        
+        segments = CG.client_controller.Read( 'file_segments', hash )
+        
+        try:
+            
+            segments = ClientGUIMediaSegments.ManageSegments( self, segments, media.GetDurationMS() )
+            
+        except HydrusExceptions.CancelledException:
+            
+            return
+            
+        
+        CG.client_controller.Write( 'file_segments', hash, segments )
         
     
     def _SaveScriptedEvents( self, hash: bytes, scripted_events: list[ tuple[ int, str ] ] ):
@@ -5323,6 +5396,15 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
             AddAudioVolumeMenu( menu, self.CANVAS_TYPE, self._media_container )
             
             ClientGUIMenus.AppendMenuItem( menu, 'audio effects', 'Apply audio effects, like a low pass filter or reverb, to what this media viewer plays.', self._ShowAudioEffects )
+            
+            if self._media_container.SupportsSegments():
+                
+                hash = self._current_media.GetHash()
+                
+                segments = CG.client_controller.Read( 'file_segments', hash )
+                
+                ClientGUIMediaSegments.AppendSegmentsMenu( menu, segments, self._AddSegment, lambda timestamp_ms: self._GoToSegment( hash, timestamp_ms ), self._ManageSegments )
+                
             
             if ClientGUICanvasMedia.MediaHasPlayback( self._current_media ):
                 

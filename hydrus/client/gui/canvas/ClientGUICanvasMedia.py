@@ -1802,6 +1802,9 @@ class MediaContainer( QW.QWidget ):
         self._scripted_events: list[ ClientMediaScriptedEvents.ScriptedEvent ] = []
         self._scripted_events_load_id = 0
         
+        # named points in a video to jump to. just videos, and just the media viewer
+        self._does_segments = self._canvas_type in ( CC.CANVAS_MEDIA_VIEWER, CC.CANVAS_MEDIA_VIEWER_ARCHIVE_DELETE )
+        
         # where playback was at the last check, so we can see what it went past. None means we have not seen it playing yet
         self._scripted_events_last_timestamp_ms: float | None = None
         
@@ -5253,6 +5256,11 @@ class MediaContainer( QW.QWidget ):
     def SupportsScriptedEvents( self ) -> bool:
         
         return self._media is not None and self._does_scripted_events and MediaHasPlayback( self._media )
+        
+    
+    def SupportsSegments( self ) -> bool:
+        
+        return self._media is not None and self._does_segments and self._media.GetMime() in HC.VIDEO and MediaHasPlayback( self._media )
         
     
     def SupportsZoomTimestamps( self ) -> bool:

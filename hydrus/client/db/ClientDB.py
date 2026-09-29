@@ -49,6 +49,7 @@ from hydrus.client.db import ClientDBFilesPhysicalStorage
 from hydrus.client.db import ClientDBFilesPlaybackSkips
 from hydrus.client.db import ClientDBFilesScriptedEvents
 from hydrus.client.db import ClientDBFilesSearch
+from hydrus.client.db import ClientDBFilesSegments
 from hydrus.client.db import ClientDBFilesSnapshots
 from hydrus.client.db import ClientDBFilesStorage
 from hydrus.client.db import ClientDBFilesTimestamps
@@ -3959,6 +3960,7 @@ class DB( HydrusDB.HydrusDB ):
                 'file_maintenance_get_jobs' : self.modules_files_maintenance_queue.GetJobs,
                 'file_playback_skips' : self.modules_files_playback_skips.GetPlaybackSkips,
                 'file_scripted_events' : self.modules_files_scripted_events.GetScriptedEvents,
+                'file_segments' : self.modules_files_segments.GetSegments,
                 'file_query_ids' : self.modules_files_query.GetHashIdsFromQuery,
                 'file_relationships_for_api' : self.modules_files_duplicates_storage.GetFileRelationshipsForAPI,
                 'file_viewer_zoom' : self.modules_files_viewer_zooms.GetViewerZoom,
@@ -4113,6 +4115,7 @@ class DB( HydrusDB.HydrusDB ):
                 'file_maintenance_clear_jobs' : self.modules_files_maintenance.ClearJobs,
                 'file_playback_skips' : self.modules_files_playback_skips.SetPlaybackSkips,
                 'file_scripted_events' : self.modules_files_scripted_events.SetScriptedEvents,
+                'file_segments' : self.modules_files_segments.SetSegments,
                 'file_viewer_zoom' : self.modules_files_viewer_zooms.SetViewerZoom,
                 'file_zoom_timestamps' : self.modules_files_zoom_timestamps.SetZoomTimestamps,
                 'granularise' : self.modules_files_physical_storage.Granularise,
@@ -4289,6 +4292,10 @@ class DB( HydrusDB.HydrusDB ):
         self.modules_files_scripted_events = ClientDBFilesScriptedEvents.ClientDBFilesScriptedEvents( self._c, self.modules_hashes_local_cache )
         
         self._modules.append( self.modules_files_scripted_events )
+        
+        self.modules_files_segments = ClientDBFilesSegments.ClientDBFilesSegments( self._c, self.modules_hashes_local_cache )
+        
+        self._modules.append( self.modules_files_segments )
         
         self.modules_files_viewer_zooms = ClientDBFilesViewerZooms.ClientDBFilesViewerZooms( self._c, self.modules_hashes_local_cache )
         
