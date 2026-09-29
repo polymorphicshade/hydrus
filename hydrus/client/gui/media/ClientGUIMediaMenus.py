@@ -20,6 +20,7 @@ from hydrus.client.gui import ClientGUIAsync
 from hydrus.client.gui import ClientGUIMenus
 from hydrus.client.gui import QtPorting as QP
 from hydrus.client.gui.executables import ClientGUIExecutableActions
+from hydrus.client.gui.exporting import ClientGUIExportVideo
 from hydrus.client.gui.media import ClientGUIMediaModalActions
 from hydrus.client.gui.media import ClientGUIMediaSimpleActions
 from hydrus.client.media import ClientMedia
@@ -1055,9 +1056,19 @@ def AddShareMenu( win: QW.QWidget, command_processor: CAC.ApplicationCommandProc
     
     share_menu = ClientGUIMenus.GenerateMenu( menu )
     
-    if len( local_selection ) > 0:
+    can_export_video = focused_is_local and ClientGUIExportVideo.CanExportVideo( focused_media_result )
+    
+    if len( local_selection ) > 0 or can_export_video:
         
-        ClientGUIMenus.AppendMenuItem( share_menu, 'export files', 'Export the selected files to an external folder.', command_processor.ProcessApplicationCommand, CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_EXPORT_FILES ) )
+        if len( local_selection ) > 0:
+            
+            ClientGUIMenus.AppendMenuItem( share_menu, 'export files', 'Export the selected files to an external folder.', command_processor.ProcessApplicationCommand, CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_EXPORT_FILES ) )
+            
+        
+        if can_export_video:
+            
+            ClientGUIMenus.AppendMenuItem( share_menu, 'export video' + HC.UNICODE_ELLIPSIS, 'Export this video as it is, or encode it again as an mp4 or webm to fit a resolution or file size.', ClientGUIExportVideo.ExportVideo, win, focused_media_result )
+            
         
         ClientGUIMenus.AppendSeparator( share_menu )
         
