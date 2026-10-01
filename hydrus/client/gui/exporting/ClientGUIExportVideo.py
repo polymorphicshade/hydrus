@@ -8,6 +8,7 @@ from hydrus.core import HydrusExceptions
 from hydrus.client import ClientConstants as CC
 from hydrus.client import ClientData
 from hydrus.client import ClientGlobals as CG
+from hydrus.client.exporting import ClientExportingSpans
 from hydrus.client.exporting import ClientExportingVideo
 from hydrus.client.gui import ClientGUITopLevelWindowsPanels
 from hydrus.client.gui import QtPorting as QP
@@ -26,15 +27,18 @@ def CanExportVideo( media_result: ClientMediaResult.MediaResult ) -> bool:
     return media_result.GetMime() in HC.VIDEO and media_result.GetLocationsManager().IsLocal()
     
 
-def ExportVideo( win: QW.QWidget, media_result: ClientMediaResult.MediaResult ):
+def ExportVideo( win: QW.QWidget, media_result: ClientMediaResult.MediaResult, span_ms: tuple[ int, int ] | None = None ):
     
     # asks how to export it and where to put it, and then makes it in the background, with a popup to follow along
+    # with a span, just that part of the video is exported
     global LAST_VIDEO_EXPORT_DIR
     global LAST_VIDEO_EXPORT_SETTINGS
     
-    with ClientGUITopLevelWindowsPanels.DialogEdit( win, 'export video' ) as dlg:
+    title = 'export video' if span_ms is None else 'export video clip'
+    
+    with ClientGUITopLevelWindowsPanels.DialogEdit( win, title ) as dlg:
         
-        panel = EditVideoExportPanel( dlg, media_result, LAST_VIDEO_EXPORT_SETTINGS )
+        panel = EditVideoExportPanel( dlg, media_result, LAST_VIDEO_EXPORT_SETTINGS, span_ms = span_ms )
         
         dlg.SetPanel( panel )
         
@@ -46,26 +50,31 @@ def ExportVideo( win: QW.QWidget, media_result: ClientMediaResult.MediaResult ):
         settings = panel.GetValue()
         
     
-    if not media_result.HasAudio() and LAST_VIDEO_EXPORT_SETTINGS is not None:
+    settings_to_remember = ClientExportingVideo.VideoExportSettings( **settings.__dict__ )
+    
+    if LAST_VIDEO_EXPORT_SETTINGS is not None:
         
-        # a file with no audio did not get to pick, so the next one keeps what was picked before
-        settings_to_remember = ClientExportingVideo.VideoExportSettings( **settings.__dict__ )
+        if not media_result.HasAudio():
+            
+            # a file with no audio did not get to pick, so the next one keeps what was picked before
+            settings_to_remember.audio_kbps = LAST_VIDEO_EXPORT_SETTINGS.audio_kbps
+            
         
-        settings_to_remember.audio_kbps = LAST_VIDEO_EXPORT_SETTINGS.audio_kbps
+        if span_ms is not None and LAST_VIDEO_EXPORT_SETTINGS.export_format == ClientExportingVideo.VIDEO_EXPORT_FORMAT_RAW:
+            
+            # a clip could not pick raw, so the next whole video keeps it
+            settings_to_remember.export_format = ClientExportingVideo.VIDEO_EXPORT_FORMAT_RAW
+            
         
-        LAST_VIDEO_EXPORT_SETTINGS = settings_to_remember
-        
-    else:
-        
-        LAST_VIDEO_EXPORT_SETTINGS = settings
-        
+    
+    LAST_VIDEO_EXPORT_SETTINGS = settings_to_remember
     
     
     ext = ClientExportingVideo.GetVideoExportExtension( settings.export_format, media_result.GetMime() )
     
     starting_dir = LAST_VIDEO_EXPORT_DIR if LAST_VIDEO_EXPORT_DIR is not None else os.path.expanduser( '~' )
     
-    starting_path = os.path.join( starting_dir, media_result.GetHash().hex() + ext )
+    starting_path = os.path.join( starting_dir, media_result.GetHash().hex() + ClientExportingSpans.GetExportSpanFilenameSuffix( span_ms ) + ext )
     
     options = QW.QFileDialog.Option.DontResolveSymlinks
     
@@ -90,36 +99,60 @@ def ExportVideo( win: QW.QWidget, media_result: ClientMediaResult.MediaResult ):
     
     LAST_VIDEO_EXPORT_DIR = os.path.dirname( path )
     
-    ClientExportingVideo.StartVideoExport( media_result, settings, path )
+    ClientExportingVideo.StartVideoExport( media_result, settings, path, span_ms = span_ms )
     
 
 class EditVideoExportPanel( ClientGUIScrolledPanels.EditPanel ):
     
-    def __init__( self, parent: QW.QWidget, media_result: ClientMediaResult.MediaResult, last_settings: ClientExportingVideo.VideoExportSettings | None ):
+    def __init__( self, parent: QW.QWidget, media_result: ClientMediaResult.MediaResult, last_settings: ClientExportingVideo.VideoExportSettings | None, span_ms: tuple[ int, int ] | None = None ):
         
         super().__init__( parent )
+        
+        self._span_ms = span_ms
+        
+        file_duration_ms = media_result.GetDurationMS()
         
         self._source_size = media_result.GetSize()
         self._source_resolution = media_result.GetResolution()
         self._source_framerate = media_result.GetFileInfoManager().GetFramerate()
-        self._duration_ms = media_result.GetDurationMS()
+        self._duration_ms = ClientExportingSpans.GetExportSpanDurationMS( span_ms, file_duration_ms )
         self._has_audio = media_result.HasAudio()
+        
+        if span_ms is not None and file_duration_ms is not None and file_duration_ms > 0:
+            
+            # the size guesses go by how big the clip's part of the file is
+            self._source_size = int( self._source_size * self._duration_ms / file_duration_ms )
+            
         
         if last_settings is None:
             
             last_settings = ClientExportingVideo.VideoExportSettings()
             
         
-        help_text = 'Export this video as it is, or encode it again as an mp4 or webm, at a smaller resolution, framerate, quality, or file size.'
+        if span_ms is None:
+            
+            help_text = 'Export this video as it is, or encode it again as an mp4 or webm, at a smaller resolution, framerate, quality, or file size.'
+            
+        else:
+            
+            help_text = f'Export a clip of this video, from A to B: {ClientExportingSpans.ConvertExportSpanToPrettyString( span_ms )}. It is encoded as an mp4 or webm, and you can make it a smaller resolution, framerate, quality, or file size.'
+            help_text += '\n' * 2
+            help_text += 'To export the whole video, clear the A-B repeat points first.'
+            
         
         st = ClientGUICommon.BetterStaticText( self, label = help_text )
         st.setWordWrap( True )
         
         choice_tuples = [
             ( 'mp4', ClientExportingVideo.VIDEO_EXPORT_FORMAT_MP4, 'h.264 video and aac audio. Plays almost anywhere.' ),
-            ( 'webm', ClientExportingVideo.VIDEO_EXPORT_FORMAT_WEBM, 'vp9 video and opus audio. Smaller for the same quality, but slower to make.' ),
-            ( 'raw', ClientExportingVideo.VIDEO_EXPORT_FORMAT_RAW, f'The original {HC.mime_string_lookup.get( media_result.GetMime(), "file" )}, copied as it is.' )
+            ( 'webm', ClientExportingVideo.VIDEO_EXPORT_FORMAT_WEBM, 'vp9 video and opus audio. Smaller for the same quality, but slower to make.' )
         ]
+        
+        if span_ms is None:
+            
+            # a clip has to be cut out and encoded, so the original file is no good for it
+            choice_tuples.append( ( 'raw', ClientExportingVideo.VIDEO_EXPORT_FORMAT_RAW, f'The original {HC.mime_string_lookup.get( media_result.GetMime(), "file" )}, copied as it is.' ) )
+            
         
         self._format = ClientGUICommon.BetterRadioBox( self, choice_tuples )
         
@@ -180,7 +213,14 @@ class EditVideoExportPanel( ClientGUIScrolledPanels.EditPanel ):
         
         #
         
-        self._format.SetValue( last_settings.export_format )
+        if span_ms is not None and last_settings.export_format == ClientExportingVideo.VIDEO_EXPORT_FORMAT_RAW:
+            
+            self._format.SetValue( ClientExportingVideo.VIDEO_EXPORT_FORMAT_MP4 )
+            
+        else:
+            
+            self._format.SetValue( last_settings.export_format )
+            
         
         if self._has_audio:
             
@@ -284,6 +324,8 @@ class EditVideoExportPanel( ClientGUIScrolledPanels.EditPanel ):
         
         source_size_text = ClientData.ToHumanBytes( self._source_size )
         
+        now_text = f'it is {source_size_text} now' if self._span_ms is None else f'this part is about {source_size_text} now'
+        
         problem = ClientExportingVideo.GetVideoExportProblem( settings, self._duration_ms )
         
         if is_raw:
@@ -292,7 +334,15 @@ class EditVideoExportPanel( ClientGUIScrolledPanels.EditPanel ):
             
         elif problem is not None:
             
-            estimate_text = f'This file is {source_size_text} now.'
+            if self._span_ms is None:
+                
+                estimate_text = f'This file is {source_size_text} now.'
+                
+            else:
+                
+                estimate_text = f'This part of the file is about {source_size_text} now.'
+                
+            
             
         else:
             
@@ -300,11 +350,11 @@ class EditVideoExportPanel( ClientGUIScrolledPanels.EditPanel ):
             
             if estimate is None:
                 
-                estimate_text = f'resulting file size: unknown (it is {source_size_text} now)'
+                estimate_text = f'resulting file size: unknown ({now_text})'
                 
             else:
                 
-                estimate_text = f'approximate resulting file size: {ClientData.ToHumanBytes( estimate )} (it is {source_size_text} now)'
+                estimate_text = f'approximate resulting file size: {ClientData.ToHumanBytes( estimate )} ({now_text})'
                 
             
             if fit_size:

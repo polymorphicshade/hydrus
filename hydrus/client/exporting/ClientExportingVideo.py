@@ -12,9 +12,11 @@ from hydrus.client import ClientData
 from hydrus.client import ClientGlobals as CG
 from hydrus.client import ClientThreading
 from hydrus.client.exporting import ClientExportingPlaylists
+from hydrus.client.exporting import ClientExportingSpans
 from hydrus.client.media import ClientMediaResult
 
 # a video export is one video file, either copied as it is, or encoded again to a smaller size, resolution, or framerate
+# it can be just part of the file, a clip between the media viewer's A-B repeat points. a clip is always encoded
 
 VIDEO_EXPORT_FORMAT_MP4 = 0 # h.264 and aac
 VIDEO_EXPORT_FORMAT_WEBM = 1 # vp9 and opus
@@ -407,10 +409,12 @@ def GetVideoExportFFMPEGCommands(
     source_resolution: tuple[ int | None, int | None ],
     has_audio: bool,
     duration_ms: int | None,
-    passlog_path: str
+    passlog_path: str,
+    span_ms: tuple[ int, int ] | None = None
 ) -> list[ list[ str ] ]:
     
     # one command for a quality level, or two for a target size, since the first pass works out where the bits should go
+    # duration_ms is how long the export is, so for a clip it is the clip's length
     if settings.export_format not in ( VIDEO_EXPORT_FORMAT_MP4, VIDEO_EXPORT_FORMAT_WEBM ):
         
         raise HydrusExceptions.UnsupportedFileException( 'That format is not encoded!' )
@@ -509,7 +513,7 @@ def GetVideoExportFFMPEGCommands(
         maps += [ '-map', '0:a:0' ]
         
     
-    start = ClientExportingPlaylists.GetPlaylistExportFFMPEGStart( ffmpeg_path ) + [ '-i', input_path ]
+    start = ClientExportingPlaylists.GetPlaylistExportFFMPEGStart( ffmpeg_path ) + ClientExportingSpans.GetExportSpanFFMPEGInputArgs( span_ms ) + [ '-i', input_path ]
     
     if two_pass:
         
@@ -523,7 +527,7 @@ def GetVideoExportFFMPEGCommands(
     return [ start + maps + video_args + audio_args + container_args + [ output_path ] ]
     
 
-def ExportVideo( job_status: ClientThreading.JobStatus, media_result: ClientMediaResult.MediaResult, settings: VideoExportSettings, output_path: str ):
+def ExportVideo( job_status: ClientThreading.JobStatus, media_result: ClientMediaResult.MediaResult, settings: VideoExportSettings, output_path: str, span_ms: tuple[ int, int ] | None = None ):
     
     # this runs in a worker thread
     temp_dir = None
@@ -536,6 +540,11 @@ def ExportVideo( job_status: ClientThreading.JobStatus, media_result: ClientMedi
         source_path = CG.client_controller.client_files_manager.GetFilePath( hash, mime )
         
         if settings.export_format == VIDEO_EXPORT_FORMAT_RAW:
+            
+            if span_ms is not None:
+                
+                raise HydrusExceptions.VetoException( 'Part of a file cannot be copied as it is. It has to be encoded.' )
+                
             
             job_status.SetStatusText( 'copying' )
             
@@ -550,9 +559,9 @@ def ExportVideo( job_status: ClientThreading.JobStatus, media_result: ClientMedi
             stderr_path = os.path.join( temp_dir, 'ffmpeg_errors.txt' )
             passlog_path = os.path.join( temp_dir, 'passlog' )
             
-            duration_ms = media_result.GetDurationMS()
+            duration_ms = ClientExportingSpans.GetExportSpanDurationMS( span_ms, media_result.GetDurationMS() )
             
-            cmds = GetVideoExportFFMPEGCommands( ffmpeg_path, source_path, output_path, settings, media_result.GetResolution(), media_result.HasAudio(), duration_ms, passlog_path )
+            cmds = GetVideoExportFFMPEGCommands( ffmpeg_path, source_path, output_path, settings, media_result.GetResolution(), media_result.HasAudio(), duration_ms, passlog_path, span_ms = span_ms )
             
             total_ms = max( 1, 0 if duration_ms is None else duration_ms )
             
@@ -637,7 +646,7 @@ def ExportVideo( job_status: ClientThreading.JobStatus, media_result: ClientMedi
         
     
 
-def StartVideoExport( media_result: ClientMediaResult.MediaResult, settings: VideoExportSettings, output_path: str ):
+def StartVideoExport( media_result: ClientMediaResult.MediaResult, settings: VideoExportSettings, output_path: str, span_ms: tuple[ int, int ] | None = None ):
     
     job_status = ClientThreading.JobStatus( cancellable = True )
     
@@ -645,5 +654,5 @@ def StartVideoExport( media_result: ClientMediaResult.MediaResult, settings: Vid
     
     CG.client_controller.pub( 'message', job_status )
     
-    CG.client_controller.CallToThread( ExportVideo, job_status, media_result, settings, output_path )
+    CG.client_controller.CallToThread( ExportVideo, job_status, media_result, settings, output_path, span_ms )
     

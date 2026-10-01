@@ -6,6 +6,7 @@ from qtpy import QtWidgets as QW
 from hydrus.core import HydrusConstants as HC
 from hydrus.core import HydrusExceptions
 
+from hydrus.client.exporting import ClientExportingSpans
 from hydrus.client.exporting import ClientExportingVideo as V
 from hydrus.client.gui.exporting import ClientGUIExportVideo
 
@@ -222,6 +223,94 @@ class TestVideoExport( unittest.TestCase ):
             
             V.GetVideoExportFFMPEGCommands( 'ffmpeg', 'in.mkv', 'out.mkv', V.VideoExportSettings( export_format = V.VIDEO_EXPORT_FORMAT_RAW ), ( 1920, 1080 ), True, 100000, 'passlog' )
             
+        
+    
+    def test_spans( self ):
+        
+        # both A and B, in order, or it is the whole file
+        self.assertEqual( ClientExportingSpans.GetExportSpanFromABLoop( 12345, 34000 ), ( 12345, 34000 ) )
+        self.assertIsNone( ClientExportingSpans.GetExportSpanFromABLoop( None, 34000 ) )
+        self.assertIsNone( ClientExportingSpans.GetExportSpanFromABLoop( 12345, None ) )
+        self.assertIsNone( ClientExportingSpans.GetExportSpanFromABLoop( None, None ) )
+        self.assertIsNone( ClientExportingSpans.GetExportSpanFromABLoop( 34000, 12345 ) )
+        
+        self.assertEqual( ClientExportingSpans.GetExportSpanDurationMS( None, 60000 ), 60000 )
+        self.assertEqual( ClientExportingSpans.GetExportSpanDurationMS( ( 12345, 34000 ), 60000 ), 21655 )
+        
+        # B past the end stops at the end
+        self.assertEqual( ClientExportingSpans.GetExportSpanDurationMS( ( 50000, 70000 ), 60000 ), 10000 )
+        
+        self.assertEqual( ClientExportingSpans.GetExportSpanFFMPEGInputArgs( None ), [] )
+        self.assertEqual( ClientExportingSpans.GetExportSpanFFMPEGInputArgs( ( 12345, 34000 ) ), [ '-ss', '12.345', '-t', '21.655' ] )
+        
+        self.assertEqual( ClientExportingSpans.ConvertExportSpanTimeToPrettyString( 3456 ), '3.456' )
+        self.assertEqual( ClientExportingSpans.ConvertExportSpanTimeToPrettyString( 123456 ), '2:03.456' )
+        self.assertEqual( ClientExportingSpans.ConvertExportSpanTimeToPrettyString( 3723456 ), '1:02:03.456' )
+        
+        self.assertTrue( ClientExportingSpans.ConvertExportSpanToPrettyString( ( 12345, 34000 ) ).startswith( '12.345 to 34.000' ) )
+        
+        self.assertEqual( ClientExportingSpans.GetExportSpanFilenameSuffix( None ), '' )
+        self.assertEqual( ClientExportingSpans.GetExportSpanFilenameSuffix( ( 12345, 34000 ) ), '_12.345s-34.000s' )
+        
+    
+    def test_clip_commands( self ):
+        
+        # the seek goes before the input, in both passes, so the clip starts at zero and the encode is frame accurate
+        settings = V.VideoExportSettings( size_mode = V.VIDEO_EXPORT_SIZE_MODE_TARGET, target_size_bytes = 2 * 1000 * 1000 )
+        
+        span_ms = ( 12345, 34000 )
+        
+        duration_ms = ClientExportingSpans.GetExportSpanDurationMS( span_ms, 60000 )
+        
+        cmds = V.GetVideoExportFFMPEGCommands( 'ffmpeg', 'in.mkv', 'out.mp4', settings, ( 1920, 1080 ), True, duration_ms, 'passlog', span_ms = span_ms )
+        
+        self.assertEqual( len( cmds ), 2 )
+        
+        for cmd in cmds:
+            
+            i = cmd.index( '-i' )
+            
+            self.assertEqual( cmd[ i - 4 : i ], [ '-ss', '12.345', '-t', '21.655' ] )
+            
+            # the bitrate is for the clip's length, not the file's
+            self.assertEqual( cmd[ cmd.index( '-b:v' ) + 1 ], f'{V.GetVideoExportTargetVideoKBPS( 2 * 1000 * 1000, duration_ms, settings.audio_kbps )}k' )
+            
+        
+        # no span, no seek
+        cmd = V.GetVideoExportFFMPEGCommands( 'ffmpeg', 'in.mkv', 'out.mp4', V.VideoExportSettings(), ( 1920, 1080 ), True, 60000, 'passlog' )[0]
+        
+        self.assertNotIn( '-ss', cmd )
+        self.assertNotIn( '-t', cmd )
+        
+    
+    def test_clip_panel( self ):
+        
+        dialog = QW.QDialog()
+        
+        media_result = GetFakeVideoMediaResult()
+        
+        span_ms = ( 15000, 45000 )
+        
+        panel = ClientGUIExportVideo.EditVideoExportPanel( dialog, media_result, V.VideoExportSettings( export_format = V.VIDEO_EXPORT_FORMAT_RAW ), span_ms = span_ms )
+        
+        # a clip cannot be raw, so it falls back to mp4
+        self.assertEqual( panel.GetValue().export_format, V.VIDEO_EXPORT_FORMAT_MP4 )
+        self.assertNotIn( V.VIDEO_EXPORT_FORMAT_RAW, list( panel._format._buttons_to_data.values() ) )
+        
+        # the size guesses are for half the file
+        self.assertEqual( panel._duration_ms, 30000 )
+        self.assertEqual( panel._source_size, 25 * 1024 * 1024 )
+        self.assertIn( 'this part is about', panel._estimate.text() )
+        
+        # a size that fits the clip but would not fit the whole file
+        panel._size_mode.SetValue( V.VIDEO_EXPORT_SIZE_MODE_TARGET )
+        panel._target_size_mb.setValue( 1.0 )
+        panel._audio.SetValue( None )
+        panel._UpdateControls()
+        
+        self.assertEqual( panel.GetValue().target_size_bytes, 1 * 1024 * 1024 )
+        
+        dialog.deleteLater()
         
     
     def test_can_export_video( self ):

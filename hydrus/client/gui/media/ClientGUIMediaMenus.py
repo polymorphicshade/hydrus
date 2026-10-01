@@ -1073,7 +1073,14 @@ def AddShareMenu( win: QW.QWidget, command_processor: CAC.ApplicationCommandProc
         
         if can_export_video:
             
-            ClientGUIMenus.AppendMenuItem( share_menu, 'export video' + HC.UNICODE_ELLIPSIS, 'Export this video as it is, or encode it again as an mp4 or webm to fit a resolution or file size.', ClientGUIExportVideo.ExportVideo, win, focused_media_result )
+            if export_span_ms is None:
+                
+                ClientGUIMenus.AppendMenuItem( share_menu, 'export video' + HC.UNICODE_ELLIPSIS, 'Export this video as it is, or encode it again as an mp4 or webm to fit a resolution or file size.', ClientGUIExportVideo.ExportVideo, win, focused_media_result )
+                
+            else:
+                
+                ClientGUIMenus.AppendMenuItem( share_menu, 'export video (A-B clip)' + HC.UNICODE_ELLIPSIS, 'Export the part of this video between the A-B repeat points as an mp4 or webm.', ClientGUIExportVideo.ExportVideo, win, focused_media_result, span_ms = export_span_ms )
+                
             
         
         if can_export_audio:
