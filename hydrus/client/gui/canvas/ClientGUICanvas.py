@@ -2008,7 +2008,7 @@ class CanvasPanel( Canvas ):
             
             ClientGUIMediaMenus.AddOpenMenu( self, self, menu, self._current_media, [ self._current_media ] )
             
-            ClientGUIMediaMenus.AddShareMenu( self, self, menu, self._current_media, [ self._current_media ] )
+            ClientGUIMediaMenus.AddShareMenu( self, self, menu, self._current_media, [ self._current_media ], ab_loop_ms = self._media_container.GetABLoop() )
             
             ClientGUIMenus.AppendSeparator( menu )
             
@@ -5627,7 +5627,7 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
             
             ClientGUIMediaMenus.AddOpenMenu( self, self, menu, self._current_media, [ self._current_media ] )
             
-            ClientGUIMediaMenus.AddShareMenu( self, self, menu, self._current_media, [ self._current_media ] )
+            ClientGUIMediaMenus.AddShareMenu( self, self, menu, self._current_media, [ self._current_media ], ab_loop_ms = self._media_container.GetABLoop() )
             
             ClientGUIMenus.AppendSeparator( menu )
             

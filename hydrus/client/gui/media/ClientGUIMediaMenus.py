@@ -16,6 +16,7 @@ from hydrus.client import ClientConstants as CC
 from hydrus.client import ClientGlobals as CG
 from hydrus.client import ClientLocation
 from hydrus.client import ClientPaths
+from hydrus.client.exporting import ClientExportingSpans
 from hydrus.client.gui import ClientGUIAsync
 from hydrus.client.gui import ClientGUIMenus
 from hydrus.client.gui import QtPorting as QP
@@ -1030,7 +1031,10 @@ def StartOtherHashMenuFetch( win: QW.QWidget, media: ClientMediaSingle.MediaSing
     job.start()
     
 
-def AddShareMenu( win: QW.QWidget, command_processor: CAC.ApplicationCommandProcessorMixin, menu: QW.QMenu, focused_media: ClientMedia.Media | None, selected_media_mixed: collections.abc.Collection[ ClientMedia.Media ] ):
+def AddShareMenu( win: QW.QWidget, command_processor: CAC.ApplicationCommandProcessorMixin, menu: QW.QMenu, focused_media: ClientMedia.Media | None, selected_media_mixed: collections.abc.Collection[ ClientMedia.Media ], ab_loop_ms: tuple[ int | None, int | None ] = ( None, None ) ):
+    
+    # ab_loop_ms is the media viewer's A-B repeat points for the focused file. when both are set, exports are just that part
+    export_span_ms = ClientExportingSpans.GetExportSpanFromABLoop( *ab_loop_ms )
     
     focused_media_result = None
     
