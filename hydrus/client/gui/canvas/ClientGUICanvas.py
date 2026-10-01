@@ -4651,6 +4651,10 @@ class CanvasMediaListNavigable( CanvasMediaList ):
         
     
 
+# when a media viewer layout is put back, how often and how many times we check whether the file is ready to be zoomed and panned
+PENDING_LAYOUT_VIEW_RETRY_PERIOD_S = 0.5
+PENDING_LAYOUT_VIEW_MAX_ATTEMPTS = 20
+
 class CanvasMediaListBrowser( CanvasMediaListNavigable ):
     
     def __init__( self, parent, page_key, location_context: ClientLocation.LocationContext, media_results, first_hash ):
@@ -4667,6 +4671,10 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
         
         self._slideshow_is_shuffling = CG.client_controller.new_options.GetBoolean( 'slideshows_progress_randomly' )
         self._slideshow_is_playing_once_through = CG.client_controller.new_options.GetBoolean( 'slideshow_always_play_duration_media_once_through' )
+        
+        # a media viewer layout being put back: ( hash, relative_zoom, center, playback_ms ), waiting for that file to be up and ready
+        self._pending_layout_view: tuple[ bytes, float | None, tuple[ float, float ] | None, int | None ] | None = None
+        self._pending_layout_view_attempts = 0
         
         if first_hash is None:
             
@@ -5635,6 +5643,107 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
             
             CGC.core().PopupMenu( self, menu )
             
+        
+    
+    def _TryToApplyPendingLayoutView( self ):
+        
+        if self._pending_layout_view is None:
+            
+            return
+            
+        
+        ( hash, relative_zoom, center, playback_ms ) = self._pending_layout_view
+        
+        ready = self._current_media is not None and self._current_media.GetHash() == hash and self._media_container.GetMedia() == self._current_media
+        
+        if ready and relative_zoom is not None:
+            
+            ready = self._media_container.IsZoomable() and self._media_container.GetCurrentView() is not None
+            
+        
+        if ready and playback_ms is not None and self._media_container.CurrentlyPresentingMediaWithDuration():
+            
+            # the player has to be going before it can seek
+            ready = self._media_container.GetCurrentPlaybackTimestampMS() is not None
+            
+        
+        if not ready:
+            
+            self._pending_layout_view_attempts += 1
+            
+            # the user may have moved on, or the file will not load, so we do not wait forever
+            if self._pending_layout_view_attempts < PENDING_LAYOUT_VIEW_MAX_ATTEMPTS and self._current_media is not None and self._current_media.GetHash() == hash:
+                
+                CG.client_controller.CallLaterQtSafe( self, PENDING_LAYOUT_VIEW_RETRY_PERIOD_S, 'apply media viewer layout', self._TryToApplyPendingLayoutView )
+                
+            else:
+                
+                self._pending_layout_view = None
+                
+            
+            return
+            
+        
+        self._pending_layout_view = None
+        
+        if relative_zoom is not None:
+            
+            self._media_container.SetCurrentView( relative_zoom, center )
+            
+        
+        if playback_ms is not None and playback_ms > 0 and self._media_container.CurrentlyPresentingMediaWithDuration():
+            
+            self._media_container.SeekTo( playback_ms )
+            
+        
+    
+    def GetMediaViewerLayoutView( self ) -> tuple[ list[ bytes ], bytes, float | None, tuple[ float, float ] | None, int | None ] | None:
+        
+        # ( hashes, current_hash, relative_zoom, center, playback_ms ) for saving a media viewer layout. None if there is nothing up
+        if self._current_media is None:
+            
+            return None
+            
+        
+        hashes = [ media.GetHash() for media in self._media_list.GetFlatMedia() ]
+        
+        current_hash = self._current_media.GetHash()
+        
+        relative_zoom = None
+        center = None
+        
+        if self._media_container.GetMedia() == self._current_media:
+            
+            view = self._media_container.GetCurrentView()
+            
+            if view is not None:
+                
+                ( relative_zoom, center ) = view
+                
+            
+        
+        playback_ms = None
+        
+        if self._media_container.CurrentlyPresentingMediaWithDuration():
+            
+            playback_ms = self._media_container.GetCurrentPlaybackTimestampMS()
+            
+        
+        return ( hashes, current_hash, relative_zoom, center, playback_ms )
+        
+    
+    def SetPendingLayoutView( self, hash: bytes, relative_zoom: float | None, center: tuple[ float, float ] | None, playback_ms: int | None ):
+        
+        # once this file is up, zoom and pan it and go to this point in playback. the window has to be the right size first, so this happens a moment later
+        if relative_zoom is None and ( playback_ms is None or playback_ms <= 0 ):
+            
+            return
+            
+        
+        self._pending_layout_view = ( hash, relative_zoom, center, playback_ms )
+        self._pending_layout_view_attempts = 0
+        
+        CG.client_controller.CallLaterQtSafe( self, PENDING_LAYOUT_VIEW_RETRY_PERIOD_S, 'apply media viewer layout', self._TryToApplyPendingLayoutView )
         
     
     def SlideshowIsRunning( self ) -> bool:

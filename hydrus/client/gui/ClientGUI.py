@@ -8089,6 +8089,14 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
         return mpv_widget
         
     
+    def GetCanvasFrames( self ) -> list[ ClientGUICanvasFrame.CanvasFrame ]:
+        
+        # the media viewer windows that are still around, in the order they were opened
+        self.MaintainCanvasFrameReferences()
+        
+        return list( self._canvas_frames )
+        
+    
     def GetMediaViewersAPIInfo( self ):
         
         self.MaintainCanvasFrameReferences()

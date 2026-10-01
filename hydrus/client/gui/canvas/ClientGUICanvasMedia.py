@@ -3775,6 +3775,26 @@ class MediaContainer( QW.QWidget ):
         return self._current_zoom
         
     
+    def GetCurrentView( self ) -> tuple[ float, tuple[ float, float ] ] | None:
+        
+        # the zoom, relative to the zoom that fits the file in the window, and the part of the file in the middle of the window, as a fraction of its width and height
+        # these follow the window's size, like zoom timestamps. None if the file is not zoomable
+        canvas_zoom = self._zoom_types_to_zooms[ MEDIA_VIEWER_ZOOM_TYPE_CANVAS ]
+        
+        if self._media is None or not self.IsZoomable() or canvas_zoom <= 0:
+            
+            return None
+            
+        
+        canvas_size = self.parentWidget().size()
+        my_pos = self.pos()
+        my_size = self.size()
+        
+        center = GetZoomCenter( ( canvas_size.width(), canvas_size.height() ), ( my_pos.x(), my_pos.y() ), ( my_size.width(), my_size.height() ) )
+        
+        return ( self._current_zoom / canvas_zoom, center )
+        
+    
     def GetIdealControlsBarRect( self, full_size = True ):
         
         my_size = self.size()
@@ -4301,6 +4321,35 @@ class MediaContainer( QW.QWidget ):
                 self._media_window.SeekDelta( direction, duration_ms )
                 
             
+        
+    
+    def SetCurrentView( self, relative_zoom: float, center: tuple[ float, float ] | None ) -> bool:
+        
+        # the other side of GetCurrentView. False if the file is not ready to be zoomed yet
+        canvas_zoom = self._zoom_types_to_zooms[ MEDIA_VIEWER_ZOOM_TYPE_CANVAS ]
+        
+        if self._media is None or not self.IsZoomable() or canvas_zoom <= 0:
+            
+            return False
+            
+        
+        # a saved zoom still on its way would undo this
+        self._saved_zoom_load_id += 1
+        
+        self._SetZoom( self._GetZoomWithinMaxDimension( relative_zoom * canvas_zoom ) )
+        
+        if center is None:
+            
+            self.ResetCenterPosition()
+            
+        else:
+            
+            self._MoveToZoomCenter( center )
+            
+        
+        self.update()
+        
+        return True
         
     
     def SeekTo( self, timestamp_ms: int ):

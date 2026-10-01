@@ -73,6 +73,7 @@ from hydrus.test import TestClientImportObjects
 from hydrus.test import TestClientImportOptions
 from hydrus.test import TestClientImportSubscriptions
 from hydrus.test import TestClientListBoxes
+from hydrus.test import TestClientMediaViewerLayouts
 from hydrus.test import TestClientMetadataConditional
 from hydrus.test import TestClientMetadataMigration
 from hydrus.test import TestClientMigration
@@ -952,6 +953,7 @@ class Controller( object ):
             TestClientAudioExport,
             TestClientCanvasOverlays,
             TestClientFileCounters,
+            TestClientMediaViewerLayouts,
             TestClientPlaybackPoints,
             TestClientPlaylistItems,
             TestClientPlaylistNavigation,
