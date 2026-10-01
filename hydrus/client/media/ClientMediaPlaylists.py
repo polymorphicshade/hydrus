@@ -2,6 +2,9 @@ import bisect
 import collections.abc
 import random
 
+from hydrus.core import HydrusNumbers
+from hydrus.core import HydrusTime
+
 # playlists are named, ordered lists of files. each item is a whole file, or just the span between two timestamps of it
 # they live in the db. these are the bits of logic the gui and the db share
 
@@ -20,6 +23,46 @@ PLAYLIST_LAST_FRAME_SLACK_MS = 5
 
 # ( playlist_id, name, num_items )
 PlaylistSummary = tuple[ int, str, int ]
+
+# how many times each item plays before the playlist moves on
+PLAYLIST_ITEM_LOOP_ONCE = 0 # the normal way: once through
+PLAYLIST_ITEM_LOOP_TIMES = 1 # a number of times through
+PLAYLIST_ITEM_LOOP_SECONDS = 2 # round and round for a time, like a slideshow, moving on when the time is up even part way through
+
+def ConvertPlaylistItemLoopToString( loop_type: int, loop_times: int, loop_seconds: float ) -> str:
+    
+    if loop_type == PLAYLIST_ITEM_LOOP_TIMES:
+        
+        return f'{HydrusNumbers.ToHumanInt( loop_times )} times'
+        
+    elif loop_type == PLAYLIST_ITEM_LOOP_SECONDS:
+        
+        return f'for {HydrusTime.TimeDeltaToPrettyTimeDelta( loop_seconds )}'
+        
+    
+    return 'once'
+    
+
+def PlaylistItemShouldPlayAgain( loop_type: int, loop_times: int, passes_done: int ) -> bool:
+    
+    # a time through an item just ended. whether it goes round again rather than on to the next item. passes_done counts the one that just ended
+    if loop_type == PLAYLIST_ITEM_LOOP_TIMES:
+        
+        return passes_done < loop_times
+        
+    elif loop_type == PLAYLIST_ITEM_LOOP_SECONDS:
+        
+        # it goes round until its time is up
+        return True
+        
+    
+    return False
+    
+
+def PlaylistItemTimeIsUp( loop_type: int, loop_seconds: float, play_time_s: float ) -> bool:
+    
+    return loop_type == PLAYLIST_ITEM_LOOP_SECONDS and play_time_s >= loop_seconds
+    
 
 def FilterPlaylistsByName( playlists: collections.abc.Iterable[ PlaylistSummary ], filter_text: str ) -> list[ PlaylistSummary ]:
     

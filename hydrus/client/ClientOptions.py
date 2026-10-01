@@ -491,6 +491,8 @@ class ClientOptions( HydrusSerialisable.SerialisableBase ):
         from hydrus.client.metadata import ClientTags
         
         self._dictionary[ 'integers' ] = {
+            'playlists_item_loop_type' : 0, # see ClientMediaPlaylists.PLAYLIST_ITEM_LOOP_ONCE and friends
+            'playlists_item_loop_times' : 2,
             'notebook_tab_alignment' : CC.DIRECTION_UP,
             'video_buffer_size' : 96 * 1024 * 1024,
             'related_tags_search_1_duration_ms' : 250,
@@ -625,6 +627,7 @@ class ClientOptions( HydrusSerialisable.SerialisableBase ):
         }
         
         self._dictionary[ 'floats' ] = {
+            'playlists_item_loop_seconds' : 10.0,
             'draw_thumbnail_rating_icon_size_px' : ClientGUIPainterShapes.SIZE.width(),
             'thumbnail_rating_incdec_width_px' : ClientGUIPainterShapes.SIZE.width() * 2, #deprecated
             'thumbnail_rating_incdec_height_px' : ClientGUIPainterShapes.SIZE.height(),

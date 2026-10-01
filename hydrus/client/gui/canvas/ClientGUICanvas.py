@@ -5834,6 +5834,9 @@ PLAYLIST_SEEK_MAX_ATTEMPTS = 5
 # how long a file with no duration, like an image, stays up if there is no slideshow duration in the options to use
 PLAYLIST_DEFAULT_STILL_PERIOD_S = 5.0
 
+# the 'play each item n times' choices in the playlist menu. anything else is 'custom'
+PLAYLIST_ITEM_LOOP_TIMES_CHOICES = ( 2, 3, 5 )
+
 class CanvasPlaylist( CanvasMediaListBrowser ):
     
     def __init__( self, parent, page_key, location_context: ClientLocation.LocationContext, playlist_id: int, playlist_name: str, playlist_items: list[ tuple[ ClientMediaResult.MediaResult, int | None, int | None ] ] ):
@@ -5854,6 +5857,11 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         self._playlist_items = [ ( hashes_to_medias[ media_result.GetHash() ], start_ms, end_ms ) for ( media_result, start_ms, end_ms ) in playlist_items if media_result.GetHash() in hashes_to_medias ]
         
         self._playlist_loop = CG.client_controller.new_options.GetBoolean( 'playlists_loop' )
+        
+        # how many times, or for how long, each item plays before we move on
+        self._playlist_item_loop_type = CG.client_controller.new_options.GetInteger( 'playlists_item_loop_type' )
+        self._playlist_item_loop_times = CG.client_controller.new_options.GetInteger( 'playlists_item_loop_times' )
+        self._playlist_item_loop_seconds = CG.client_controller.new_options.GetFloat( 'playlists_item_loop_seconds' )
         
         # when locked, the user cannot go to the next/previous item themselves--the playlist moves itself along
         self._playlist_lock_navigation = CG.client_controller.new_options.GetBoolean( 'playlists_lock_navigation' )
@@ -5902,6 +5910,53 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
     def _AppendPlaylistExportMenuItem( self, playlist_menu: QW.QMenu ):
         
         ClientGUIMenus.AppendMenuItem( playlist_menu, 'export' + HC.UNICODE_ELLIPSIS, 'Save this playlist, in order, as one mp4 video with sound. It is what is playing now, so anything you removed from view is left out. Parts of files are just those parts, and images stay up for as long as they do here.', self._ExportPlayingPlaylist )
+        
+    
+    def _AppendPlaylistItemLoopingMenu( self, playlist_menu: QW.QMenu ):
+        
+        looping_menu = ClientGUIMenus.GenerateMenu( playlist_menu )
+        
+        loop_type = self._playlist_item_loop_type
+        
+        ClientGUIMenus.AppendMenuCheckItem( looping_menu, 'play each item once', 'Play each item once through, and then go on to the next.', loop_type == ClientMediaPlaylists.PLAYLIST_ITEM_LOOP_ONCE, self._SetPlaylistItemLooping, ClientMediaPlaylists.PLAYLIST_ITEM_LOOP_ONCE, self._playlist_item_loop_times, self._playlist_item_loop_seconds )
+        
+        ClientGUIMenus.AppendSeparator( looping_menu )
+        
+        times_choices = list( PLAYLIST_ITEM_LOOP_TIMES_CHOICES )
+        
+        if self._playlist_item_loop_times not in times_choices:
+            
+            times_choices.append( self._playlist_item_loop_times )
+            
+        
+        for loop_times in sorted( times_choices ):
+            
+            ClientGUIMenus.AppendMenuCheckItem( looping_menu, f'play each item {HydrusNumbers.ToHumanInt( loop_times )} times', f'Play each item {loop_times} times through, and then go on to the next.', loop_type == ClientMediaPlaylists.PLAYLIST_ITEM_LOOP_TIMES and loop_times == self._playlist_item_loop_times, self._SetPlaylistItemLooping, ClientMediaPlaylists.PLAYLIST_ITEM_LOOP_TIMES, loop_times, self._playlist_item_loop_seconds )
+            
+        
+        ClientGUIMenus.AppendMenuItem( looping_menu, 'play each item a custom number of times' + HC.UNICODE_ELLIPSIS, 'Enter how many times each item plays through before the playlist goes on.', self._SetPlaylistItemLoopTimesCustom )
+        
+        ClientGUIMenus.AppendSeparator( looping_menu )
+        
+        seconds_choices = CG.client_controller.new_options.GetSlideshowDurations()
+        
+        if self._playlist_item_loop_seconds not in seconds_choices:
+            
+            seconds_choices.append( self._playlist_item_loop_seconds )
+            
+        
+        for loop_seconds in sorted( seconds_choices ):
+            
+            pretty_time = HydrusTime.TimeDeltaToPrettyTimeDelta( loop_seconds )
+            
+            ClientGUIMenus.AppendMenuCheckItem( looping_menu, f'loop each item for {pretty_time}', f'Play each item round and round for {pretty_time}, like a slideshow, and then go on to the next, even part way through. Images stay up this long too.', loop_type == ClientMediaPlaylists.PLAYLIST_ITEM_LOOP_SECONDS and loop_seconds == self._playlist_item_loop_seconds, self._SetPlaylistItemLooping, ClientMediaPlaylists.PLAYLIST_ITEM_LOOP_SECONDS, self._playlist_item_loop_times, loop_seconds )
+            
+        
+        ClientGUIMenus.AppendMenuItem( looping_menu, 'loop each item for a custom time' + HC.UNICODE_ELLIPSIS, 'Enter how many seconds each item plays round and round for before the playlist goes on.', self._SetPlaylistItemLoopSecondsCustom )
+        
+        label = 'looping: ' + ClientMediaPlaylists.ConvertPlaylistItemLoopToString( loop_type, self._playlist_item_loop_times, self._playlist_item_loop_seconds )
+        
+        ClientGUIMenus.AppendMenu( playlist_menu, looping_menu, label )
         
     
     def _DoPlaylistWork( self ):
@@ -6018,6 +6073,21 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
             return
             
         
+        if self._PlaylistIsHeld():
+            
+            return
+            
+        
+        # how long this item has been playing, for 'loop for n seconds'
+        self._playlist_item_play_time_s += tick_s
+        
+        if ClientMediaPlaylists.PlaylistItemTimeIsUp( self._playlist_item_loop_type, self._playlist_item_loop_seconds, self._playlist_item_play_time_s ):
+            
+            self._AdvancePlaylist()
+            
+            return
+            
+        
         item_is_done = ClientMediaPlaylists.PlaylistItemIsDone(
             end_ms,
             self._current_media.GetDurationMS(),
@@ -6032,9 +6102,18 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
             item_is_done = self._PlaylistItemLastFrameIsDone( end_ms, current_timestamp_ms, now )
             
         
-        if item_is_done and not self._PlaylistIsHeld():
+        if item_is_done:
             
-            self._AdvancePlaylist()
+            self._playlist_item_passes_done += 1
+            
+            if ClientMediaPlaylists.PlaylistItemShouldPlayAgain( self._playlist_item_loop_type, self._playlist_item_loop_times, self._playlist_item_passes_done ):
+                
+                self._RestartPlaylistItemPass( start_ms, now )
+                
+            else:
+                
+                self._AdvancePlaylist()
+                
             
         
     
@@ -6186,6 +6265,12 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
     
     def _GetPlaylistStillPeriod( self ) -> float:
         
+        # an image or similar stays up for as long as each item loops for, if that is set
+        if self._playlist_item_loop_type == ClientMediaPlaylists.PLAYLIST_ITEM_LOOP_SECONDS:
+            
+            return self._playlist_item_loop_seconds
+            
+        
         slideshow_durations = CG.client_controller.new_options.GetSlideshowDurations()
         
         if len( slideshow_durations ) > 0:
@@ -6320,6 +6405,8 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         ClientGUIMenus.AppendMenuCheckItem( playlist_menu, 'lock navigation', 'Stop next/previous/first/last/random from moving to another item, however you ask for them. The playlist still moves itself along.', self._playlist_lock_navigation, self._FlipPlaylistLockNavigation )
         ClientGUIMenus.AppendMenuCheckItem( playlist_menu, 'lock position', 'Give every item the same zoom and pan: each item opens zoomed and panned like the one before it was left. Zoom or pan an item, and the ones after it follow. Turn it off, and items open at their own zoom again.', self._playlist_lock_position, self._FlipPlaylistLockPosition )
         
+        self._AppendPlaylistItemLoopingMenu( playlist_menu )
+        
         ClientGUIMenus.AppendSeparator( playlist_menu )
         
         super()._PopulatePlaylistMenu( playlist_menu )
@@ -6380,6 +6467,22 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
             
         
     
+    def _RestartPlaylistItemPass( self, start_ms: int | None, now: float ):
+        
+        # back to the start of the item for another time through. it plays on from there, and we check it got there, like when an item starts
+        self._playlist_item_seek_confirmed = False
+        self._playlist_item_seek_attempts = 0
+        self._playlist_item_seek_time = now
+        
+        self._playlist_item_last_timestamp_ms = None
+        self._playlist_item_last_frame_end_time = None
+        
+        # the file has played through now, so we cannot tell it plays through again that way. we watch for the end, or for it looping round, instead
+        self._playlist_item_had_played_once_at_start = True
+        
+        self._media_container.SeekTo( 0 if start_ms is None else start_ms )
+        
+    
     def _ResetPlaylistItemState( self ):
         
         self._playlist_item_ready = False
@@ -6396,6 +6499,10 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         
         self._playlist_item_still_time_s = 0.0
         
+        # for looping items: how many times through we have done, and how long it has been playing
+        self._playlist_item_passes_done = 0
+        self._playlist_item_play_time_s = 0.0
+        
         # whether we have got the next item ready yet
         self._playlist_item_preload_done = False
         
@@ -6403,6 +6510,48 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         self._playlist_item_last_frame_end_time: float | None = None
         
         self._playlist_last_tick_time = HydrusTime.GetNowPrecise()
+        
+    
+    def _SetPlaylistItemLooping( self, loop_type: int, loop_times: int, loop_seconds: float ):
+        
+        self._playlist_item_loop_type = loop_type
+        self._playlist_item_loop_times = loop_times
+        self._playlist_item_loop_seconds = loop_seconds
+        
+        # remembered for next time, like 'loop playlist'
+        new_options = CG.client_controller.new_options
+        
+        new_options.SetInteger( 'playlists_item_loop_type', loop_type )
+        new_options.SetInteger( 'playlists_item_loop_times', loop_times )
+        new_options.SetFloat( 'playlists_item_loop_seconds', loop_seconds )
+        
+    
+    def _SetPlaylistItemLoopSecondsCustom( self ):
+        
+        try:
+            
+            loop_seconds = ClientGUIDialogsQuick.EnterNumber( self, 'Enter how many seconds each item plays round and round for before the playlist goes on.', default = max( 1, int( self._playlist_item_loop_seconds ) ), min_value = 1, max_value = 86400, title = 'loop each item for' )
+            
+        except HydrusExceptions.CancelledException:
+            
+            return
+            
+        
+        self._SetPlaylistItemLooping( ClientMediaPlaylists.PLAYLIST_ITEM_LOOP_SECONDS, self._playlist_item_loop_times, float( loop_seconds ) )
+        
+    
+    def _SetPlaylistItemLoopTimesCustom( self ):
+        
+        try:
+            
+            loop_times = ClientGUIDialogsQuick.EnterNumber( self, 'Enter how many times each item plays through before the playlist goes on.', default = self._playlist_item_loop_times, min_value = 1, max_value = 1000, title = 'play each item' )
+            
+        except HydrusExceptions.CancelledException:
+            
+            return
+            
+        
+        self._SetPlaylistItemLooping( ClientMediaPlaylists.PLAYLIST_ITEM_LOOP_TIMES, loop_times, self._playlist_item_loop_seconds )
         
     
     def _ShowFirst( self ):
