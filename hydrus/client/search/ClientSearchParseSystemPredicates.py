@@ -331,6 +331,8 @@ pred_generators = {
     SystemPredicateParser.Predicate.HAS_NOTE_NAME : lambda o, v, u: ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_HAS_NOTE_NAME, ( True, strip_quotes( v ) ) ),
     SystemPredicateParser.Predicate.NO_NOTE_NAME : lambda o, v, u: ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_HAS_NOTE_NAME, ( False, strip_quotes( v ) ) ),
     SystemPredicateParser.Predicate.TAG_PRESET : lambda o, v, u: ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_TAG_PRESET, strip_quotes( v ).strip() ),
+    SystemPredicateParser.Predicate.HAS_SNAPSHOTS : lambda o, v, u: ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_SNAPSHOTS, True ),
+    SystemPredicateParser.Predicate.NO_SNAPSHOTS : lambda o, v, u: ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_SNAPSHOTS, False ),
     SystemPredicateParser.Predicate.VIRTUAL_PATH : lambda o, v, u: ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_VIRTUAL_PATH, ( o == '=', ClientVirtualPaths.NormaliseVirtualPath( strip_quotes( v ) ) ) ),
     SystemPredicateParser.Predicate.COUNTER : lambda o, v, u: ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_COUNTER, ( v[0], ClientNumberTest.NumberTest.STATICCreateFromCharacters( v[1], v[2] ) ) ),
     SystemPredicateParser.Predicate.HAS_RATING : lambda o, v, u: rating_service_pred_generator( '=', ( 'rated', v ) ),

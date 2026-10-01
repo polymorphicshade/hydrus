@@ -20,6 +20,7 @@ from hydrus.client.db import ClientDBFilesInbox
 from hydrus.client.db import ClientDBFilesMetadataBasic
 from hydrus.client.db import ClientDBFilesStorage
 from hydrus.client.db import ClientDBFilesTimestamps
+from hydrus.client.db import ClientDBFilesSnapshots
 from hydrus.client.db import ClientDBFilesViewingStats
 from hydrus.client.db import ClientDBFilesVirtualPaths
 from hydrus.client.db import ClientDBMappingsCounts
@@ -1081,7 +1082,8 @@ class ClientDBFilesQuery( ClientDBModule.ClientDBModule ):
         modules_files_duplicates_storage: ClientDBFilesDuplicatesStorage.ClientDBFilesDuplicatesStorage,
         modules_files_search_tags: ClientDBFilesSearchTags,
         modules_files_counters: ClientDBFilesCounters.ClientDBFilesCounters,
-        modules_files_virtual_paths: ClientDBFilesVirtualPaths.ClientDBFilesVirtualPaths
+        modules_files_virtual_paths: ClientDBFilesVirtualPaths.ClientDBFilesVirtualPaths,
+        modules_files_snapshots: ClientDBFilesSnapshots.ClientDBFilesSnapshots
     ):
         
         # this is obviously a monster, so the solution is going to be to merge the sub-modules into 'search' modules like the 'tags' one above. this guy doesn't have to do search, it can farm that work out
@@ -1104,6 +1106,7 @@ class ClientDBFilesQuery( ClientDBModule.ClientDBModule ):
         self.modules_files_search_tags = modules_files_search_tags
         self.modules_files_counters = modules_files_counters
         self.modules_files_virtual_paths = modules_files_virtual_paths
+        self.modules_files_snapshots = modules_files_snapshots
         
         super().__init__( 'client file query', cursor )
         
@@ -1966,6 +1969,8 @@ class ClientDBFilesQuery( ClientDBModule.ClientDBModule ):
         query_hash_ids = self._DoCounterPreds( system_predicates, query_hash_ids, job_status = job_status )
         
         query_hash_ids = self._DoVirtualPathPreds( system_predicates, query_hash_ids, job_status = job_status )
+        
+        query_hash_ids = self._DoSnapshotPreds( system_predicates, query_hash_ids )
         
         for ( view_type, desired_canvas_types, operator, viewing_value ) in system_predicates.GetFileViewingStatsPredicates():
             
@@ -2880,6 +2885,34 @@ class ClientDBFilesQuery( ClientDBModule.ClientDBModule ):
             
         
         return query_hash_ids
+        
+    
+    def _DoSnapshotPreds( self, system_predicates: ClientSearchFileSearchContext.FileSystemPredicates, query_hash_ids: set[ int ] ) -> set[ int ]:
+        
+        simple_preds = system_predicates.GetSimpleInfo()
+        
+        if 'has_snapshots' not in simple_preds:
+            
+            return query_hash_ids
+            
+        
+        has_snapshots = simple_preds[ 'has_snapshots' ]
+        
+        with self._MakeTemporaryIntegerTable( query_hash_ids, 'hash_id' ) as temp_table_name:
+            
+            self._AnalyzeTempTable( temp_table_name )
+            
+            matching_hash_ids = self.modules_files_snapshots.GetHashIdsWithSnapshots( temp_table_name )
+            
+        
+        if has_snapshots:
+            
+            return intersection_update_qhi( query_hash_ids, matching_hash_ids )
+            
+        else:
+            
+            return query_hash_ids.difference( matching_hash_ids )
+            
         
     
     def _DoVirtualPathPreds( self, system_predicates: ClientSearchFileSearchContext.FileSystemPredicates, query_hash_ids: set[ int ], job_status: ClientThreading.JobStatus | None = None ) -> set[ int ]:

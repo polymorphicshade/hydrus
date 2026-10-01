@@ -3,10 +3,12 @@ import sqlite3
 from hydrus.core import HydrusConstants as HC
 from hydrus.core import HydrusDBBase
 
+from hydrus.client import ClientGlobals as CG
 from hydrus.client import ClientLocation
 from hydrus.client.db import ClientDBDefinitionsCache
 from hydrus.client.db import ClientDBFilesStorage
 from hydrus.client.db import ClientDBModule
+from hydrus.client.db import ClientDBServices
 
 class ClientDBFilesSnapshots( ClientDBModule.ClientDBModule ):
     
@@ -14,11 +16,13 @@ class ClientDBFilesSnapshots( ClientDBModule.ClientDBModule ):
         self,
         cursor: sqlite3.Cursor,
         modules_hashes_local_cache: ClientDBDefinitionsCache.ClientDBCacheLocalHashes,
-        modules_files_storage: ClientDBFilesStorage.ClientDBFilesStorage
+        modules_files_storage: ClientDBFilesStorage.ClientDBFilesStorage,
+        modules_services: ClientDBServices.ClientDBMasterServices
     ):
         
         self.modules_hashes_local_cache = modules_hashes_local_cache
         self.modules_files_storage = modules_files_storage
+        self.modules_services = modules_services
         
         super().__init__( 'client files snapshots', cursor )
         
@@ -72,6 +76,31 @@ class ClientDBFilesSnapshots( ClientDBModule.ClientDBModule ):
         return [ hash_ids_to_hashes[ snapshot_hash_id ] for ( timestamp_ms, snapshot_hash_id ) in rows ]
         
     
+    def GetHashIdsWithSnapshots( self, hash_ids_table_name: str ) -> set[ int ]:
+        
+        # the files in the table that have at least one snapshot still in the snapshots domain. ones that were all deleted do not count
+        # the user can rename or delete the snapshots domain, so it is remembered by its key, like ClientSnapshots.GetSnapshotsServiceKey does
+        snapshots_service_key = CG.client_controller.new_options.GetKey( 'snapshots_file_service_key' )
+        
+        if snapshots_service_key not in self.modules_services.GetServiceKeys():
+            
+            return set()
+            
+        
+        service_id = self.modules_services.GetServiceId( snapshots_service_key )
+        
+        if self.modules_services.GetServiceType( service_id ) != HC.LOCAL_FILE_DOMAIN:
+            
+            return set()
+            
+        
+        current_files_table_name = ClientDBFilesStorage.GenerateFilesTableName( service_id, HC.CONTENT_STATUS_CURRENT )
+        
+        query = f'SELECT DISTINCT {hash_ids_table_name}.hash_id FROM {hash_ids_table_name} CROSS JOIN file_snapshots ON ( {hash_ids_table_name}.hash_id = file_snapshots.hash_id ) CROSS JOIN {current_files_table_name} ON ( file_snapshots.snapshot_hash_id = {current_files_table_name}.hash_id );'
+        
+        return self._STS( self._Execute( query ) )
+        
+    
     def GetTablesAndColumnsThatUseDefinitions( self, content_type: int ) -> list[ tuple[ str, str ] ]:
         
         tables_and_columns = []
@@ -83,6 +112,11 @@ class ClientDBFilesSnapshots( ClientDBModule.ClientDBModule ):
             
         
         return tables_and_columns
+        
+    
+    def HasSnapshots( self ) -> bool:
+        
+        return self._Execute( 'SELECT 1 FROM file_snapshots LIMIT 1;' ).fetchone() is not None
         
     
     def Repair( self, current_db_version, cursor_transaction_wrapper: HydrusDBBase.DBCursorTransactionWrapper ):

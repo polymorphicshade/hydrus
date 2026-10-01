@@ -2434,6 +2434,12 @@ class DB( HydrusDB.HydrusDB ):
             blank_pred_types.add( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_VIRTUAL_PATH )
             
         
+        if self.modules_files_snapshots.HasSnapshots():
+            
+            # this one needs nothing filling in, so it goes in ready to use
+            predicates.append( ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_SNAPSHOTS, True ) )
+            
+        
         if location_context.IsAllKnownFiles():
             
             tag_service_key = file_search_context.GetTagContext().service_key
@@ -4324,7 +4330,7 @@ class DB( HydrusDB.HydrusDB ):
         
         self._modules.append( self.modules_playlists )
         
-        self.modules_files_snapshots = ClientDBFilesSnapshots.ClientDBFilesSnapshots( self._c, self.modules_hashes_local_cache, self.modules_files_storage )
+        self.modules_files_snapshots = ClientDBFilesSnapshots.ClientDBFilesSnapshots( self._c, self.modules_hashes_local_cache, self.modules_files_storage, self.modules_services )
         
         self._modules.append( self.modules_files_snapshots )
         
@@ -4548,7 +4554,8 @@ class DB( HydrusDB.HydrusDB ):
             self.modules_files_duplicates_storage,
             self.modules_files_search_tags,
             self.modules_files_counters,
-            self.modules_files_virtual_paths
+            self.modules_files_virtual_paths,
+            self.modules_files_snapshots
         )
         
         self._modules.append( self.modules_files_query )

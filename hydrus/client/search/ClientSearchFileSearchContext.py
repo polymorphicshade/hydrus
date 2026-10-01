@@ -389,6 +389,12 @@ class FileSystemPredicates( object ):
                 self._common_info[ 'counters' ].append( value )
                 
             
+            if predicate_type == ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_SNAPSHOTS and value is not None:
+                
+                # True for files with snapshots, False for files without
+                self._common_info[ 'has_snapshots' ] = value
+                
+            
             if predicate_type == ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_VIRTUAL_PATH and value is not None:
                 
                 if 'virtual_paths' not in self._common_info:

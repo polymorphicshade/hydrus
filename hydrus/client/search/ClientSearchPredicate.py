@@ -83,6 +83,7 @@ PREDICATE_TYPE_SYSTEM_HAS_SOFTWARE_SOURCE = 69
 PREDICATE_TYPE_SYSTEM_COUNTER = 1001 # not an official hydrus predicate, so it is well away from hydev's numbers
 PREDICATE_TYPE_SYSTEM_VIRTUAL_PATH = 1002
 PREDICATE_TYPE_SYSTEM_TAG_PRESET = 1003 # never searched on--the search box swaps it for the preset's own predicates
+PREDICATE_TYPE_SYSTEM_SNAPSHOTS = 1004 # True for files that have snapshots taken from them, False for files that do not
 
 SYSTEM_PREDICATE_TYPES = {
     PREDICATE_TYPE_SYSTEM_EVERYTHING,
@@ -126,6 +127,7 @@ SYSTEM_PREDICATE_TYPES = {
     PREDICATE_TYPE_SYSTEM_COUNTER,
     PREDICATE_TYPE_SYSTEM_VIRTUAL_PATH,
     PREDICATE_TYPE_SYSTEM_TAG_PRESET,
+    PREDICATE_TYPE_SYSTEM_SNAPSHOTS,
     PREDICATE_TYPE_SYSTEM_FILE_SERVICE,
     PREDICATE_TYPE_SYSTEM_NUM_PIXELS,
     PREDICATE_TYPE_SYSTEM_DIMENSIONS,
@@ -1207,7 +1209,7 @@ class Predicate( HydrusSerialisable.SerialisableBase ):
                 
                 return Predicate( self._predicate_type, self._value, not self._inclusive )
                 
-            elif self._predicate_type in ( PREDICATE_TYPE_SYSTEM_HAS_AUDIO, PREDICATE_TYPE_SYSTEM_HAS_TRANSPARENCY, PREDICATE_TYPE_SYSTEM_HAS_EXIF, PREDICATE_TYPE_SYSTEM_HAS_XMP, PREDICATE_TYPE_SYSTEM_HAS_IPTC, PREDICATE_TYPE_SYSTEM_HAS_HUMAN_READABLE_EMBEDDED_METADATA, PREDICATE_TYPE_SYSTEM_HAS_SOFTWARE_SOURCE, PREDICATE_TYPE_SYSTEM_HAS_ICC_PROFILE, PREDICATE_TYPE_SYSTEM_HAS_FORCED_FILETYPE, PREDICATE_TYPE_SYSTEM_FILE_RELATIONSHIPS_KING ):
+            elif self._predicate_type in ( PREDICATE_TYPE_SYSTEM_HAS_AUDIO, PREDICATE_TYPE_SYSTEM_SNAPSHOTS, PREDICATE_TYPE_SYSTEM_HAS_TRANSPARENCY, PREDICATE_TYPE_SYSTEM_HAS_EXIF, PREDICATE_TYPE_SYSTEM_HAS_XMP, PREDICATE_TYPE_SYSTEM_HAS_IPTC, PREDICATE_TYPE_SYSTEM_HAS_HUMAN_READABLE_EMBEDDED_METADATA, PREDICATE_TYPE_SYSTEM_HAS_SOFTWARE_SOURCE, PREDICATE_TYPE_SYSTEM_HAS_ICC_PROFILE, PREDICATE_TYPE_SYSTEM_HAS_FORCED_FILETYPE, PREDICATE_TYPE_SYSTEM_FILE_RELATIONSHIPS_KING ):
                 
                 if self._value is None: # weird default that sometimes kicks in, means 'yes, has'
                     
@@ -2186,6 +2188,15 @@ class Predicate( HydrusSerialisable.SerialisableBase ):
                 if self._value is not None:
                     
                     base = f'presets {self._value}'
+                    
+                
+            elif self._predicate_type == PREDICATE_TYPE_SYSTEM_SNAPSHOTS:
+                
+                base = 'snapshots'
+                
+                if self._value is not None and not self._value:
+                    
+                    base = 'no snapshots'
                     
                 
             elif self._predicate_type == PREDICATE_TYPE_SYSTEM_VIRTUAL_PATH:

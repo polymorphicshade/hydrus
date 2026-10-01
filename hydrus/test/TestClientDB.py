@@ -479,6 +479,149 @@ class TestClientDB( unittest.TestCase ):
         self._write( 'update_services', services )
         
     
+    def test_system_snapshots( self ):
+        
+        TestClientDB._clear_db()
+        
+        # two files in my files, and a snapshots domain with one snapshot in it
+        
+        full_import_options_container = ImportOptionsManager.ImportOptionsManager.STATICGetDefaultInitialisedManager().GetDefaultImportOptionsContainerForCallerType( IOC.IMPORT_OPTIONS_CALLER_TYPE_GLOBAL )
+        
+        hashes = []
+        
+        for filename in ( 'hydrus.png', 'hydrus_small.png' ):
+            
+            file_import_job = ClientImportFiles.FileImportJob( HydrusStaticDir.GetStaticPath( filename ), full_import_options_container )
+            
+            file_import_job.GeneratePreImportHashAndStatus()
+            
+            file_import_job.GenerateInfo()
+            
+            self._write( 'import_file', file_import_job )
+            
+            hashes.append( file_import_job.GetHash() )
+            
+        
+        ( hash_a, hash_b ) = hashes
+        
+        services = self._read( 'services' )
+        
+        snapshots_service_key = HydrusData.GenerateKey()
+        
+        self._write( 'update_services', services + [ ClientServices.GenerateService( snapshots_service_key, HC.LOCAL_FILE_DOMAIN, 'snapshots' ) ] )
+        
+        snapshots_location_context = ClientLocation.LocationContext.STATICCreateSimple( snapshots_service_key )
+        
+        location_import_options = LocationImportOptions.LocationImportOptions()
+        
+        location_import_options.SetDestinationLocationContext( snapshots_location_context )
+        
+        import_options_container = ImportOptionsContainer.ImportOptionsContainer()
+        
+        import_options_container.SetImportOptions( location_import_options )
+        
+        snapshot_import_options_container = ImportOptionsManager.ImportOptionsManager.STATICGetDefaultInitialisedManager().GenerateFullImportOptionsContainer( import_options_container, IOC.IMPORT_OPTIONS_CALLER_TYPE_LOCAL_IMPORT )
+        
+        file_import_job = ClientImportFiles.FileImportJob( HydrusStaticDir.GetStaticPath( 'collection.png' ), snapshot_import_options_container )
+        
+        file_import_job.GeneratePreImportHashAndStatus()
+        
+        file_import_job.GenerateInfo()
+        
+        # the test client does not know about the domain we just made in this db
+        real_valid_local_domains_filter = ClientLocation.ValidLocalDomainsFilter
+        
+        def valid_local_domains_filter( service_keys ):
+            
+            return [ service_key for service_key in service_keys if service_key == snapshots_service_key ] + real_valid_local_domains_filter( service_keys )
+            
+        
+        with mock.patch.object( ClientLocation, 'ValidLocalDomainsFilter', side_effect = valid_local_domains_filter ):
+            
+            self._write( 'import_file', file_import_job )
+            
+        
+        snapshot_hash = file_import_job.GetHash()
+        
+        # a has a snapshot. b has one too, but it is not in the snapshots domain (like one that was deleted), so it does not count
+        self._write( 'file_snapshot_add', hash_a, snapshot_hash, 1000 )
+        self._write( 'file_snapshot_add', hash_b, os.urandom( 32 ), 2000 )
+        
+        def run_search_hashes( predicate ):
+            
+            location_context = ClientLocation.LocationContext.STATICCreateSimple( CC.LOCAL_FILE_SERVICE_KEY )
+            
+            search_context = ClientSearchFileSearchContext.FileSearchContext( location_context = location_context, predicates = [ predicate ] )
+            
+            hash_ids = self._read( 'file_query_ids', search_context )
+            
+            return { self._read( 'hash_ids_to_hashes', hash_ids = ( hash_id, ) )[ hash_id ] for hash_id in hash_ids }
+            
+        
+        has_snapshots = ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_SNAPSHOTS, True )
+        no_snapshots = ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_SNAPSHOTS, False )
+        
+        # they are each other's opposite, so the active search can flip one into the other
+        self.assertEqual( has_snapshots.GetInverseCopy(), no_snapshots )
+        
+        new_options = TG.test_controller.new_options
+        
+        old_snapshots_service_key = new_options.GetKey( ClientSnapshots.SNAPSHOTS_SERVICE_KEY_OPTION )
+        
+        try:
+            
+            # no snapshots domain yet, so nothing has any
+            new_options.SetKey( ClientSnapshots.SNAPSHOTS_SERVICE_KEY_OPTION, b'' )
+            
+            self.assertEqual( run_search_hashes( has_snapshots ), set() )
+            self.assertEqual( run_search_hashes( no_snapshots ), { hash_a, hash_b } )
+            
+            new_options.SetKey( ClientSnapshots.SNAPSHOTS_SERVICE_KEY_OPTION, snapshots_service_key )
+            
+            self.assertEqual( run_search_hashes( has_snapshots ), { hash_a } )
+            self.assertEqual( run_search_hashes( no_snapshots ), { hash_b } )
+            
+            # it shows in the system predicates once there are any snapshots
+            location_context = ClientLocation.LocationContext.STATICCreateSimple( CC.LOCAL_FILE_SERVICE_KEY )
+            
+            file_search_context = ClientSearchFileSearchContext.FileSearchContext( location_context = location_context )
+            
+            system_predicates = self._read( 'file_system_predicates', file_search_context )
+            
+            self.assertIn( has_snapshots, system_predicates )
+            
+            # typed in
+            
+            from hydrus.client.search import ClientSearchParseSystemPredicates
+            
+            for ( text, result ) in [
+                ( 'system:snapshots', { hash_a } ),
+                ( 'system:has snapshots', { hash_a } ),
+                ( 'system:no snapshots', { hash_b } ),
+                ( 'system:does not have snapshots', { hash_b } )
+            ]:
+                
+                ( predicate, ) = ClientSearchParseSystemPredicates.ParseSystemPredicateStringsToPredicates( [ text ] )
+                
+                self.assertEqual( run_search_hashes( predicate ), result, text )
+                
+                # it writes back out as something we can read in again
+                ( reparsed_predicate, ) = ClientSearchParseSystemPredicates.ParseSystemPredicateStringsToPredicates( [ predicate.ToString() ] )
+                
+                self.assertEqual( reparsed_predicate, predicate )
+                
+                # and it survives saving
+                self.assertEqual( HydrusSerialisable.CreateFromSerialisableTuple( predicate.GetSerialisableTuple() ), predicate )
+                
+            
+        finally:
+            
+            new_options.SetKey( ClientSnapshots.SNAPSHOTS_SERVICE_KEY_OPTION, old_snapshots_service_key )
+            
+            self._write( 'update_services', services )
+            
+        
+    
     def test_file_virtual_paths( self ):
         
         TestClientDB._clear_db()
