@@ -30,6 +30,7 @@ from hydrus.client import ClientApplicationCommand as CAC
 from hydrus.client import ClientConstants as CC
 from hydrus.client import ClientGlobals as CG
 from hydrus.client import ClientLocation
+from hydrus.client import ClientMediaViewerLayouts
 from hydrus.client import ClientServices
 from hydrus.client import ClientThreading
 from hydrus.client.exporting import ClientExportingFiles
@@ -45,6 +46,7 @@ from hydrus.client.gui import ClientGUIDownloaders
 from hydrus.client.gui import ClientGUIDragDrop
 from hydrus.client.gui import ClientGUIFrames
 from hydrus.client.gui import ClientGUIFunctions
+from hydrus.client.gui import ClientGUIMediaViewerLayouts
 from hydrus.client.gui import ClientGUIMenus
 from hydrus.client.gui import ClientGUIPlaylists
 from hydrus.client.gui import ClientGUIPopupMessages
@@ -3945,6 +3947,13 @@ ATTACH "client.mappings.db" as external_mappings;'''
         
         ClientGUIMenus.AppendMenu( menu, self._menubar_pages_sessions_submenu, 'sessions' )
         
+        media_viewers_menu = ClientGUIMenus.GenerateMenu( menu )
+        
+        ClientGUIMenus.AppendMenuItem( media_viewers_menu, 'reopen the ones open when the client last closed', 'Open the media viewers that were open when the client last closed, where they were, on the files they were on, zoomed and panned like they were.', self._ReopenLastMediaViewers )
+        ClientGUIMenus.AppendMenuCheckItem( media_viewers_menu, 'reopen them when the client starts', 'When the client starts, open the media viewers that were open when it last closed, where they were, on the files they were on, zoomed and panned like they were.', self._new_options.GetBoolean( 'reopen_media_viewers_on_start' ), self._new_options.FlipBoolean, 'reopen_media_viewers_on_start' )
+        
+        ClientGUIMenus.AppendMenu( menu, media_viewers_menu, 'media viewers' )
+        
         ClientGUIMenus.AppendSeparator( menu )
         
         ClientGUIMenus.AppendMenuItem( menu, 'new page' + HC.UNICODE_ELLIPSIS, 'Choose a new page to open.', self.ProcessApplicationCommand, CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_NEW_PAGE ) )
@@ -4144,6 +4153,9 @@ ATTACH "client.mappings.db" as external_mappings;'''
                 
             
         
+        # if the user is being careful after a bad shutdown, we do not throw media viewers at them either
+        reopen_media_viewers = self._new_options.GetBoolean( 'reopen_media_viewers_on_start' ) and not ( load_a_blank_page and self._controller.LastShutdownWasBad() )
+        
         def do_it( default_gui_session, load_a_blank_page ):
             
             try:
@@ -4174,6 +4186,12 @@ ATTACH "client.mappings.db" as external_mappings;'''
                 self._BootOrStopClipboardWatcherIfNeeded()
                 
                 self._tabs_tree_model.Reset()
+                
+                if reopen_media_viewers:
+                    
+                    # after the pages, so the media viewers come up on top
+                    self._controller.CallLaterQtSafe( self, 1.0, 'reopen media viewers', self._ReopenLastMediaViewers, False )
+                    
                 
             
         
@@ -5514,6 +5532,63 @@ ATTACH "client.mappings.db" as external_mappings;'''
             self._vertical_splitter.setStretchFactor( notebook_index, 1 )
             
             self._tabs_tree_sidebar.setMinimumWidth( 100 )
+            
+        
+    
+    def _ReopenLastMediaViewers( self, from_menu = True ):
+        
+        text = self._new_options.GetNoneableString( 'last_media_viewer_layout' )
+        
+        if text is None:
+            
+            if from_menu:
+                
+                ClientGUIDialogsMessage.ShowInformation( self, 'No media viewers were open when the client last closed.' )
+                
+            
+            return
+            
+        
+        try:
+            
+            media_viewer_layouts = ClientMediaViewerLayouts.ConvertJSONToMediaViewerLayouts( text )
+            
+        except ValueError as e:
+            
+            HydrusData.ShowText( f'The media viewers from when the client last closed could not be read: {e}' )
+            
+            return
+            
+        
+        ( num_opened, num_skipped ) = ClientGUIMediaViewerLayouts.OpenMediaViewerLayouts( media_viewer_layouts )
+        
+        if num_skipped > 0 and ( from_menu or num_opened == 0 ):
+            
+            HydrusData.ShowText( f'{HydrusNumbers.ToHumanInt( num_skipped )} media viewers from when the client last closed were not reopened, since none of their files can be shown any more--they were probably deleted.' )
+            
+        
+    
+    def _SaveLastMediaViewerLayout( self ):
+        
+        # the media viewers that are open now, so they can come back next time
+        try:
+            
+            media_viewer_layouts = ClientGUIMediaViewerLayouts.GetOpenMediaViewerLayouts()
+            
+            if len( media_viewer_layouts ) == 0:
+                
+                text = None
+                
+            else:
+                
+                text = ClientMediaViewerLayouts.ConvertMediaViewerLayoutsToJSON( media_viewer_layouts )
+                
+            
+            self._new_options.SetNoneableString( 'last_media_viewer_layout', text )
+            
+        except Exception as e:
+            
+            HydrusData.PrintException( e )
             
         
     
@@ -9225,6 +9300,9 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
                     
                 
                 ClientGUITopLevelWindows.SaveTLWSizeAndPosition( self, self._frame_key )
+                
+                # before they are hidden, which would make them look closed
+                self._SaveLastMediaViewerLayout()
                 
             
             for tlw in QW.QApplication.topLevelWidgets():

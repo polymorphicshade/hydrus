@@ -302,6 +302,7 @@ class ClientOptions( HydrusSerialisable.SerialisableBase ):
             'slideshow_always_play_duration_media_once_through' : False,
             'playlists_loop' : True,
             'playlists_lock_navigation' : True,
+            'reopen_media_viewers_on_start' : True,
             'enable_truncated_images_pil' : True,
             'do_icc_profile_normalisation' : True,
             'mpv_available_at_start' : ClientGUIMPV.MPV_IS_AVAILABLE,
@@ -693,6 +694,7 @@ class ClientOptions( HydrusSerialisable.SerialisableBase ):
         
         self._dictionary[ 'noneable_strings' ] = {
             'favourite_file_lookup_script' : None,
+            'last_media_viewer_layout' : None,
             'suggested_tags_layout' : 'notebook',
             'backup_path' : None,
             'last_png_export_dir' : None,

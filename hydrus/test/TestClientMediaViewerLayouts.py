@@ -2,7 +2,11 @@ import json
 import os
 import unittest
 
+from unittest import mock
+
 from hydrus.client import ClientMediaViewerLayouts as L
+from hydrus.client import ClientOptions
+from hydrus.client.gui import ClientGUI
 from hydrus.client.gui import ClientGUIMediaViewerLayouts
 from hydrus.client.gui.canvas import ClientGUICanvas
 
@@ -106,6 +110,59 @@ class TestMediaViewerLayouts( unittest.TestCase ):
         # but not off either end
         self.assertEqual( L.GetHashesAroundCurrent( hashes, hashes[0], 4 ), hashes[ 0 : 4 ] )
         self.assertEqual( L.GetHashesAroundCurrent( hashes, hashes[9], 4 ), hashes[ 6 : 10 ] )
+        
+    
+    def test_last_media_viewers( self ):
+        
+        # on by default, with nothing saved yet
+        new_options = ClientOptions.ClientOptions()
+        
+        self.assertTrue( new_options.GetBoolean( 'reopen_media_viewers_on_start' ) )
+        self.assertIsNone( new_options.GetNoneableString( 'last_media_viewer_layout' ) )
+        
+        # just enough of the main window to save and reopen them
+        class FakeGUI( object ):
+            
+            def __init__( self ):
+                
+                self._new_options = new_options
+                
+            
+        
+        gui = FakeGUI()
+        
+        hash = os.urandom( 32 )
+        
+        layouts = [ L.MediaViewerLayout( [ hash ], hash, 'DISPLAY1', 0, 0, 800, 600, relative_zoom = 1.5, center = ( 0.5, 0.5 ) ) ]
+        
+        with mock.patch.object( ClientGUIMediaViewerLayouts, 'GetOpenMediaViewerLayouts', return_value = layouts ):
+            
+            ClientGUI.FrameGUI._SaveLastMediaViewerLayout( gui )
+            
+        
+        self.assertEqual( L.ConvertJSONToMediaViewerLayouts( new_options.GetNoneableString( 'last_media_viewer_layout' ) ), layouts )
+        
+        with mock.patch.object( ClientGUIMediaViewerLayouts, 'OpenMediaViewerLayouts', return_value = ( 1, 0 ) ) as open_layouts:
+            
+            ClientGUI.FrameGUI._ReopenLastMediaViewers( gui, False )
+            
+            open_layouts.assert_called_once_with( layouts )
+            
+        
+        # closing with none open forgets them, so they do not come back again and again
+        with mock.patch.object( ClientGUIMediaViewerLayouts, 'GetOpenMediaViewerLayouts', return_value = [] ):
+            
+            ClientGUI.FrameGUI._SaveLastMediaViewerLayout( gui )
+            
+        
+        self.assertIsNone( new_options.GetNoneableString( 'last_media_viewer_layout' ) )
+        
+        with mock.patch.object( ClientGUIMediaViewerLayouts, 'OpenMediaViewerLayouts' ) as open_layouts:
+            
+            ClientGUI.FrameGUI._ReopenLastMediaViewers( gui, False )
+            
+            open_layouts.assert_not_called()
+            
         
     
     def test_saveable_canvases( self ):
