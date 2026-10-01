@@ -21,6 +21,7 @@ from hydrus.client.gui import ClientGUIAsync
 from hydrus.client.gui import ClientGUIMenus
 from hydrus.client.gui import QtPorting as QP
 from hydrus.client.gui.executables import ClientGUIExecutableActions
+from hydrus.client.gui.exporting import ClientGUIExportAudio
 from hydrus.client.gui.exporting import ClientGUIExportVideo
 from hydrus.client.gui.media import ClientGUIMediaModalActions
 from hydrus.client.gui.media import ClientGUIMediaSimpleActions
@@ -1061,8 +1062,9 @@ def AddShareMenu( win: QW.QWidget, command_processor: CAC.ApplicationCommandProc
     share_menu = ClientGUIMenus.GenerateMenu( menu )
     
     can_export_video = focused_is_local and ClientGUIExportVideo.CanExportVideo( focused_media_result )
+    can_export_audio = focused_is_local and ClientGUIExportAudio.CanExportAudio( focused_media_result )
     
-    if len( local_selection ) > 0 or can_export_video:
+    if len( local_selection ) > 0 or can_export_video or can_export_audio:
         
         if len( local_selection ) > 0:
             
@@ -1072,6 +1074,18 @@ def AddShareMenu( win: QW.QWidget, command_processor: CAC.ApplicationCommandProc
         if can_export_video:
             
             ClientGUIMenus.AppendMenuItem( share_menu, 'export video' + HC.UNICODE_ELLIPSIS, 'Export this video as it is, or encode it again as an mp4 or webm to fit a resolution or file size.', ClientGUIExportVideo.ExportVideo, win, focused_media_result )
+            
+        
+        if can_export_audio:
+            
+            if export_span_ms is None:
+                
+                ClientGUIMenus.AppendMenuItem( share_menu, 'export audio' + HC.UNICODE_ELLIPSIS, 'Export the sound of this file on its own, as an mp3 or wav.', ClientGUIExportAudio.ExportAudio, win, focused_media_result )
+                
+            else:
+                
+                ClientGUIMenus.AppendMenuItem( share_menu, 'export audio (A-B part)' + HC.UNICODE_ELLIPSIS, 'Export the sound between the A-B repeat points on its own, as an mp3 or wav.', ClientGUIExportAudio.ExportAudio, win, focused_media_result, span_ms = export_span_ms )
+                
             
         
         ClientGUIMenus.AppendSeparator( share_menu )
