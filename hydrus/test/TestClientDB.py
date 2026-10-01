@@ -886,6 +886,31 @@ class TestClientDB( unittest.TestCase ):
         self.assertEqual( self._read( 'file_scripted_events', hash_b ), [ ( 250, 'echo b' ) ] )
         
     
+    def test_file_viewer_rotation( self ):
+        
+        hash_a = os.urandom( 32 )
+        hash_b = os.urandom( 32 )
+        
+        self.assertEqual( self._read( 'file_viewer_rotation', hash_a ), 0 )
+        
+        self._write( 'file_viewer_rotation', hash_a, 90 )
+        self._write( 'file_viewer_rotation', hash_b, 45 )
+        
+        self.assertEqual( self._read( 'file_viewer_rotation', hash_a ), 90 )
+        self.assertEqual( self._read( 'file_viewer_rotation', hash_b ), 45 )
+        
+        # a whole turn and more comes round again
+        self._write( 'file_viewer_rotation', hash_a, 450 )
+        
+        self.assertEqual( self._read( 'file_viewer_rotation', hash_a ), 90 )
+        
+        # turning it back forgets it
+        self._write( 'file_viewer_rotation', hash_a, 360 )
+        
+        self.assertEqual( self._read( 'file_viewer_rotation', hash_a ), 0 )
+        self.assertEqual( self._read( 'file_viewer_rotation', hash_b ), 45 )
+        
+    
     def test_file_segments( self ):
         
         hash_a = os.urandom( 32 )

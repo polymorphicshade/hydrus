@@ -85,6 +85,7 @@ from hydrus.test import TestClientPlaylistItems
 from hydrus.test import TestClientPlaylistNavigation
 from hydrus.test import TestClientPlaylistExport
 from hydrus.test import TestClientPlaylistSelect
+from hydrus.test import TestClientRotation
 from hydrus.test import TestClientScreenLocations
 from hydrus.test import TestClientScriptedEvents
 from hydrus.test import TestClientSearch
@@ -958,6 +959,7 @@ class Controller( object ):
             TestClientPlaylistItems,
             TestClientPlaylistNavigation,
             TestClientPlaylistSelect,
+            TestClientRotation,
             TestClientScriptedEvents,
             TestClientSegments,
             TestClientVideoExport,

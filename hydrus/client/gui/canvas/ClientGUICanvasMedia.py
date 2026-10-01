@@ -288,7 +288,53 @@ def CalculateCanvasMediaSize( media, canvas_size: QC.QSize, show_action ):
     return ( canvas_width, canvas_height )
     
 
-def CalculateCanvasZooms( canvas_size: QC.QSize, canvas_type: int, device_pixel_ratio: float, media, show_action ) -> dict[ int, int ]:
+def ConvertRotationToPrettyString( rotation: int ) -> str:
+    
+    return f'{rotation}\u00b0'
+    
+
+# the orientations the media viewer's right-click menu offers. anything else is 'custom'
+ORIENTATION_MENU_ROTATIONS = ( 0, 90, 180, 270 )
+
+def NormaliseRotation( rotation: float ) -> int:
+    
+    # whole degrees clockwise, 0 to 359
+    return int( round( rotation ) ) % 360
+    
+
+def GetRotatedBoundingSize( width: float, height: float, rotation: int ) -> tuple[ float, float ]:
+    
+    # the size of the box a width x height rectangle fits in once it is turned this many degrees
+    rotation = NormaliseRotation( rotation )
+    
+    if rotation in ( 0, 180 ):
+        
+        return ( width, height )
+        
+    elif rotation in ( 90, 270 ):
+        
+        return ( height, width )
+        
+    
+    radians = math.radians( rotation )
+    
+    c = abs( math.cos( radians ) )
+    s = abs( math.sin( radians ) )
+    
+    return ( width * c + height * s, width * s + height * c )
+    
+
+def GetUnrotatedSizeInBoundingSize( bounding_width: float, bounding_height: float, media_width: float, media_height: float, rotation: int ) -> tuple[ float, float ]:
+    
+    # the other way: how big the media is, before it is turned, when its turned box is this big
+    ( unit_bounding_width, unit_bounding_height ) = GetRotatedBoundingSize( media_width, media_height, rotation )
+    
+    zoom = min( bounding_width / unit_bounding_width, bounding_height / unit_bounding_height )
+    
+    return ( media_width * zoom, media_height * zoom )
+    
+
+def CalculateCanvasZooms( canvas_size: QC.QSize, canvas_type: int, device_pixel_ratio: float, media, show_action, rotation: int = 0 ) -> dict[ int, int ]:
     
     zoom_types_to_zooms = {
         MEDIA_VIEWER_ZOOM_TYPE_DEFAULT_FOR_FILETYPE : 1.0,
@@ -311,7 +357,7 @@ def CalculateCanvasZooms( canvas_size: QC.QSize, canvas_type: int, device_pixel_
     
     new_options = CG.client_controller.new_options
     
-    ( media_width, media_height ) = CalculateMediaSize( media, 1.0 )
+    ( media_width, media_height ) = CalculateMediaSize( media, 1.0, rotation = rotation )
     
     ( canvas_width, canvas_height ) = CalculateCanvasMediaSize( media, canvas_size, show_action )
     
@@ -435,7 +481,7 @@ def CalculateCanvasZooms( canvas_size: QC.QSize, canvas_type: int, device_pixel_
     return zoom_types_to_zooms
     
 
-def CalculateMediaContainerSize( media, device_pixel_ratio: float, zoom, show_action ) -> QC.QSize:
+def CalculateMediaContainerSize( media, device_pixel_ratio: float, zoom, show_action, rotation: int = 0 ) -> QC.QSize:
     
     if show_action in ( CC.MEDIA_VIEWER_ACTION_DO_NOT_SHOW_ON_ACTIVATION_OPEN_EXTERNALLY, CC.MEDIA_VIEWER_ACTION_DO_NOT_SHOW ):
         
@@ -463,7 +509,7 @@ def CalculateMediaContainerSize( media, device_pixel_ratio: float, zoom, show_ac
         
     else:
         
-        ( raw_media_width, raw_media_height ) = CalculateMediaSize( media, zoom )
+        ( raw_media_width, raw_media_height ) = CalculateMediaSize( media, zoom, rotation = rotation )
         
         media_width = int( raw_media_width / device_pixel_ratio )
         media_height = int( raw_media_height / device_pixel_ratio )
@@ -472,8 +518,9 @@ def CalculateMediaContainerSize( media, device_pixel_ratio: float, zoom, show_ac
         
     
 
-def CalculateMediaSize( media, zoom ):
+def CalculateMediaSize( media, zoom, rotation: int = 0 ):
     
+    # a rotated file takes up the box it fits in once it is turned
     if media.GetMime() in HC.AUDIO or not media.HasUsefulResolution():
         
         ( original_width, original_height ) = ( 360, 240 )
@@ -486,7 +533,7 @@ def CalculateMediaSize( media, zoom ):
         
     else:
         
-        ( original_width, original_height ) = media.GetResolution()
+        ( original_width, original_height ) = GetRotatedBoundingSize( *media.GetResolution(), rotation )
         
     
     media_width = int( round( zoom * original_width ) )
@@ -592,6 +639,9 @@ class Animation( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         
         self._canvas_qt_pixmap = None
         
+        # degrees clockwise. we are the size of the box the turned frames fit in
+        self._rotation = 0
+        
         if self._canvas_type in CC.CANVAS_MEDIA_VIEWER_TYPES:
             
             shortcut_set = 'media_viewer_media_window'
@@ -637,6 +687,23 @@ class Animation( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         return self.size() * self.devicePixelRatio()
         
     
+    def _GetRenderRawPixelSize( self ) -> QC.QSize:
+        
+        # the size the frames are rendered at. when they are turned, that is a different shape to us
+        my_raw_size = self._GetRawPixelSize()
+        
+        if self._rotation == 0 or self._media is None or None in self._media.GetResolution():
+            
+            return my_raw_size
+            
+        
+        ( media_width, media_height ) = self._media.GetResolution()
+        
+        ( width, height ) = GetUnrotatedSizeInBoundingSize( my_raw_size.width(), my_raw_size.height(), media_width, media_height, self._rotation )
+        
+        return QC.QSize( max( 1, round( width ) ), max( 1, round( height ) ) )
+        
+    
     def _GetFrameIndexAtPlaybackPoint( self, point_ms: int ) -> int:
         
         frame_index = GetFrameIndexAtPlaybackPoint( point_ms, self._num_frames, self._video_container.GetTimestampMS )
@@ -658,7 +725,7 @@ class Animation( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
     
     def _ReinitForResizeOrDPRChange( self ):
         
-        my_raw_size = self._GetRawPixelSize()
+        my_raw_size = self._GetRenderRawPixelSize()
         
         my_raw_width = my_raw_size.width()
         my_raw_height = my_raw_size.height()
@@ -715,9 +782,11 @@ class Animation( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         my_raw_width = my_raw_size.width()
         my_raw_height = my_raw_size.height()
         
+        render_raw_size = self._GetRenderRawPixelSize()
+        
         if self._video_container is None:
             
-            self._video_container = ClientRendering.RasterContainerVideo( self._media, ( my_raw_width, my_raw_height ), init_position = self._current_frame_index, frame_durations_ms = self._frame_durations_ms )
+            self._video_container = ClientRendering.RasterContainerVideo( self._media, ( render_raw_size.width(), render_raw_size.height() ), init_position = self._current_frame_index, frame_durations_ms = self._frame_durations_ms )
             
         
         if not self._video_container.HasFrame( self._current_frame_index ):
@@ -744,7 +813,22 @@ class Animation( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         painter.setRenderHint( QG.QPainter.RenderHint.SmoothPixmapTransform, True )
 
         # note we draw to self.rect(), which is in DPR coordinates. the pixmap needs to be DPR'd by here mate, this caught us up before
-        painter.drawImage( self.rect(), current_frame_image )
+        if self._rotation == 0:
+            
+            painter.drawImage( self.rect(), current_frame_image )
+            
+        else:
+            
+            # turned about our middle
+            my_dpr = self.devicePixelRatio()
+            
+            ( width, height ) = ( render_raw_size.width() / my_dpr, render_raw_size.height() / my_dpr )
+            
+            painter.translate( self.width() / 2, self.height() / 2 )
+            painter.rotate( self._rotation )
+            
+            painter.drawImage( QC.QRectF( - width / 2, - height / 2, width, height ), current_frame_image )
+            
         
         self._current_frame_drawn = True
         
@@ -986,6 +1070,18 @@ class Animation( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
                 self._ReinitForResizeOrDPRChange()
                 
             
+        
+    
+    def SetRotation( self, rotation: int ):
+        
+        if rotation == self._rotation:
+            
+            return
+            
+        
+        self._rotation = rotation
+        
+        self._ReinitForResizeOrDPRChange()
         
     
     def SeekDelta( self, direction, duration_ms ):
@@ -1817,6 +1913,10 @@ class MediaContainer( QW.QWidget ):
         # after a move to a screen location, the file sits at the default zoom until the user zooms or we go to another file. its saved zoom stays in the db for next time
         self._holding_default_zoom = False
         
+        # degrees clockwise that the current file is turned. each file has its own, saved in the db
+        self._rotation = 0
+        self._rotation_load_id = 0
+        
         # where the next file should start playing, as ( media, start_ms ). a playlist sets this for a part of a file, so the player never shows what comes before it
         self._next_media_start: tuple[ ClientMediaSingle.MediaSingle, int | None ] | None = None
         
@@ -2374,13 +2474,13 @@ class MediaContainer( QW.QWidget ):
         
         my_dpr = self.devicePixelRatio()
         
-        media_window_size = CalculateMediaContainerSize( self._media, my_dpr, zoom, CC.MEDIA_VIEWER_ACTION_SHOW_WITH_NATIVE )
+        media_window_size = CalculateMediaContainerSize( self._media, my_dpr, zoom, CC.MEDIA_VIEWER_ACTION_SHOW_WITH_NATIVE, rotation = self._rotation )
         
         max_zoom_dimension = self._GetMaxZoomDimension()
         
         if media_window_size.width() > max_zoom_dimension or media_window_size.height() > max_zoom_dimension:
             
-            limit_max_zoom_types_to_zooms = CalculateCanvasZooms( QC.QSize( max_zoom_dimension, max_zoom_dimension ), self._canvas_type, my_dpr, self._media, CC.MEDIA_VIEWER_ACTION_SHOW_WITH_NATIVE )
+            limit_max_zoom_types_to_zooms = CalculateCanvasZooms( QC.QSize( max_zoom_dimension, max_zoom_dimension ), self._canvas_type, my_dpr, self._media, CC.MEDIA_VIEWER_ACTION_SHOW_WITH_NATIVE, rotation = self._rotation )
             
             zoom = limit_max_zoom_types_to_zooms[ MEDIA_VIEWER_ZOOM_TYPE_CANVAS ]
             
@@ -2639,6 +2739,82 @@ class MediaContainer( QW.QWidget ):
         self._ReleaseStandbyMPVWidget()
         
         return None
+        
+    
+    def _ApplyRotationToMediaWindow( self ):
+        
+        if isinstance( self._media_window, ( StaticImage, Animation, ClientGUIMPV.MPVWidget, ClientGUIQtMediaPlayer.QtMediaPlayer ) ):
+            
+            self._media_window.SetRotation( self._rotation )
+            
+        
+    
+    def _GetMediaResolution( self ) -> tuple[ float, float ]:
+        
+        # the file's resolution as it is shown, so on its side if it is turned
+        resolution = self._media.GetResolution()
+        
+        if self._rotation == 0 or None in resolution:
+            
+            return resolution
+            
+        
+        return GetRotatedBoundingSize( resolution[0], resolution[1], self._rotation )
+        
+    
+    def _LoadRotation( self ):
+        
+        self._rotation_load_id += 1
+        
+        load_id = self._rotation_load_id
+        
+        self._rotation = 0
+        
+        self._ApplyRotationToMediaWindow()
+        
+        if not self.CanRotate():
+            
+            return
+            
+        
+        hash = self._media.GetHash()
+        
+        def work_callable():
+            
+            return CG.client_controller.Read( 'file_viewer_rotation', hash )
+            
+        
+        def publish_callable( rotation ):
+            
+            # the media changed, or the user turned it, while we were waiting
+            if load_id != self._rotation_load_id:
+                
+                return
+                
+            
+            if rotation != 0:
+                
+                self._SetRotation( rotation )
+                
+            
+        
+        job = ClientGUIAsync.AsyncQtJob( self, work_callable, publish_callable )
+        
+        job.start()
+        
+    
+    def _SetRotation( self, rotation: float ):
+        
+        self._rotation = NormaliseRotation( rotation )
+        
+        self._ApplyRotationToMediaWindow()
+        
+        # it is a different shape now, so it fits the window differently
+        self.ZoomReinit()
+        
+        self.ResetCenterPosition()
+        
+        self.update()
         
     
     def _LoadSavedZoom( self ):
@@ -3298,7 +3474,7 @@ class MediaContainer( QW.QWidget ):
         
         my_dpr = self.devicePixelRatio()
         
-        new_media_window_size = CalculateMediaContainerSize( self._media, my_dpr, new_zoom, CC.MEDIA_VIEWER_ACTION_SHOW_WITH_NATIVE )
+        new_media_window_size = CalculateMediaContainerSize( self._media, my_dpr, new_zoom, CC.MEDIA_VIEWER_ACTION_SHOW_WITH_NATIVE, rotation = self._rotation )
         
         new_my_width = new_media_window_size.width()
         new_my_height = new_media_window_size.height()
@@ -3307,11 +3483,11 @@ class MediaContainer( QW.QWidget ):
         
         if new_my_width > max_zoom_dimension or new_my_height > max_zoom_dimension:
             
-            limit_max_zoom_types_to_zooms = CalculateCanvasZooms( QC.QSize( max_zoom_dimension, max_zoom_dimension ), self._canvas_type, my_dpr, self._media, CC.MEDIA_VIEWER_ACTION_SHOW_WITH_NATIVE )
+            limit_max_zoom_types_to_zooms = CalculateCanvasZooms( QC.QSize( max_zoom_dimension, max_zoom_dimension ), self._canvas_type, my_dpr, self._media, CC.MEDIA_VIEWER_ACTION_SHOW_WITH_NATIVE, rotation = self._rotation )
             
             new_zoom = limit_max_zoom_types_to_zooms[ MEDIA_VIEWER_ZOOM_TYPE_CANVAS ]
             
-            new_media_window_size = CalculateMediaContainerSize( self._media, my_dpr, new_zoom, CC.MEDIA_VIEWER_ACTION_SHOW_WITH_NATIVE )
+            new_media_window_size = CalculateMediaContainerSize( self._media, my_dpr, new_zoom, CC.MEDIA_VIEWER_ACTION_SHOW_WITH_NATIVE, rotation = self._rotation )
             
             new_my_width = new_media_window_size.width()
             new_my_height = new_media_window_size.height()
@@ -3601,6 +3777,11 @@ class MediaContainer( QW.QWidget ):
         return isinstance( self._media_window, ( Animation, ClientGUIMPV.MPVWidget, ClientGUIQtMediaPlayer.QtMediaPlayer ) )
         
     
+    def CanRotate( self ) -> bool:
+        
+        return self._media is not None and self.IsZoomable() and self._media.GetMime() not in HC.AUDIO and self._media.HasUsefulResolution()
+        
+    
     def ClearPlaybackSkips( self ):
         
         self._SavePlaybackSkips( [] )
@@ -3768,6 +3949,11 @@ class MediaContainer( QW.QWidget ):
     def GetCanvasZoom( self ) -> float:
         
         return self._zoom_types_to_zooms[ MEDIA_VIEWER_ZOOM_TYPE_CANVAS ]
+        
+    
+    def GetRotation( self ) -> int:
+        
+        return self._rotation
         
     
     def GetCurrentZoom( self ) -> float:
@@ -4496,6 +4682,9 @@ class MediaContainer( QW.QWidget ):
         
         self._LoadScriptedEvents()
         
+        # like the zoom, the last file's rotation goes, and the new file's comes in a moment later
+        self._LoadRotation()
+        
         # this clears the last file's zoom before we set up the new one, and then the new file's zoom comes in a moment later
         self._LoadSavedZoom()
         
@@ -4542,6 +4731,22 @@ class MediaContainer( QW.QWidget ):
         
         # the next time we get this file, start playing it here
         self._next_media_start = ( media, start_ms )
+        
+    
+    def SetRotation( self, rotation: float ):
+        
+        # the user turning the file. it stays like this every time it is shown
+        if not self.CanRotate():
+            
+            return
+            
+        
+        # anything we are still loading is now out of date
+        self._rotation_load_id += 1
+        
+        self._SetRotation( rotation )
+        
+        CG.client_controller.Write( 'file_viewer_rotation', self._media.GetHash(), self._rotation )
         
     
     def ShouldHaveVolumeControl( self ):
@@ -4626,7 +4831,7 @@ class MediaContainer( QW.QWidget ):
         
         my_dpr = self.devicePixelRatio()
         
-        return CalculateMediaContainerSize( self._media, my_dpr, self._current_zoom, self._show_action )
+        return CalculateMediaContainerSize( self._media, my_dpr, self._current_zoom, self._show_action, rotation = self._rotation )
         
     
     def SizeSelfToMedia( self ):
@@ -4733,7 +4938,7 @@ class MediaContainer( QW.QWidget ):
         
         my_dpr = self.devicePixelRatio()
         
-        ( original_width, original_height ) = self._media.GetResolution()
+        ( original_width, original_height ) = self._GetMediaResolution()
         
         # we step the longer side, so that is the one that changes one pixel at a time
         step_on_width = original_width >= original_height
@@ -4742,7 +4947,7 @@ class MediaContainer( QW.QWidget ):
         
         def get_dimension( zoom ):
             
-            size = CalculateMediaContainerSize( self._media, my_dpr, zoom, CC.MEDIA_VIEWER_ACTION_SHOW_WITH_NATIVE )
+            size = CalculateMediaContainerSize( self._media, my_dpr, zoom, CC.MEDIA_VIEWER_ACTION_SHOW_WITH_NATIVE, rotation = self._rotation )
             
             return size.width() if step_on_width else size.height()
             
@@ -4751,7 +4956,7 @@ class MediaContainer( QW.QWidget ):
         
         step = 1 if pixel_delta > 0 else -1
         
-        ( current_raw_width, current_raw_height ) = CalculateMediaSize( self._media, self._current_zoom )
+        ( current_raw_width, current_raw_height ) = CalculateMediaSize( self._media, self._current_zoom, rotation = self._rotation )
         
         raw_dimension = current_raw_width if step_on_width else current_raw_height
         
@@ -4873,7 +5078,7 @@ class MediaContainer( QW.QWidget ):
             return
             
         
-        self._zoom_types_to_zooms = CalculateCanvasZooms( canvas_size, self._canvas_type, my_dpr, self._media, media_show_action )
+        self._zoom_types_to_zooms = CalculateCanvasZooms( canvas_size, self._canvas_type, my_dpr, self._media, media_show_action, rotation = self._rotation )
         
         previous_current_zoom = self._current_zoom
         
@@ -4888,13 +5093,13 @@ class MediaContainer( QW.QWidget ):
         ( previous_width, previous_height ) = CalculateMediaSize( previous_media, self._current_zoom )
         
         ( previous_media_100_width, previous_media_100_height ) = previous_media.GetResolution()
-        ( current_media_100_width, current_media_100_height ) = self._media.GetResolution()
+        ( current_media_100_width, current_media_100_height ) = self._GetMediaResolution()
         
         width_locked_zoom = previous_width / current_media_100_width
         height_locked_zoom = previous_height / current_media_100_height
         
-        width_locked_size = CalculateMediaContainerSize( self._media, my_dpr, width_locked_zoom, media_show_action )
-        height_locked_size = CalculateMediaContainerSize( self._media, my_dpr, height_locked_zoom, media_show_action )
+        width_locked_size = CalculateMediaContainerSize( self._media, my_dpr, width_locked_zoom, media_show_action, rotation = self._rotation )
+        height_locked_size = CalculateMediaContainerSize( self._media, my_dpr, height_locked_zoom, media_show_action, rotation = self._rotation )
         
         # if landscape, go height, portrait, go width
         if previous_media_100_width > previous_media_100_height and current_media_100_width > current_media_100_height:
@@ -5089,7 +5294,7 @@ class MediaContainer( QW.QWidget ):
         canvas_size = self.parentWidget().size()
         my_dpr = self.devicePixelRatio()
         
-        self._zoom_types_to_zooms = CalculateCanvasZooms( canvas_size, self._canvas_type, my_dpr, self._media, self._show_action )
+        self._zoom_types_to_zooms = CalculateCanvasZooms( canvas_size, self._canvas_type, my_dpr, self._media, self._show_action, rotation = self._rotation )
         
         self._current_zoom_type = self._GetDefaultZoomType()
         
@@ -5245,7 +5450,7 @@ class MediaContainer( QW.QWidget ):
         
         ( media_show_action, media_start_paused, media_start_with_embed ) = ClientMedia.GetShowAction( self._media.GetMediaResult(), self._canvas_type )
         
-        self._zoom_types_to_zooms = CalculateCanvasZooms( canvas_size, self._canvas_type, my_dpr, self._media, media_show_action )
+        self._zoom_types_to_zooms = CalculateCanvasZooms( canvas_size, self._canvas_type, my_dpr, self._media, media_show_action, rotation = self._rotation )
         
         self._current_zoom_type = zoom_type
         
@@ -5628,6 +5833,11 @@ class StaticImage( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         
         self._zoom = 1.0
         
+        # degrees clockwise. we are the size of the box the turned image fits in. a turned image is drawn in one go, not in tiles
+        self._rotation = 0
+        self._rotated_pixmap = None
+        self._rotated_pixmap_size = None
+        
         if self._canvas_type in CC.CANVAS_MEDIA_VIEWER_TYPES:
             
             shortcut_set = 'media_viewer_media_window'
@@ -5694,6 +5904,9 @@ class StaticImage( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         self._raw_canvas_tile_size = QC.QSize( tile_dimension, tile_dimension )
         
         self._canvas_tiles = {}
+        
+        self._rotated_pixmap = None
+        self._rotated_pixmap_size = None
         
         self._last_device_pixel_ratio = self.devicePixelRatio()
         
@@ -5897,6 +6110,46 @@ class StaticImage( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         return self.size() * self.devicePixelRatio()
         
     
+    def _PaintRotated( self, painter: QG.QPainter ):
+        
+        my_dpr = self.devicePixelRatio()
+        
+        ( media_width, media_height ) = self._media.GetResolution()
+        
+        ( raw_width, raw_height ) = GetUnrotatedSizeInBoundingSize( self.width() * my_dpr, self.height() * my_dpr, media_width, media_height, self._rotation )
+        
+        raw_size = QC.QSize( max( 1, round( raw_width ) ), max( 1, round( raw_height ) ) )
+        
+        if self._rotated_pixmap is None or self._rotated_pixmap_size != raw_size:
+            
+            tile = self._image_tiles_cache.GetTile( self._image_renderer, self._media.GetMediaResult(), QC.QRect( 0, 0, media_width, media_height ), raw_size )
+            
+            self._rotated_pixmap = tile.qt_pixmap
+            self._rotated_pixmap_size = raw_size
+            
+        
+        # the corners the turned image leaves are the background colour
+        painter.setBackground( QG.QBrush( self._background_colour_generator.GetColour() ) )
+        
+        painter.eraseRect( painter.viewport() )
+        
+        painter.setRenderHint( QG.QPainter.RenderHint.SmoothPixmapTransform, True )
+        
+        painter.translate( self.width() / 2, self.height() / 2 )
+        painter.rotate( self._rotation )
+        
+        ( width, height ) = ( raw_size.width() / my_dpr, raw_size.height() / my_dpr )
+        
+        painter.drawPixmap( QC.QRectF( - width / 2, - height / 2, width, height ), self._rotated_pixmap, QC.QRectF( self._rotated_pixmap.rect() ) )
+        
+        if not self._is_rendered:
+            
+            self.readyForNeighbourPrefetch.emit()
+            
+            self._is_rendered = True
+            
+        
+    
     def _GetTileCoordinateFromPoint( self, device_pos: QC.QPoint ):
         
         raw_pos = device_pos * self.devicePixelRatio()
@@ -5949,6 +6202,13 @@ class StaticImage( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
             if self._image_renderer is None or not self._image_renderer.IsReady():
                 
                 self._DrawBackground( painter )
+                
+                return
+                
+            
+            if self._rotation != 0:
+                
+                self._PaintRotated( painter )
                 
                 return
                 
@@ -6112,6 +6372,20 @@ class StaticImage( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
     def SetBackgroundColourGenerator( self, background_colour_generator ):
         
         self._background_colour_generator = background_colour_generator
+        
+    
+    def SetRotation( self, rotation: int ):
+        
+        if rotation == self._rotation:
+            
+            return
+            
+        
+        self._rotation = rotation
+        
+        self._ClearCanvasTileCache()
+        
+        self.update()
         
     
     def SetMedia( self, media ):

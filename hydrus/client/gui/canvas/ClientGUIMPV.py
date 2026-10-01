@@ -420,6 +420,11 @@ class MPVMediator( object ):
         self._mpv_player.set_loglevel( value )
         
     
+    def SetVideoRotation( self, rotation: int ):
+        
+        raise NotImplementedError()
+        
+    
     def SetPaused( self, value: bool ):
         
         raise NotImplementedError()
@@ -564,6 +569,11 @@ class MPVMediatorRude( MPVMediator ):
         ( operation, value ) = ConvertAudioFilterGraphToMPVAFArgs( graph )
         
         self._mpv_player.command( 'af', operation, value )
+        
+    
+    def SetVideoRotation( self, rotation: int ):
+        
+        self._mpv_player.video_rotate = rotation
         
     
     def SetPaused( self, value: bool ):
@@ -797,6 +807,12 @@ class MPVMediatorPolite( MPVMediator ):
         self._mpv_player.command_async( 'af', operation, value )
         
     
+    def SetVideoRotation( self, rotation: int ):
+        
+        # this is added to any rotation the file says it has. it is clockwise, and any angle works, unless hardware decoding without copy-back is on, which only does right angles
+        self._mpv_player.command_async( 'set', 'video-rotate', str( rotation ) )
+        
+    
     def SetPaused( self, value: bool ):
         
         # mpv_value = 'yes' if value else 'no'
@@ -910,6 +926,9 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         self._current_second_of_seek_restarts = 0.0
         self._number_of_restarts_this_second = 0
         self._current_seek_to_start_count = 0
+        
+        # degrees clockwise that mpv is turning the video
+        self._rotation = 0
         
         self._InitialiseMPVCallbacks()
         
@@ -1628,6 +1647,14 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
             
             self._mpv_mediator.SetPaused( True )
             
+            # the rotation is player-wide in mpv, so it would carry over to the next file. the media container sets the next file's once it knows it
+            if self._rotation != 0:
+                
+                self._mpv_mediator.SetVideoRotation( 0 )
+                
+                self._rotation = 0
+                
+            
             # ab-loop points are player-wide in mpv, so they would carry over to the next file
             self._mpv_mediator.SetABLoop( None, None )
             
@@ -1823,6 +1850,26 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         
         # TODO: Move this to the mediator
         self._player.mute = mute
+        
+    
+    def SetRotation( self, rotation: int ):
+        
+        if self._currently_in_media_load_error_state or rotation == self._rotation:
+            
+            return
+            
+        
+        try:
+            
+            self._mpv_mediator.SetVideoRotation( rotation )
+            
+            self._rotation = rotation
+            
+        except mpv.ShutdownError:
+            
+            # libmpv core probably shut down
+            pass
+            
         
     
     def SetVolume( self, volume: int ):

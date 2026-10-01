@@ -161,6 +161,9 @@ class QtMediaPlayer( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         
         self._my_video_output.setPos( 0, 0 )
         
+        # degrees clockwise. the video item is turned about its middle, and then the turned box is fitted to the view
+        self._rotation = 0
+        
         self._my_video_output.nativeSizeChanged.connect( self._RefitVideo )
         
         QP.SetBackgroundColour( self._my_audio_placeholder, QG.QColor( 0, 0, 0 ) )
@@ -319,6 +322,9 @@ class QtMediaPlayer( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         
     
     def _RefitVideo( self ):
+        
+        self._my_video_output.setTransformOriginPoint( self._my_video_output.boundingRect().center() )
+        self._my_video_output.setRotation( self._rotation )
         
         # ok this is megaslop but it works
         # had to edit a bit for KISS since it was going bananas
@@ -741,6 +747,18 @@ class QtMediaPlayer( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
     def resizeEvent( self, event ):
         
         super().resizeEvent( event )
+        
+        self._RefitVideo()
+        
+    
+    def SetRotation( self, rotation: int ):
+        
+        if rotation == self._rotation:
+            
+            return
+            
+        
+        self._rotation = rotation
         
         self._RefitVideo()
         

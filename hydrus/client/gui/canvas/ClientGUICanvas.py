@@ -5128,6 +5128,33 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
             
         
     
+    def _SetCustomRotation( self ):
+        
+        if self._current_media is None:
+            
+            return
+            
+        
+        # the dialog is modal, but a slideshow can move us on to another file while it is open
+        media = self._current_media
+        
+        try:
+            
+            rotation = ClientGUIDialogsQuick.EnterNumber( self, 'Enter how many degrees to turn this file clockwise.', default = self._media_container.GetRotation(), min_value = 0, max_value = 359, title = 'custom orientation' )
+            
+        except HydrusExceptions.CancelledException:
+            
+            return
+            
+        
+        if self._current_media != media:
+            
+            return
+            
+        
+        self._media_container.SetRotation( rotation )
+        
+    
     def _StartSlideshowCustomPeriod( self ):
         
         try:
@@ -5376,6 +5403,28 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
                     
                 
                 ClientGUIMenus.AppendMenu( menu, zoom_menu, 'zoom: {}'.format( ClientData.ConvertZoomToPercentage( self._media_container.GetCurrentZoom() ) ) )
+                
+            
+            if self._media_container.CanRotate():
+                
+                orientation_menu = ClientGUIMenus.GenerateMenu( menu )
+                
+                current_rotation = self._media_container.GetRotation()
+                
+                for rotation in ClientGUICanvasMedia.ORIENTATION_MENU_ROTATIONS:
+                    
+                    ClientGUIMenus.AppendMenuCheckItem( orientation_menu, ClientGUICanvasMedia.ConvertRotationToPrettyString( rotation ), f'Turn this file {rotation} degrees clockwise. It stays like this every time it is shown, until you change it.', current_rotation == rotation, self._media_container.SetRotation, rotation )
+                    
+                
+                ClientGUIMenus.AppendSeparator( orientation_menu )
+                
+                is_custom = current_rotation not in ClientGUICanvasMedia.ORIENTATION_MENU_ROTATIONS
+                
+                custom_label = f'custom ({ClientGUICanvasMedia.ConvertRotationToPrettyString( current_rotation )})' if is_custom else 'custom'
+                
+                ClientGUIMenus.AppendMenuCheckItem( orientation_menu, custom_label + HC.UNICODE_ELLIPSIS, 'Turn this file clockwise by any number of degrees. It stays like this every time it is shown, until you change it.', is_custom, self._SetCustomRotation )
+                
+                ClientGUIMenus.AppendMenu( menu, orientation_menu, f'orientation: {ClientGUICanvasMedia.ConvertRotationToPrettyString( current_rotation )}' )
                 
             
             if self.parentWidget().isFullScreen():
