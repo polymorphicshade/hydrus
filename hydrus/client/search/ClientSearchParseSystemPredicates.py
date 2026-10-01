@@ -6,6 +6,7 @@ from hydrus.core import HydrusExceptions
 from hydrus.core import HydrusNumbers
 
 from hydrus.client import ClientGlobals as CG
+from hydrus.client.media import ClientMediaPlaylists
 from hydrus.client.metadata import ClientVirtualPaths
 from hydrus.client.search import ClientNumberTest
 from hydrus.client.search import ClientSearchPredicate
@@ -333,6 +334,8 @@ pred_generators = {
     SystemPredicateParser.Predicate.TAG_PRESET : lambda o, v, u: ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_TAG_PRESET, strip_quotes( v ).strip() ),
     SystemPredicateParser.Predicate.HAS_SNAPSHOTS : lambda o, v, u: ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_SNAPSHOTS, True ),
     SystemPredicateParser.Predicate.NO_SNAPSHOTS : lambda o, v, u: ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_SNAPSHOTS, False ),
+    SystemPredicateParser.Predicate.IN_PLAYLIST : lambda o, v, u: ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_PLAYLIST, ( True, ClientMediaPlaylists.NormalisePlaylistName( strip_quotes( v ) ) ) ),
+    SystemPredicateParser.Predicate.NOT_IN_PLAYLIST : lambda o, v, u: ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_PLAYLIST, ( False, ClientMediaPlaylists.NormalisePlaylistName( strip_quotes( v ) ) ) ),
     SystemPredicateParser.Predicate.VIRTUAL_PATH : lambda o, v, u: ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_VIRTUAL_PATH, ( o == '=', ClientVirtualPaths.NormaliseVirtualPath( strip_quotes( v ) ) ) ),
     SystemPredicateParser.Predicate.COUNTER : lambda o, v, u: ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_COUNTER, ( v[0], ClientNumberTest.NumberTest.STATICCreateFromCharacters( v[1], v[2] ) ) ),
     SystemPredicateParser.Predicate.HAS_RATING : lambda o, v, u: rating_service_pred_generator( '=', ( 'rated', v ) ),
@@ -353,7 +356,12 @@ def ParseSystemPredicateStringsToPredicates( system_predicate_strings: collectio
         
         try:
             
-            ( ext_pred_type, operator, value, unit ) = SystemPredicateParser.parse_system_predicate( s )
+            # a few system predicates can be negated with a '-', like a tag
+            negated = s.startswith( '-' )
+            
+            text_to_parse = s[ 1 : ] if negated else s
+            
+            ( ext_pred_type, operator, value, unit ) = SystemPredicateParser.parse_system_predicate( text_to_parse )
             
             if ext_pred_type not in pred_generators:
                 
@@ -362,6 +370,15 @@ def ParseSystemPredicateStringsToPredicates( system_predicate_strings: collectio
             
             predicate = pred_generators[ ext_pred_type ]( operator, value, unit )
             
+            if negated:
+                
+                if predicate.GetType() not in ClientSearchPredicate.NEGATABLE_SYSTEM_PREDICATE_TYPES:
+                    
+                    raise HydrusExceptions.BadRequestException( 'Sorry, "{}" cannot be negated with a "-"!'.format( text_to_parse ) )
+                    
+                
+                predicate = predicate.GetInverseCopy()
+                
             system_predicates.append( predicate )
             
         except ValueError as e:

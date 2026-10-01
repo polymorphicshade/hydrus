@@ -3882,14 +3882,22 @@ class EditAdvancedORPredicates( ClientGUIScrolledPanels.EditPanel ):
                     
                     if len( negated_system_pred_strings ) > 0:
                         
-                        raise ValueError( 'Sorry, that would make negated system tags, which are not supported yet! Try to rephrase or negate the system tag yourself.' )
+                        # a few can be, like -system:playlist
+                        try:
+                            
+                            system_preds.extend( ClientSearchParseSystemPredicates.ParseSystemPredicateStringsToPredicates( negated_system_pred_strings ) )
+                            
+                        except Exception as e:
+                            
+                            raise ValueError( 'Sorry, that would make negated system tags, which are not supported yet (except for system:playlist)! Try to rephrase or negate the system tag yourself.' )
+                            
                         
                     
                     if len( system_pred_strings ) > 0:
                         
                         try:
                             
-                            system_preds = ClientSearchParseSystemPredicates.ParseSystemPredicateStringsToPredicates( system_pred_strings )
+                            system_preds.extend( ClientSearchParseSystemPredicates.ParseSystemPredicateStringsToPredicates( system_pred_strings ) )
                             
                         except Exception as e:
                             

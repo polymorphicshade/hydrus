@@ -84,6 +84,12 @@ PREDICATE_TYPE_SYSTEM_COUNTER = 1001 # not an official hydrus predicate, so it i
 PREDICATE_TYPE_SYSTEM_VIRTUAL_PATH = 1002
 PREDICATE_TYPE_SYSTEM_TAG_PRESET = 1003 # never searched on--the search box swaps it for the preset's own predicates
 PREDICATE_TYPE_SYSTEM_SNAPSHOTS = 1004 # True for files that have snapshots taken from them, False for files that do not
+PREDICATE_TYPE_SYSTEM_PLAYLIST = 1005 # ( is_in, playlist_name ). files that are, or are not, in the playlist with that name
+
+# system predicates you can type with a '-' in front, like a tag, to get the opposite
+NEGATABLE_SYSTEM_PREDICATE_TYPES = {
+    PREDICATE_TYPE_SYSTEM_PLAYLIST
+}
 
 SYSTEM_PREDICATE_TYPES = {
     PREDICATE_TYPE_SYSTEM_EVERYTHING,
@@ -128,6 +134,7 @@ SYSTEM_PREDICATE_TYPES = {
     PREDICATE_TYPE_SYSTEM_VIRTUAL_PATH,
     PREDICATE_TYPE_SYSTEM_TAG_PRESET,
     PREDICATE_TYPE_SYSTEM_SNAPSHOTS,
+    PREDICATE_TYPE_SYSTEM_PLAYLIST,
     PREDICATE_TYPE_SYSTEM_FILE_SERVICE,
     PREDICATE_TYPE_SYSTEM_NUM_PIXELS,
     PREDICATE_TYPE_SYSTEM_DIMENSIONS,
@@ -376,6 +383,7 @@ EDIT_PRED_TYPES = {
     PREDICATE_TYPE_SYSTEM_HAS_NOTE_NAME,
     PREDICATE_TYPE_SYSTEM_COUNTER,
     PREDICATE_TYPE_SYSTEM_VIRTUAL_PATH,
+    PREDICATE_TYPE_SYSTEM_PLAYLIST,
     PREDICATE_TYPE_SYSTEM_NUM_WORDS,
     PREDICATE_TYPE_SYSTEM_SIMILAR_TO_FILES,
     PREDICATE_TYPE_SYSTEM_SIMILAR_TO_DATA,
@@ -1208,6 +1216,12 @@ class Predicate( HydrusSerialisable.SerialisableBase ):
             elif self._predicate_type in ( PREDICATE_TYPE_TAG, PREDICATE_TYPE_NAMESPACE, PREDICATE_TYPE_WILDCARD ):
                 
                 return Predicate( self._predicate_type, self._value, not self._inclusive )
+                
+            elif self._predicate_type == PREDICATE_TYPE_SYSTEM_PLAYLIST and self._value is not None:
+                
+                ( is_in, playlist_name ) = self._value
+                
+                return Predicate( self._predicate_type, ( not is_in, playlist_name ) )
                 
             elif self._predicate_type in ( PREDICATE_TYPE_SYSTEM_HAS_AUDIO, PREDICATE_TYPE_SYSTEM_SNAPSHOTS, PREDICATE_TYPE_SYSTEM_HAS_TRANSPARENCY, PREDICATE_TYPE_SYSTEM_HAS_EXIF, PREDICATE_TYPE_SYSTEM_HAS_XMP, PREDICATE_TYPE_SYSTEM_HAS_IPTC, PREDICATE_TYPE_SYSTEM_HAS_HUMAN_READABLE_EMBEDDED_METADATA, PREDICATE_TYPE_SYSTEM_HAS_SOFTWARE_SOURCE, PREDICATE_TYPE_SYSTEM_HAS_ICC_PROFILE, PREDICATE_TYPE_SYSTEM_HAS_FORCED_FILETYPE, PREDICATE_TYPE_SYSTEM_FILE_RELATIONSHIPS_KING ):
                 
@@ -2199,6 +2213,18 @@ class Predicate( HydrusSerialisable.SerialisableBase ):
                     base = 'no snapshots'
                     
                 
+            elif self._predicate_type == PREDICATE_TYPE_SYSTEM_PLAYLIST:
+                
+                base = 'playlist'
+                
+                if self._value is not None:
+                    
+                    ( is_in, playlist_name ) = self._value
+                    
+                    # 'not in' is a '-' in front, below
+                    base = f'playlist {playlist_name}'
+                    
+                
             elif self._predicate_type == PREDICATE_TYPE_SYSTEM_VIRTUAL_PATH:
                 
                 base = 'path'
@@ -3033,6 +3059,12 @@ class Predicate( HydrusSerialisable.SerialisableBase ):
                 
             
             base = HydrusTags.CombineTag( 'system', base )
+            
+            if self._predicate_type == PREDICATE_TYPE_SYSTEM_PLAYLIST and self._value is not None and not self._value[0]:
+                
+                # -system:playlist name, like a tag you do not want
+                base = '-' + base
+                
             
             base = ClientTags.RenderTag( base, render_for_user )
             

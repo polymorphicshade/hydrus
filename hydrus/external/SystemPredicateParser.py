@@ -189,6 +189,8 @@ class Predicate( Enum ):
     VIRTUAL_PATH = auto()
     HAS_SNAPSHOTS = auto()
     NO_SNAPSHOTS = auto()
+    IN_PLAYLIST = auto()
+    NOT_IN_PLAYLIST = auto()
     TAG_PRESET = auto()
     RATING_SPECIFIC_NUMERICAL = auto()
     RATING_SPECIFIC_LIKE_DISLIKE = auto()
@@ -355,6 +357,8 @@ SYSTEM_PREDICATES = {
     'path': (Predicate.VIRTUAL_PATH, Operators.EQUAL, Value.ANY_STRING, None ),
     '(has )?snapshots$': (Predicate.HAS_SNAPSHOTS, None, None, None ),
     '((has )?no|does not have|doesn\'t have) snapshots$': (Predicate.NO_SNAPSHOTS, None, None, None ),
+    '(is )?not in( a)? playlist': (Predicate.NOT_IN_PLAYLIST, None, Value.ANY_STRING, None ),
+    '((is )?in( a)? )?playlist': (Predicate.IN_PLAYLIST, None, Value.ANY_STRING, None ),
     'presets?': (Predicate.TAG_PRESET, None, Value.ANY_STRING, None ),
     'has( a)? (rating|count)( for)?': (Predicate.HAS_RATING, None, Value.ANY_STRING, None ),
     '((has )?no|does not have( a)?|doesn\'t have( a)?) (rating|count)( for)?': (Predicate.NO_RATING, None, Value.ANY_STRING, None ),

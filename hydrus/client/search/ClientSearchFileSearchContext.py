@@ -395,6 +395,17 @@ class FileSystemPredicates( object ):
                 self._common_info[ 'has_snapshots' ] = value
                 
             
+            if predicate_type == ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_PLAYLIST and value is not None:
+                
+                if 'playlists' not in self._common_info:
+                    
+                    self._common_info[ 'playlists' ] = []
+                    
+                
+                # ( is_in, playlist_name )
+                self._common_info[ 'playlists' ].append( value )
+                
+            
             if predicate_type == ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_VIRTUAL_PATH and value is not None:
                 
                 if 'virtual_paths' not in self._common_info:

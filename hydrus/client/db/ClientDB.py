@@ -2434,6 +2434,11 @@ class DB( HydrusDB.HydrusDB ):
             blank_pred_types.add( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_VIRTUAL_PATH )
             
         
+        if self.modules_playlists.HasPlaylists():
+            
+            blank_pred_types.add( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_PLAYLIST )
+            
+        
         if self.modules_files_snapshots.HasSnapshots():
             
             # this one needs nothing filling in, so it goes in ready to use
@@ -4555,7 +4560,8 @@ class DB( HydrusDB.HydrusDB ):
             self.modules_files_search_tags,
             self.modules_files_counters,
             self.modules_files_virtual_paths,
-            self.modules_files_snapshots
+            self.modules_files_snapshots,
+            self.modules_playlists
         )
         
         self._modules.append( self.modules_files_query )

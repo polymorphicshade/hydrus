@@ -427,7 +427,8 @@ class ParsedAutocompleteText( object ):
     
     def IsPossibleSystemPredicate( self ):
         
-        return self.raw_input.startswith( 'system:' )
+        # a few system predicates can be negated with a '-', like system:playlist
+        return self.raw_input.startswith( 'system:' ) or self.raw_input.startswith( '-system:' )
         
     
     def IsValidSystemPredicate( self ):

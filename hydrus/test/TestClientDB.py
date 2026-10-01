@@ -622,6 +622,115 @@ class TestClientDB( unittest.TestCase ):
             
         
     
+    def test_system_playlist( self ):
+        
+        TestClientDB._clear_db()
+        
+        full_import_options_container = ImportOptionsManager.ImportOptionsManager.STATICGetDefaultInitialisedManager().GetDefaultImportOptionsContainerForCallerType( IOC.IMPORT_OPTIONS_CALLER_TYPE_GLOBAL )
+        
+        hashes = []
+        
+        for filename in ( 'hydrus.png', 'hydrus_small.png' ):
+            
+            file_import_job = ClientImportFiles.FileImportJob( HydrusStaticDir.GetStaticPath( filename ), full_import_options_container )
+            
+            file_import_job.GeneratePreImportHashAndStatus()
+            
+            file_import_job.GenerateInfo()
+            
+            self._write( 'import_file', file_import_job )
+            
+            hashes.append( file_import_job.GetHash() )
+            
+        
+        ( hash_a, hash_b ) = hashes
+        
+        def run_search_hashes( predicate ):
+            
+            location_context = ClientLocation.LocationContext.STATICCreateSimple( CC.LOCAL_FILE_SERVICE_KEY )
+            
+            search_context = ClientSearchFileSearchContext.FileSearchContext( location_context = location_context, predicates = [ predicate ] )
+            
+            hash_ids = self._read( 'file_query_ids', search_context )
+            
+            return { self._read( 'hash_ids_to_hashes', hash_ids = ( hash_id, ) )[ hash_id ] for hash_id in hash_ids }
+            
+        
+        def playlist_predicate( is_in, name ):
+            
+            return ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_PLAYLIST, ( is_in, name ) )
+            
+        
+        location_context = ClientLocation.LocationContext.STATICCreateSimple( CC.LOCAL_FILE_SERVICE_KEY )
+        
+        file_search_context = ClientSearchFileSearchContext.FileSearchContext( location_context = location_context )
+        
+        # it only shows in the system predicates once there are playlists
+        self.assertNotIn( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_PLAYLIST, [ predicate.GetType() for predicate in self._read( 'file_system_predicates', file_search_context ) ] )
+        
+        self._write( 'playlists', [ ( None, 'my playlist' ), ( None, 'empty' ) ] )
+        
+        playlist_names_to_ids = { name : playlist_id for ( playlist_id, name, num_items ) in self._read( 'playlists' ) }
+        
+        self.assertIn( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_PLAYLIST, [ predicate.GetType() for predicate in self._read( 'file_system_predicates', file_search_context ) ] )
+        
+        # a file in it more than once, as different parts, is found once
+        self._write( 'playlist_add_item', playlist_names_to_ids[ 'my playlist' ], hash_a, None, None )
+        self._write( 'playlist_add_item', playlist_names_to_ids[ 'my playlist' ], hash_a, 1000, 2000 )
+        
+        self.assertEqual( run_search_hashes( playlist_predicate( True, 'my playlist' ) ), { hash_a } )
+        self.assertEqual( run_search_hashes( playlist_predicate( False, 'my playlist' ) ), { hash_b } )
+        
+        # names are not case-sensitive, and an underscore is as good as a space
+        self.assertEqual( run_search_hashes( playlist_predicate( True, 'My_Playlist' ) ), { hash_a } )
+        
+        self.assertEqual( run_search_hashes( playlist_predicate( True, 'empty' ) ), set() )
+        self.assertEqual( run_search_hashes( playlist_predicate( False, 'empty' ) ), { hash_a, hash_b } )
+        
+        # one that does not exist has nothing in it
+        self.assertEqual( run_search_hashes( playlist_predicate( True, 'no such playlist' ) ), set() )
+        self.assertEqual( run_search_hashes( playlist_predicate( False, 'no such playlist' ) ), { hash_a, hash_b } )
+        
+        # in and not in are each other's opposite
+        self.assertEqual( playlist_predicate( True, 'my playlist' ).GetInverseCopy(), playlist_predicate( False, 'my playlist' ) )
+        
+        # typed in
+        
+        from hydrus.client.search import ClientSearchParseSystemPredicates
+        
+        for ( text, result ) in [
+            ( 'system:playlist my playlist', { hash_a } ),
+            ( 'system:playlist my_playlist', { hash_a } ),
+            ( 'system:in playlist my playlist', { hash_a } ),
+            ( '-system:playlist my_playlist', { hash_b } ),
+            ( 'system:not in playlist My Playlist', { hash_b } ),
+            ( '-system:playlist empty', { hash_a, hash_b } )
+        ]:
+            
+            ( predicate, ) = ClientSearchParseSystemPredicates.ParseSystemPredicateStringsToPredicates( [ text ] )
+            
+            self.assertEqual( run_search_hashes( predicate ), result, text )
+            
+            # it writes back out as something we can read in again
+            ( reparsed_predicate, ) = ClientSearchParseSystemPredicates.ParseSystemPredicateStringsToPredicates( [ predicate.ToString() ] )
+            
+            self.assertEqual( reparsed_predicate, predicate )
+            
+            # and it survives saving
+            self.assertEqual( HydrusSerialisable.CreateFromSerialisableTuple( predicate.GetSerialisableTuple() ), predicate )
+            
+        
+        self.assertEqual( playlist_predicate( False, 'my playlist' ).ToString(), '-system:playlist my playlist' )
+        
+        # the other system predicates still cannot be negated
+        with self.assertRaises( Exception ):
+            
+            ClientSearchParseSystemPredicates.ParseSystemPredicateStringsToPredicates( [ '-system:inbox' ] )
+            
+        
+        self._write( 'playlists', [] )
+        
+    
     def test_file_virtual_paths( self ):
         
         TestClientDB._clear_db()

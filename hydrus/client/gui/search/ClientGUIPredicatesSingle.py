@@ -7,6 +7,7 @@ from qtpy import QtWidgets as QW
 from hydrus.core import HydrusConstants as HC
 from hydrus.core import HydrusData
 from hydrus.core import HydrusExceptions
+from hydrus.core import HydrusNumbers
 from hydrus.core import HydrusLists
 from hydrus.core import HydrusTags
 from hydrus.core import HydrusText
@@ -3561,6 +3562,69 @@ class PanelPredicateSystemVirtualPath( PanelPredicateSystemSingle ):
             
         
         predicates = ( ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_VIRTUAL_PATH, ( self._operator.GetValue(), pattern ) ), )
+        
+        return predicates
+        
+    
+
+class PanelPredicateSystemPlaylist( PanelPredicateSystemSingle ):
+    
+    def __init__( self, parent, predicate ):
+        
+        super().__init__( parent )
+        
+        self._operator = ClientGUICommon.BetterChoice( self )
+        
+        self._operator.addItem( 'is in', True )
+        self._operator.addItem( 'is not in', False )
+        
+        self._playlist_name = ClientGUICommon.BetterChoice( self )
+        
+        playlists = CG.client_controller.Read( 'playlists' )
+        
+        for ( playlist_id, name, num_items ) in playlists:
+            
+            self._playlist_name.addItem( f'{name} ({HydrusNumbers.ToHumanInt( num_items )} items)', name )
+            
+        
+        #
+        
+        predicate = self._GetPredicateToInitialisePanelWith( predicate )
+        
+        ( is_in, playlist_name ) = predicate.GetValue()
+        
+        self._operator.SetValue( is_in )
+        
+        if playlist_name in [ name for ( playlist_id, name, num_items ) in playlists ]:
+            
+            self._playlist_name.SetValue( playlist_name )
+            
+        
+        #
+        
+        hbox = QP.HBoxLayout()
+        
+        QP.AddToLayout( hbox, ClientGUICommon.BetterStaticText( self, 'system:file' ), CC.FLAGS_CENTER_PERPENDICULAR )
+        QP.AddToLayout( hbox, self._operator, CC.FLAGS_CENTER_PERPENDICULAR )
+        QP.AddToLayout( hbox, ClientGUICommon.BetterStaticText( self, 'playlist' ), CC.FLAGS_CENTER_PERPENDICULAR )
+        QP.AddToLayout( hbox, self._playlist_name, CC.FLAGS_EXPAND_BOTH_WAYS )
+        
+        self.setLayout( hbox )
+        
+    
+    def GetDefaultPredicate( self ):
+        
+        return ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_PLAYLIST, ( True, '' ) )
+        
+    
+    def GetPredicates( self ):
+        
+        if self._playlist_name.count() == 0:
+            
+            raise Exception( 'You do not have any playlists to search for!' )
+            
+        
+        predicates = ( ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_PLAYLIST, ( self._operator.GetValue(), self._playlist_name.GetValue() ) ), )
         
         return predicates
         

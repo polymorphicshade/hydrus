@@ -92,6 +92,21 @@ class ClientDBPlaylists( ClientDBModule.ClientDBModule ):
         return sorted( playlists, key = lambda playlist: playlist[1].lower() )
         
     
+    def GetHashIdsInPlaylist( self, playlist_name: str, hash_ids_table_name: str ) -> set[ int ]:
+        
+        # the files in the table that are in the playlist with this name. names are not case-sensitive, and an underscore is as good as a space, so 'my_playlist' finds 'my playlist'
+        playlist_name = ClientMediaPlaylists.NormalisePlaylistName( playlist_name.replace( '_', ' ' ) )
+        
+        query = f'SELECT DISTINCT {hash_ids_table_name}.hash_id FROM {hash_ids_table_name} CROSS JOIN playlist_items ON ( {hash_ids_table_name}.hash_id = playlist_items.hash_id ) CROSS JOIN playlists ON ( playlist_items.playlist_id = playlists.playlist_id ) WHERE REPLACE( playlists.name, ?, ? ) = ? COLLATE NOCASE;'
+        
+        return self._STS( self._Execute( query, ( '_', ' ', playlist_name ) ) )
+        
+    
+    def HasPlaylists( self ) -> bool:
+        
+        return self._Execute( 'SELECT 1 FROM playlists LIMIT 1;' ).fetchone() is not None
+        
+    
     def GetTablesAndColumnsThatUseDefinitions( self, content_type: int ) -> list[ tuple[ str, str ] ]:
         
         tables_and_columns = []

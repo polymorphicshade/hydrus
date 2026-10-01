@@ -28,6 +28,7 @@ FLESH_OUT_SYSTEM_PRED_TYPES = {
     ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_NUM_TAGS,
     ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_COUNTER,
     ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_VIRTUAL_PATH,
+    ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_PLAYLIST,
     ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_TAG_PRESET,
     ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_LIMIT,
     ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_SIZE,
@@ -367,6 +368,10 @@ class EditPredicatesPanel( ClientGUIScrolledPanels.EditPanel ):
             elif predicate_type == ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_VIRTUAL_PATH:
                 
                 self._editable_pred_panels.append( ClientGUIPredicatesSingle.PanelPredicateSystemVirtualPath( self, predicate ) )
+                
+            elif predicate_type == ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_PLAYLIST:
+                
+                self._editable_pred_panels.append( ClientGUIPredicatesSingle.PanelPredicateSystemPlaylist( self, predicate ) )
                 
             elif predicate_type == ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_NUM_WORDS:
                 
@@ -853,6 +858,15 @@ class FleshOutPredicatePanel( ClientGUIScrolledPanels.EditPanel ):
         elif predicate_type == ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_VIRTUAL_PATH:
             
             editable_pred_panels.append( self._PredOKPanel( self, ClientGUIPredicatesSingle.PanelPredicateSystemVirtualPath, predicate ) )
+            
+        elif predicate_type == ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_PLAYLIST:
+            
+            # a button for each playlist, to find its files in one click
+            playlists = CG.client_controller.Read( 'playlists' )
+            
+            static_pred_buttons.extend( ( ClientGUIPredicatesSingle.StaticSystemPredicateButton( self, ( ClientSearchPredicate.Predicate( ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_PLAYLIST, ( True, name ) ), ), show_remove_button = False ) for ( playlist_id, name, num_items ) in playlists ) )
+            
+            editable_pred_panels.append( self._PredOKPanel( self, ClientGUIPredicatesSingle.PanelPredicateSystemPlaylist, predicate ) )
             
         elif predicate_type == ClientSearchPredicate.PREDICATE_TYPE_SYSTEM_TAG_PRESET:
             
