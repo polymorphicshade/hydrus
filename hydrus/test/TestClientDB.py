@@ -887,8 +887,8 @@ class TestClientDB( unittest.TestCase ):
         self._write( 'playlist_add_item', chill_id, hash_a, 20000, 25000 )
         self._write( 'playlist_add_item', road_trip_id, hash_a, None, None )
         
-        self.assertEqual( self._read( 'playlist_items', chill_id ), [ ( hash_a, None, None ), ( hash_b, 1000, 5000 ), ( hash_a, 20000, 25000 ) ] )
-        self.assertEqual( self._read( 'playlist_items', road_trip_id ), [ ( hash_a, None, None ) ] )
+        self.assertEqual( self._read( 'playlist_items', chill_id ), [ ( hash_a, None, None, False ), ( hash_b, 1000, 5000, False ), ( hash_a, 20000, 25000, False ) ] )
+        self.assertEqual( self._read( 'playlist_items', road_trip_id ), [ ( hash_a, None, None, False ) ] )
         
         self.assertEqual( self._read( 'playlists' ), [ ( chill_id, 'chill', 3 ), ( road_trip_id, 'road trip', 1 ) ] )
         
@@ -899,35 +899,43 @@ class TestClientDB( unittest.TestCase ):
         
         self._write( 'playlist_remove_file', chill_id, hash_a )
         
-        self.assertEqual( self._read( 'playlist_items', chill_id ), [ ( hash_b, 1000, 5000 ) ] )
-        self.assertEqual( self._read( 'playlist_items', road_trip_id ), [ ( hash_a, None, None ) ] )
+        self.assertEqual( self._read( 'playlist_items', chill_id ), [ ( hash_b, 1000, 5000, False ) ] )
+        self.assertEqual( self._read( 'playlist_items', road_trip_id ), [ ( hash_a, None, None, False ) ] )
         
         # new items still go on the end
         
         self._write( 'playlist_add_item', chill_id, hash_a, None, None )
         
-        self.assertEqual( self._read( 'playlist_items', chill_id ), [ ( hash_b, 1000, 5000 ), ( hash_a, None, None ) ] )
+        self.assertEqual( self._read( 'playlist_items', chill_id ), [ ( hash_b, 1000, 5000, False ), ( hash_a, None, None, False ) ] )
         
         # the editor sets the whole list: reordered, with a repeat, and with the old hash_a item gone
         
-        self._write( 'playlist_items', chill_id, [ ( hash_a, None, None ), ( hash_b, 1000, 5000 ), ( hash_a, None, None ) ] )
+        self._write( 'playlist_items', chill_id, [ ( hash_a, None, None, False ), ( hash_b, 1000, 5000, False ), ( hash_a, None, None, False ) ] )
         
-        self.assertEqual( self._read( 'playlist_items', chill_id ), [ ( hash_a, None, None ), ( hash_b, 1000, 5000 ), ( hash_a, None, None ) ] )
+        self.assertEqual( self._read( 'playlist_items', chill_id ), [ ( hash_a, None, None, False ), ( hash_b, 1000, 5000, False ), ( hash_a, None, None, False ) ] )
         self.assertEqual( self._read( 'playlists_containing_file', hash_a ), [ ( chill_id, 'chill', 2 ), ( road_trip_id, 'road trip', 1 ) ] )
         
         # new items still go on the end
         
         self._write( 'playlist_add_item', chill_id, hash_b, None, None )
         
-        self.assertEqual( self._read( 'playlist_items', chill_id ), [ ( hash_a, None, None ), ( hash_b, 1000, 5000 ), ( hash_a, None, None ), ( hash_b, None, None ) ] )
+        self.assertEqual( self._read( 'playlist_items', chill_id ), [ ( hash_a, None, None, False ), ( hash_b, 1000, 5000, False ), ( hash_a, None, None, False ), ( hash_b, None, None, False ) ] )
         
         self._write( 'playlist_items', chill_id, [] )
         
         self.assertEqual( self._read( 'playlist_items', chill_id ), [] )
         
+        # items can play in reverse, and keep it when the editor moves them
+        
+        self._write( 'playlist_items', chill_id, [ ( hash_a, None, None, True ), ( hash_b, 1000, 5000, False ), ( hash_b, 1000, 5000, True ) ] )
+        
+        self.assertEqual( self._read( 'playlist_items', chill_id ), [ ( hash_a, None, None, True ), ( hash_b, 1000, 5000, False ), ( hash_b, 1000, 5000, True ) ] )
+        
+        self._write( 'playlist_items', chill_id, [] )
+        
         # a playlist that was deleted in the meantime is left alone
         
-        self._write( 'playlist_items', 123456, [ ( hash_a, None, None ) ] )
+        self._write( 'playlist_items', 123456, [ ( hash_a, None, None, False ) ] )
         
         self.assertEqual( self._read( 'playlist_items', 123456 ), [] )
         
@@ -953,14 +961,14 @@ class TestClientDB( unittest.TestCase ):
         
         ( ( new_one_id, new_one_name, new_one_count ), ) = playlists
         
-        self.assertEqual( self._read( 'playlist_items', new_one_id ), [ ( hash_a, 1000, 5000 ) ] )
+        self.assertEqual( self._read( 'playlist_items', new_one_id ), [ ( hash_a, 1000, 5000, False ) ] )
         
         # if one with that name turned up in the meantime, it goes in that
         
         self._write( 'playlist_add_item_to_new_playlist', 'new one', hash_b, None, None )
         
         self.assertEqual( self._read( 'playlists' ), [ ( new_one_id, 'new one', 2 ) ] )
-        self.assertEqual( self._read( 'playlist_items', new_one_id ), [ ( hash_a, 1000, 5000 ), ( hash_b, None, None ) ] )
+        self.assertEqual( self._read( 'playlist_items', new_one_id ), [ ( hash_a, 1000, 5000, False ), ( hash_b, None, None, False ) ] )
         
         self._write( 'playlists', [] )
         

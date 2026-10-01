@@ -5840,12 +5840,12 @@ PLAYLIST_ITEM_LOOP_TIMES_CHOICES = ( 2, 3, 5 )
 
 class CanvasPlaylist( CanvasMediaListBrowser ):
     
-    def __init__( self, parent, page_key, location_context: ClientLocation.LocationContext, playlist_id: int, playlist_name: str, playlist_items: list[ tuple[ ClientMediaResult.MediaResult, int | None, int | None ] ] ):
+    def __init__( self, parent, page_key, location_context: ClientLocation.LocationContext, playlist_id: int, playlist_name: str, playlist_items: list[ tuple[ ClientMediaResult.MediaResult, int | None, int | None, bool ] ] ):
         
         # the media list holds each file once, but a playlist can have a file many times over, so we step through the playlist with our own index
-        hashes_to_media_results = { media_result.GetHash() : media_result for ( media_result, start_ms, end_ms ) in playlist_items }
+        hashes_to_media_results = { media_result.GetHash() : media_result for ( media_result, start_ms, end_ms, reverse ) in playlist_items }
         
-        ( first_media_result, first_start_ms, first_end_ms ) = playlist_items[0]
+        ( first_media_result, first_start_ms, first_end_ms, first_reverse ) = playlist_items[0]
         
         super().__init__( parent, page_key, location_context, list( hashes_to_media_results.values() ), first_media_result.GetHash() )
         
@@ -5854,8 +5854,8 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         
         hashes_to_medias = { media.GetHash() : media for media in self._media_list.GetFlatMedia() }
         
-        # ( media, start_ms, end_ms ). the span is None, None for the whole file
-        self._playlist_items = [ ( hashes_to_medias[ media_result.GetHash() ], start_ms, end_ms ) for ( media_result, start_ms, end_ms ) in playlist_items if media_result.GetHash() in hashes_to_medias ]
+        # ( media, start_ms, end_ms, reverse ). the span is None, None for the whole file. reverse plays it backwards
+        self._playlist_items = [ ( hashes_to_medias[ media_result.GetHash() ], start_ms, end_ms, reverse ) for ( media_result, start_ms, end_ms, reverse ) in playlist_items if media_result.GetHash() in hashes_to_medias ]
         
         self._playlist_loop = CG.client_controller.new_options.GetBoolean( 'playlists_loop' )
         
@@ -5973,7 +5973,7 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
             return
             
         
-        ( media, start_ms, end_ms ) = self._playlist_items[ self._playlist_index ]
+        ( media, start_ms, end_ms, reverse ) = self._playlist_items[ self._playlist_index ]
         
         # the media container can be a moment behind while it finishes up with the previous file
         if self._current_media != media or self._media_container.GetMedia() != media:
@@ -6021,6 +6021,12 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
             # a file that already played through (the same file again in a row) cannot tell us when it plays through this time
             self._playlist_item_had_played_once_at_start = self._media_container.HasPlayedOnceThrough()
             
+            # only mpv can play backwards. with the other players, a reversed item plays forwards
+            self._playlist_item_reverse = reverse and self._media_container.CanPlayReversed()
+            
+            # this also sets it back to forwards for an item that is not reversed, if the same file was reversed just before
+            self._media_container.SetPlaybackReversed( self._playlist_item_reverse )
+            
             # a playlist plays, whatever the 'start paused' options say
             if self._media_container.IsPaused():
                 
@@ -6035,9 +6041,9 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
                 return
                 
             
-            target_ms = 0 if start_ms is None else start_ms
+            target_ms = self._GetPlaylistItemEntryMS( media, start_ms, end_ms, self._playlist_item_reverse )
             
-            if ClientMediaPlaylists.PlaylistSeekHasLanded( current_timestamp_ms, target_ms ) or self._playlist_item_seek_attempts >= PLAYLIST_SEEK_MAX_ATTEMPTS:
+            if ClientMediaPlaylists.PlaylistSeekHasLanded( current_timestamp_ms, target_ms, reverse = self._playlist_item_reverse ) or self._playlist_item_seek_attempts >= PLAYLIST_SEEK_MAX_ATTEMPTS:
                 
                 self._playlist_item_seek_confirmed = True
                 
@@ -6089,18 +6095,25 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
             return
             
         
-        item_is_done = ClientMediaPlaylists.PlaylistItemIsDone(
-            end_ms,
-            self._current_media.GetDurationMS(),
-            current_timestamp_ms,
-            last_timestamp_ms,
-            self._playlist_item_had_played_once_at_start,
-            self._media_container.HasPlayedOnceThrough()
-        )
+        if self._playlist_item_reverse:
+            
+            item_is_done = ClientMediaPlaylists.PlaylistReversedItemIsDone( start_ms, current_timestamp_ms, last_timestamp_ms )
+            
+        else:
+            
+            item_is_done = ClientMediaPlaylists.PlaylistItemIsDone(
+                end_ms,
+                self._current_media.GetDurationMS(),
+                current_timestamp_ms,
+                last_timestamp_ms,
+                self._playlist_item_had_played_once_at_start,
+                self._media_container.HasPlayedOnceThrough()
+            )
+            
         
         if not item_is_done:
             
-            item_is_done = self._PlaylistItemLastFrameIsDone( end_ms, current_timestamp_ms, now )
+            item_is_done = self._PlaylistItemLastFrameIsDone( start_ms, end_ms, current_timestamp_ms, now )
             
         
         if item_is_done:
@@ -6109,7 +6122,8 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
             
             if ClientMediaPlaylists.PlaylistItemShouldPlayAgain( self._playlist_item_loop_type, self._playlist_item_loop_times, self._playlist_item_passes_done ):
                 
-                self._RestartPlaylistItemPass( start_ms, now )
+                # an item playing in reverse goes back round from its end
+                self._RestartPlaylistItemPass( self._GetPlaylistItemEntryMS( media, start_ms, end_ms, self._playlist_item_reverse ), now )
                 
             else:
                 
@@ -6120,8 +6134,8 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
     
     def _ExportPlayingPlaylist( self ):
         
-        # in playlist order, even if it is playing randomized
-        playlist_items = [ ( media.GetMediaResult(), start_ms, end_ms ) for ( media, start_ms, end_ms ) in self._playlist_items ]
+        # in playlist order, even if it is playing randomized. the export always plays forwards
+        playlist_items = [ ( media.GetMediaResult(), start_ms, end_ms ) for ( media, start_ms, end_ms, reverse ) in self._playlist_items ]
         
         if len( playlist_items ) == 0:
             
@@ -6264,6 +6278,27 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         return self._playlist_shuffle_order[ next_position ]
         
     
+    def _GetPlaylistItemEntryMS( self, media: ClientMediaSingle.MediaSingle, start_ms: int | None, end_ms: int | None, reverse: bool ) -> int:
+        
+        # where the item starts playing from: its start, or its end if it plays backwards
+        duration_ms = media.GetDurationMS()
+        
+        frame_duration_ms = ClientMediaPlaylists.GetPlaylistFrameDurationMS( duration_ms, media.GetNumFrames() )
+        
+        return ClientMediaPlaylists.GetPlaylistItemEntryMS( start_ms, end_ms, duration_ms, frame_duration_ms, reverse )
+        
+    
+    def _GetPlaylistItemLoadStartMS( self, media: ClientMediaSingle.MediaSingle, start_ms: int | None, end_ms: int | None, reverse: bool ) -> int | None:
+        
+        # where a player that can start part way in should load the file. only mpv does that, and it can play backwards, so a reversed item loads at its end
+        if not reverse:
+            
+            return start_ms
+            
+        
+        return self._GetPlaylistItemEntryMS( media, start_ms, end_ms, reverse )
+        
+    
     def _GetPlaylistStillPeriod( self ) -> float:
         
         # an image or similar stays up for as long as each item loops for, if that is set
@@ -6318,7 +6353,7 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         
         for offset in offsets:
             
-            ( media, start_ms, end_ms ) = self._playlist_items[ play_order[ ( position + offset ) % num_items ] ]
+            ( media, start_ms, end_ms, reverse ) = self._playlist_items[ play_order[ ( position + offset ) % num_items ] ]
             
             if media not in media_looked_at:
                 
@@ -6349,7 +6384,7 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
             return
             
         
-        ( media, start_ms, end_ms ) = self._playlist_items[ upcoming_index ]
+        ( media, start_ms, end_ms, reverse ) = self._playlist_items[ upcoming_index ]
         
         # the same file again just goes back to where it starts
         if media == self._current_media:
@@ -6357,7 +6392,7 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
             return
             
         
-        self._media_container.PreloadMedia( media, start_ms )
+        self._media_container.PreloadMedia( media, self._GetPlaylistItemLoadStartMS( media, start_ms, end_ms, reverse ) )
         
     
     def _PausePlaySlideshow( self ):
@@ -6365,15 +6400,23 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         pass
         
     
-    def _PlaylistItemLastFrameIsDone( self, end_ms: int | None, current_timestamp_ms: float, now: float ) -> bool:
+    def _PlaylistItemLastFrameIsDone( self, start_ms: int | None, end_ms: int | None, current_timestamp_ms: float, now: float ) -> bool:
         
         duration_ms = self._current_media.GetDurationMS()
         
-        item_end_ms = end_ms if end_ms is not None else duration_ms
-        
         frame_duration_ms = ClientMediaPlaylists.GetPlaylistFrameDurationMS( duration_ms, self._current_media.GetNumFrames() )
         
-        time_left_ms = ClientMediaPlaylists.GetPlaylistItemLastFrameTimeLeftMS( item_end_ms, current_timestamp_ms, frame_duration_ms )
+        if self._playlist_item_reverse:
+            
+            # playing backwards, the last frame is the one at the start
+            time_left_ms = ClientMediaPlaylists.GetPlaylistReversedItemLastFrameTimeLeftMS( start_ms, current_timestamp_ms, frame_duration_ms )
+            
+        else:
+            
+            item_end_ms = end_ms if end_ms is not None else duration_ms
+            
+            time_left_ms = ClientMediaPlaylists.GetPlaylistItemLastFrameTimeLeftMS( item_end_ms, current_timestamp_ms, frame_duration_ms )
+            
         
         if time_left_ms is None:
             
@@ -6426,9 +6469,9 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
     
     def _RemovePlaylistItemsForMedias( self, medias: collections.abc.Collection[ ClientMediaSingle.MediaSingle ] ):
         
-        ( current_media, current_start_ms, current_end_ms ) = self._playlist_items[ self._playlist_index ]
+        ( current_media, current_start_ms, current_end_ms, current_reverse ) = self._playlist_items[ self._playlist_index ]
         
-        kept_indices = [ index for ( index, ( media, start_ms, end_ms ) ) in enumerate( self._playlist_items ) if media not in medias ]
+        kept_indices = [ index for ( index, ( media, start_ms, end_ms, reverse ) ) in enumerate( self._playlist_items ) if media not in medias ]
         
         self._playlist_items = [ self._playlist_items[ index ] for index in kept_indices ]
         
@@ -6470,7 +6513,7 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
     
     def _RestartPlaylistItemPass( self, start_ms: int | None, now: float ):
         
-        # back to the start of the item for another time through. it plays on from there, and we check it got there, like when an item starts
+        # back to where the item starts for another time through. start_ms is where it starts playing from, so the end for one in reverse. it plays on from there, and we check it got there, like when an item starts
         self._playlist_item_seek_confirmed = False
         self._playlist_item_seek_attempts = 0
         self._playlist_item_seek_time = now
@@ -6491,6 +6534,9 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         
         # whether this item has gone to the locked zoom and pan yet
         self._playlist_item_view_applied = False
+        
+        # whether this item is playing backwards. it is only known once the item is ready, since it depends on the player
+        self._playlist_item_reverse = False
         
         self._playlist_item_seek_confirmed = False
         self._playlist_item_seek_attempts = 0
@@ -6604,7 +6650,7 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
             self._playlist_shuffle_position = self._playlist_shuffle_order.index( index )
             
         
-        ( media, start_ms, end_ms ) = self._playlist_items[ index ]
+        ( media, start_ms, end_ms, reverse ) = self._playlist_items[ index ]
         
         if self._playlist_lock_position:
             
@@ -6623,7 +6669,7 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         if media != self._current_media:
             
             # a player that can start part way in never shows what comes before the part we want
-            self._media_container.SetNextMediaStartMS( media, start_ms )
+            self._media_container.SetNextMediaStartMS( media, self._GetPlaylistItemLoadStartMS( media, start_ms, end_ms, reverse ) )
             
         
         self.SetMedia( media, start_paused = False )
@@ -6683,7 +6729,7 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         self._media_list.ProcessContentUpdatePackage( content_update_package )
         
         # a file that was deleted drops out of the media list, and so out of what we play
-        gone_medias = { media for ( media, start_ms, end_ms ) in self._playlist_items if not self._media_list.HasMedia( media ) }
+        gone_medias = { media for ( media, start_ms, end_ms, reverse ) in self._playlist_items if not self._media_list.HasMedia( media ) }
         
         if len( gone_medias ) > 0:
             

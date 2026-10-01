@@ -6,6 +6,7 @@ from hydrus.core import HydrusNumbers
 from hydrus.core import HydrusTime
 
 # playlists are named, ordered lists of files. each item is a whole file, or just the span between two timestamps of it
+# an item can play in reverse, from its end back to its start. only mpv can do that, so with the other players it plays forwards
 # they live in the db. these are the bits of logic the gui and the db share
 
 # playback that jumps back more than this from near the end of an item has looped round to the start
@@ -154,6 +155,43 @@ def GetPlaylistIndexAfterRemoval( index: int, kept_indices: list[ int ] ) -> int
     return bisect.bisect_left( kept_indices, index ) % len( kept_indices )
     
 
+def GetPlaylistItemEntryMS( start_ms: int | None, end_ms: int | None, duration_ms: int | None, frame_duration_ms: float, reverse: bool ) -> int:
+    
+    # where an item starts playing from. that is its start, or for one playing in reverse, its end
+    if not reverse:
+        
+        return 0 if start_ms is None else start_ms
+        
+    
+    if end_ms is not None:
+        
+        return end_ms
+        
+    
+    if duration_ms is None or duration_ms <= 0:
+        
+        return 0
+        
+    
+    # the very end of the file is after its last frame starts
+    return max( 0, int( duration_ms - frame_duration_ms ) )
+    
+
+def GetPlaylistReversedItemLastFrameTimeLeftMS( item_start_ms: int | None, current_timestamp_ms: float, frame_duration_ms: float ) -> float | None:
+    
+    # like GetPlaylistItemLastFrameTimeLeftMS, but for an item playing in reverse, whose last frame is the one at its start
+    item_start_ms = 0 if item_start_ms is None else item_start_ms
+    
+    time_left_ms = current_timestamp_ms - item_start_ms
+    
+    if time_left_ms > frame_duration_ms + PLAYLIST_LAST_FRAME_SLACK_MS:
+        
+        return None
+        
+    
+    return max( 0.0, time_left_ms )
+    
+
 def GetPlaylistItemSpanFromABLoop( a_ms: int | None, b_ms: int | None ) -> tuple[ int | None, int | None ]:
     
     # an A-B repeat is only running once B is set, and a missing A means the start of the file
@@ -208,9 +246,38 @@ def RemapPlaylistOrderAfterRemoval( order: list[ int ], position: int, kept_indi
     return ( new_order, new_position )
     
 
-def PlaylistSeekHasLanded( current_timestamp_ms: int, target_ms: int ) -> bool:
+def PlaylistSeekHasLanded( current_timestamp_ms: int, target_ms: int, reverse: bool = False ) -> bool:
+    
+    if reverse:
+        
+        # playing in reverse, it plays on back from where we sent it
+        return target_ms - PLAYLIST_SEEK_LANDED_AFTER_MS <= current_timestamp_ms <= target_ms + PLAYLIST_SEEK_LANDED_BEFORE_MS
+        
     
     return target_ms - PLAYLIST_SEEK_LANDED_BEFORE_MS <= current_timestamp_ms <= target_ms + PLAYLIST_SEEK_LANDED_AFTER_MS
+    
+
+def PlaylistReversedItemIsDone(
+    start_ms: int | None,
+    current_timestamp_ms: int,
+    last_timestamp_ms: int | None
+) -> bool:
+    
+    # an item playing in reverse is done when playback runs back past its start
+    item_start_ms = 0 if start_ms is None else start_ms
+    
+    if start_ms is not None and current_timestamp_ms < item_start_ms:
+        
+        return True
+        
+    
+    # a jump forward from near its start is the player looping round to the end. a jump forward from anywhere else is the user seeking
+    if last_timestamp_ms is not None and current_timestamp_ms > last_timestamp_ms + PLAYLIST_LOOP_DETECTION_MS and last_timestamp_ms <= item_start_ms + PLAYLIST_LOOP_DETECTION_MS:
+        
+        return True
+        
+    
+    return False
     
 
 def PlaylistItemIsDone(

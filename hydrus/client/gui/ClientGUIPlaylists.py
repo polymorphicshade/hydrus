@@ -29,20 +29,25 @@ from hydrus.client.media import ClientMediaPlaylists
 from hydrus.client.media import ClientMediaResult
 from hydrus.client.media import ClientMediaSingle
 
-# ( hash, start_ms, end_ms )
-PlaylistItem = tuple[ bytes, int | None, int | None ]
+# ( hash, start_ms, end_ms, reverse )
+PlaylistItem = tuple[ bytes, int | None, int | None, bool ]
 
 # where the last playlist export went, this session, so the next one starts there
 LAST_PLAYLIST_EXPORT_DIR = None
 
-def ConvertPlaylistItemToPretty( name: str, start_ms: int | None, end_ms: int | None ) -> str:
+def ConvertPlaylistItemToPretty( name: str, start_ms: int | None, end_ms: int | None, reverse: bool = False ) -> str:
     
-    if start_ms is None or end_ms is None:
+    if start_ms is not None and end_ms is not None:
         
-        return name
+        name = f'{name} ({ClientGUICanvasMedia.ConvertPlaybackTimestampToString( start_ms )} - {ClientGUICanvasMedia.ConvertPlaybackTimestampToString( end_ms )})'
         
     
-    return f'{name} ({ClientGUICanvasMedia.ConvertPlaybackTimestampToString( start_ms )} - {ClientGUICanvasMedia.ConvertPlaybackTimestampToString( end_ms )})'
+    if reverse:
+        
+        name = f'{name} (in reverse)'
+        
+    
+    return name
     
 
 def ConvertPlaylistToPretty( playlist: ClientMediaPlaylists.PlaylistSummary ) -> str:
@@ -184,12 +189,13 @@ def PickAndExportPlaylist( win: QW.QWidget ):
         return
         
     
-    media_results = CG.client_controller.Read( 'media_results', { hash for ( hash, start_ms, end_ms ) in items } )
+    media_results = CG.client_controller.Read( 'media_results', { hash for ( hash, start_ms, end_ms, reverse ) in items } )
     
     # a file that was deleted is skipped, like when the playlist plays
     hashes_to_media_results = { media_result.GetHash() : media_result for media_result in media_results if media_result.GetLocationsManager().IsLocal() }
     
-    playlist_items = [ ( hashes_to_media_results[ hash ], start_ms, end_ms ) for ( hash, start_ms, end_ms ) in items if hash in hashes_to_media_results ]
+    # the export always plays forwards
+    playlist_items = [ ( hashes_to_media_results[ hash ], start_ms, end_ms ) for ( hash, start_ms, end_ms, reverse ) in items if hash in hashes_to_media_results ]
     
     if len( playlist_items ) == 0:
         
@@ -245,14 +251,14 @@ def ViewPlaylistItems( win: QW.QWidget, items: list[ PlaylistItem ] ):
     from hydrus.client.gui.canvas import ClientGUICanvas
     from hydrus.client.gui.canvas import ClientGUICanvasFrame
     
-    hashes = HydrusLists.DedupeList( [ hash for ( hash, start_ms, end_ms ) in items ] )
+    hashes = HydrusLists.DedupeList( [ hash for ( hash, start_ms, end_ms, reverse ) in items ] )
     
     media_results = CG.client_controller.Read( 'media_results', hashes )
     
     # a file that was deleted, or that the media viewer cannot show, is skipped
     hashes_to_media_results = { media_result.GetHash() : media_result for media_result in media_results if media_result.GetLocationsManager().IsLocal() and ClientMedia.CanDisplayMediaResult( media_result ) }
     
-    viewable_items = [ ( hash, start_ms, end_ms ) for ( hash, start_ms, end_ms ) in items if hash in hashes_to_media_results ]
+    viewable_items = [ ( hash, start_ms, end_ms ) for ( hash, start_ms, end_ms, reverse ) in items if hash in hashes_to_media_results ]
     
     if len( viewable_items ) == 0:
         
@@ -416,7 +422,7 @@ class EditPlaylistsPanel( ClientGUIScrolledPanels.EditPanel ):
             items = CG.client_controller.Read( 'playlist_items', playlist_id )
             
         
-        hashes_to_names = GetPlaylistItemNames( { hash for ( hash, start_ms, end_ms ) in items } )
+        hashes_to_names = GetPlaylistItemNames( { hash for ( hash, start_ms, end_ms, reverse ) in items } )
         
         with ClientGUITopLevelWindowsPanels.DialogEdit( self, f'edit items: {name}' ) as dlg:
             
@@ -560,6 +566,8 @@ class EditPlaylistItemsPanel( ClientGUIScrolledPanels.EditPanel ):
         help_text = 'Drag and drop to change the order, or select some and move them up and down. Duplicate an item to have it play again somewhere else, and remove items you do not want.'
         help_text += '\n' * 2
         help_text += 'Double-click an item, or select some and hit \'view\', to see what they are in a media viewer. It starts on the first one, at the start of its part (with mpv), and you can step through the others.'
+        help_text += '\n' * 2
+        help_text += '\'reverse\' makes the selected items play backwards, from their end to their start, or back to normal if they all already do. Only mpv can play backwards, so with the other players, and for images, they play as normal. A playlist export always plays forwards.'
         
         st = ClientGUICommon.BetterStaticText( self, label = help_text )
         st.setWordWrap( True )
@@ -575,6 +583,7 @@ class EditPlaylistItemsPanel( ClientGUIScrolledPanels.EditPanel ):
         self._move_up_button = ClientGUICommon.BetterButton( self, 'move up', self._Move, -1 )
         self._move_down_button = ClientGUICommon.BetterButton( self, 'move down', self._Move, 1 )
         self._duplicate_button = ClientGUICommon.BetterButton( self, 'duplicate', self._Duplicate )
+        self._reverse_button = ClientGUICommon.BetterButton( self, 'reverse', self._FlipReverse )
         self._remove_button = ClientGUICommon.BetterButton( self, 'remove', self._Remove )
         
         #
@@ -594,6 +603,7 @@ class EditPlaylistItemsPanel( ClientGUIScrolledPanels.EditPanel ):
         QP.AddToLayout( button_hbox, self._move_up_button, CC.FLAGS_EXPAND_BOTH_WAYS )
         QP.AddToLayout( button_hbox, self._move_down_button, CC.FLAGS_EXPAND_BOTH_WAYS )
         QP.AddToLayout( button_hbox, self._duplicate_button, CC.FLAGS_EXPAND_BOTH_WAYS )
+        QP.AddToLayout( button_hbox, self._reverse_button, CC.FLAGS_EXPAND_BOTH_WAYS )
         QP.AddToLayout( button_hbox, self._remove_button, CC.FLAGS_EXPAND_BOTH_WAYS )
         
         vbox = QP.VBoxLayout()
@@ -657,6 +667,32 @@ class EditPlaylistItemsPanel( ClientGUIScrolledPanels.EditPanel ):
         self._UpdateLabels()
         
     
+    def _FlipReverse( self ):
+        
+        selected_indices = self._items_list.GetSelectedIndices()
+        
+        if len( selected_indices ) == 0:
+            
+            return
+            
+        
+        keys = self._items_list.GetData()
+        
+        selected_keys = [ keys[ index ] for index in selected_indices ]
+        
+        # if any are forwards, they all go in reverse. if they are all in reverse already, they all go back to forwards
+        reverse = not all( self._keys_to_items[ key ][3] for key in selected_keys )
+        
+        for key in selected_keys:
+            
+            ( hash, start_ms, end_ms, old_reverse ) = self._keys_to_items[ key ]
+            
+            self._keys_to_items[ key ] = ( hash, start_ms, end_ms, reverse )
+            
+        
+        self._UpdateLabels()
+        
+    
     def _Move( self, direction: int ):
         
         selected_indices = self._items_list.GetSelectedIndices()
@@ -712,6 +748,7 @@ class EditPlaylistItemsPanel( ClientGUIScrolledPanels.EditPanel ):
         self._move_up_button.setEnabled( num_selected > 0 and min( selected_indices ) > 0 )
         self._move_down_button.setEnabled( num_selected > 0 and max( selected_indices ) < self._items_list.count() - 1 )
         self._duplicate_button.setEnabled( num_selected > 0 )
+        self._reverse_button.setEnabled( num_selected > 0 )
         self._remove_button.setEnabled( num_selected > 0 )
         
     
@@ -728,11 +765,11 @@ class EditPlaylistItemsPanel( ClientGUIScrolledPanels.EditPanel ):
                 continue
                 
             
-            ( hash, start_ms, end_ms ) = self._keys_to_items[ key ]
+            ( hash, start_ms, end_ms, reverse ) = self._keys_to_items[ key ]
             
             name = self._hashes_to_names.get( hash, hash.hex()[:12] )
             
-            list_widget_item.setText( f'{HydrusNumbers.ToHumanInt( index + 1 )}. {ConvertPlaylistItemToPretty( name, start_ms, end_ms )}' )
+            list_widget_item.setText( f'{HydrusNumbers.ToHumanInt( index + 1 )}. {ConvertPlaylistItemToPretty( name, start_ms, end_ms, reverse = reverse )}' )
             
         
     

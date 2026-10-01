@@ -5438,12 +5438,12 @@ ATTACH "client.mappings.db" as external_mappings;'''
             return
             
         
-        media_results = CG.client_controller.Read( 'media_results', { hash for ( hash, start_ms, end_ms ) in items } )
+        media_results = CG.client_controller.Read( 'media_results', { hash for ( hash, start_ms, end_ms, reverse ) in items } )
         
         # a file that was deleted, or that the media viewer cannot show, is skipped
         hashes_to_media_results = { media_result.GetHash() : media_result for media_result in media_results if media_result.GetLocationsManager().IsLocal() and ClientMedia.CanDisplayMediaResult( media_result ) }
         
-        playlist_items = [ ( hashes_to_media_results[ hash ], start_ms, end_ms ) for ( hash, start_ms, end_ms ) in items if hash in hashes_to_media_results ]
+        playlist_items = [ ( hashes_to_media_results[ hash ], start_ms, end_ms, reverse ) for ( hash, start_ms, end_ms, reverse ) in items if hash in hashes_to_media_results ]
         
         if len( playlist_items ) == 0:
             

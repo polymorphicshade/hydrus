@@ -63,7 +63,7 @@ def GetPlaylistCanvas( num_items: int ):
     
     canvas._canvas_key = os.urandom( 32 )
     canvas._playlist_name = 'test'
-    canvas._playlist_items = [ ( HF.GetFakeMediaResult( os.urandom( 32 ), mime = HC.VIDEO_MP4 ), None, None ) for i in range( num_items ) ]
+    canvas._playlist_items = [ ( HF.GetFakeMediaResult( os.urandom( 32 ), mime = HC.VIDEO_MP4 ), None, None, False ) for i in range( num_items ) ]
     canvas._playlist_loop = False
     canvas._playlist_index = 0
     canvas._playlist_shuffle_order = None

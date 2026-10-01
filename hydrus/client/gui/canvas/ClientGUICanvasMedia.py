@@ -2111,7 +2111,15 @@ class MediaContainer( QW.QWidget ):
                 
                 self._last_playback_skip_seek = ( skip, HydrusTime.GetNowPrecise() )
                 
-                self._SeekPastPlaybackSkip( end_ms )
+                if self._PlaybackIsReversed():
+                    
+                    # playing backwards, past it is just before its start
+                    self._media_window.Seek( max( 0, start_ms - 1 ) )
+                    
+                else:
+                    
+                    self._SeekPastPlaybackSkip( end_ms )
+                    
                 
                 return
                 
@@ -3331,6 +3339,11 @@ class MediaContainer( QW.QWidget ):
         CG.client_controller.pub( 'new_file_zoom_timestamps', hash, self._zoom_timestamps )
         
     
+    def _PlaybackIsReversed( self ) -> bool:
+        
+        return isinstance( self._media_window, ClientGUIMPV.MPVWidget ) and self._media_window.IsPlaybackReversed()
+        
+    
     def _SeekPastPlaybackSkip( self, end_ms: int ):
         
         if isinstance( self._media_window, Animation ):
@@ -3869,6 +3882,12 @@ class MediaContainer( QW.QWidget ):
         
         # the zoom stays where it is. it goes back to normal next time the file is opened
         self._current_zoom_timestamp = None
+        
+    
+    def CanPlayReversed( self ) -> bool:
+        
+        # only mpv can play backwards
+        return isinstance( self._media_window, ClientGUIMPV.MPVWidget )
         
     
     def CurrentlyPresentingMediaWithDuration( self ):
@@ -4815,6 +4834,15 @@ class MediaContainer( QW.QWidget ):
         self.show()
         
         self._UpdateWindowAlwaysOnTop()
+        
+    
+    def SetPlaybackReversed( self, reverse: bool ):
+        
+        # this does nothing for a player that cannot play backwards. a new file always starts playing forwards
+        if isinstance( self._media_window, ClientGUIMPV.MPVWidget ):
+            
+            self._media_window.SetPlaybackReversed( reverse )
+            
         
     
     def SetNextMediaStartMS( self, media: ClientMediaSingle.MediaSingle, start_ms: int | None ):

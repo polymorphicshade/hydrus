@@ -35,9 +35,10 @@ class ClientDBPlaylists( ClientDBModule.ClientDBModule ):
     def _GetInitialTableGenerationDict( self ) -> dict:
         
         # start_ms and end_ms are both NULL when the item is the whole file
+        # reverse is 1 when the item plays backwards, from its end to its start
         return {
             'main.playlists' : ( 'CREATE TABLE IF NOT EXISTS {} ( playlist_id INTEGER PRIMARY KEY, name TEXT UNIQUE );', 688 ),
-            'main.playlist_items' : ( 'CREATE TABLE IF NOT EXISTS {} ( playlist_id INTEGER, position INTEGER, hash_id INTEGER, start_ms INTEGER, end_ms INTEGER, PRIMARY KEY ( playlist_id, position ) );', 688 )
+            'main.playlist_items' : ( 'CREATE TABLE IF NOT EXISTS {} ( playlist_id INTEGER, position INTEGER, hash_id INTEGER, start_ms INTEGER, end_ms INTEGER, reverse INTEGER NOT NULL DEFAULT 0, PRIMARY KEY ( playlist_id, position ) );', 688 )
         }
         
     
@@ -66,13 +67,13 @@ class ClientDBPlaylists( ClientDBModule.ClientDBModule ):
         return playlist_id
         
     
-    def GetPlaylistItems( self, playlist_id: int ) -> list[ tuple[ bytes, int | None, int | None ] ]:
+    def GetPlaylistItems( self, playlist_id: int ) -> list[ tuple[ bytes, int | None, int | None, bool ] ]:
         
-        rows = self._Execute( 'SELECT hash_id, start_ms, end_ms FROM playlist_items WHERE playlist_id = ? ORDER BY position;', ( playlist_id, ) ).fetchall()
+        rows = self._Execute( 'SELECT hash_id, start_ms, end_ms, reverse FROM playlist_items WHERE playlist_id = ? ORDER BY position;', ( playlist_id, ) ).fetchall()
         
-        hash_ids_to_hashes = self.modules_hashes_local_cache.GetHashIdsToHashes( hash_ids = { hash_id for ( hash_id, start_ms, end_ms ) in rows } )
+        hash_ids_to_hashes = self.modules_hashes_local_cache.GetHashIdsToHashes( hash_ids = { hash_id for ( hash_id, start_ms, end_ms, reverse ) in rows } )
         
-        return [ ( hash_ids_to_hashes[ hash_id ], start_ms, end_ms ) for ( hash_id, start_ms, end_ms ) in rows ]
+        return [ ( hash_ids_to_hashes[ hash_id ], start_ms, end_ms, bool( reverse ) ) for ( hash_id, start_ms, end_ms, reverse ) in rows ]
         
     
     def GetPlaylists( self ) -> list[ ClientMediaPlaylists.PlaylistSummary ]:
@@ -138,10 +139,20 @@ class ClientDBPlaylists( ClientDBModule.ClientDBModule ):
             cursor_transaction_wrapper.CommitAndBegin()
             
         
+        column_names = [ name for ( cid, name, column_type, nullability, default_value, pk ) in self._Execute( 'PRAGMA table_info( playlist_items );' ).fetchall() ]
+        
+        if 'reverse' not in column_names:
+            
+            # the table is from before items could play backwards. everything in it plays forwards
+            self._Execute( 'ALTER TABLE playlist_items ADD COLUMN reverse INTEGER NOT NULL DEFAULT 0;' )
+            
+            cursor_transaction_wrapper.CommitAndBegin()
+            
+        
         super().Repair( current_db_version, cursor_transaction_wrapper )
         
     
-    def SetPlaylistItems( self, playlist_id: int, items: collections.abc.Sequence[ tuple[ bytes, int | None, int | None ] ] ):
+    def SetPlaylistItems( self, playlist_id: int, items: collections.abc.Sequence[ tuple[ bytes, int | None, int | None, bool ] ] ):
         
         # the whole playlist, in order. this is how the playlist editor moves, duplicates, and removes items
         result = self._Execute( 'SELECT 1 FROM playlists WHERE playlist_id = ?;', ( playlist_id, ) ).fetchone()
@@ -154,9 +165,9 @@ class ClientDBPlaylists( ClientDBModule.ClientDBModule ):
         
         self._Execute( 'DELETE FROM playlist_items WHERE playlist_id = ?;', ( playlist_id, ) )
         
-        rows = [ ( playlist_id, position, self.modules_hashes_local_cache.GetHashId( hash ), start_ms, end_ms ) for ( position, ( hash, start_ms, end_ms ) ) in enumerate( items ) ]
+        rows = [ ( playlist_id, position, self.modules_hashes_local_cache.GetHashId( hash ), start_ms, end_ms, int( reverse ) ) for ( position, ( hash, start_ms, end_ms, reverse ) ) in enumerate( items ) ]
         
-        self._ExecuteMany( 'INSERT INTO playlist_items ( playlist_id, position, hash_id, start_ms, end_ms ) VALUES ( ?, ?, ?, ?, ? );', rows )
+        self._ExecuteMany( 'INSERT INTO playlist_items ( playlist_id, position, hash_id, start_ms, end_ms, reverse ) VALUES ( ?, ?, ?, ?, ?, ? );', rows )
         
     
     def SetPlaylists( self, playlists: collections.abc.Collection[ tuple[ int | None, str ] ] ):

@@ -385,6 +385,11 @@ class MPVMediator( object ):
         raise NotImplementedError()
         
     
+    def SetPlayDirection( self, reverse: bool ):
+        
+        raise NotImplementedError()
+        
+    
     def TakeSnapshot( self, path: str ):
         
         # 'video' means the frame as decoded, at its own resolution, without subtitles or osd. mpv picks the image format from the extension
@@ -552,6 +557,11 @@ class MPVMediatorRude( MPVMediator ):
         
         self._mpv_player[ 'ab-loop-a' ] = a_value
         self._mpv_player[ 'ab-loop-b' ] = b_value
+        
+    
+    def SetPlayDirection( self, reverse: bool ):
+        
+        self._mpv_player.play_direction = 'backward' if reverse else 'forward'
         
     
     def SetAudioDevice( self, name: str ):
@@ -790,6 +800,12 @@ class MPVMediatorPolite( MPVMediator ):
         self._mpv_player.command_async( 'set', 'ab-loop-b', b_value )
         
     
+    def SetPlayDirection( self, reverse: bool ):
+        
+        # changing this while a file plays makes mpv do a precise seek to where it is, and carry on the other way from there
+        self._mpv_player.command_async( 'set', 'play-direction', 'backward' if reverse else 'forward' )
+        
+    
     def SetAudioDevice( self, name: str ):
         
         if self._current_audio_device != name:
@@ -922,6 +938,9 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         self._have_shown_human_error_on_this_file = False
         
         self._times_to_play_animation = 0
+        
+        # whether mpv is set to play backwards
+        self._playback_reversed = False
         
         self._current_second_of_seek_restarts = 0.0
         self._number_of_restarts_this_second = 0
@@ -1357,6 +1376,11 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         return self._current_seek_to_start_count > 0
         
     
+    def IsPlaybackReversed( self ) -> bool:
+        
+        return self._playback_reversed
+        
+    
     def IsInitialised( self ):
         
         INITIALISE_TOOK_TOO_LONG_PERIOD = 180
@@ -1604,6 +1628,27 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         self._my_shortcut_handler.SetShortcuts( [ shortcut_set ] )
         
     
+    def SetPlaybackReversed( self, reverse: bool ):
+        
+        # play backwards, from where we are now. a new file always starts playing forwards
+        if self._currently_in_media_load_error_state or reverse == self._playback_reversed:
+            
+            return
+            
+        
+        try:
+            
+            self._mpv_mediator.SetPlayDirection( reverse )
+            
+            self._playback_reversed = reverse
+            
+        except mpv.ShutdownError:
+            
+            # libmpv core probably shut down
+            pass
+            
+        
+    
     def SetLogLevel( self, level: str ):
         
         try:
@@ -1657,6 +1702,15 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
             
             # ab-loop points are player-wide in mpv, so they would carry over to the next file
             self._mpv_mediator.SetABLoop( None, None )
+            
+            # and so is the play direction
+            if self._playback_reversed:
+                
+                self._mpv_mediator.SetPlayDirection( False )
+                
+                self._playback_reversed = False
+                
+            
             
             if self._media is None:
                 
