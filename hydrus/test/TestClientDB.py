@@ -1095,22 +1095,42 @@ class TestClientDB( unittest.TestCase ):
         hash_a = os.urandom( 32 )
         hash_b = os.urandom( 32 )
         
-        self.assertIsNone( self._read( 'file_viewer_zoom', hash_a ) )
+        self.assertEqual( self._read( 'file_viewer_zoom', hash_a ), ( None, None ) )
         
         self._write( 'file_viewer_zoom', hash_a, 1.5 )
         self._write( 'file_viewer_zoom', hash_b, 0.25 )
         
-        self.assertEqual( self._read( 'file_viewer_zoom', hash_a ), 1.5 )
-        self.assertEqual( self._read( 'file_viewer_zoom', hash_b ), 0.25 )
+        self.assertEqual( self._read( 'file_viewer_zoom', hash_a ), ( 1.5, None ) )
+        self.assertEqual( self._read( 'file_viewer_zoom', hash_b ), ( 0.25, None ) )
         
         self._write( 'file_viewer_zoom', hash_a, 2.0 )
         
-        self.assertEqual( self._read( 'file_viewer_zoom', hash_a ), 2.0 )
+        self.assertEqual( self._read( 'file_viewer_zoom', hash_a ), ( 2.0, None ) )
         
         self._write( 'file_viewer_zoom', hash_a, None )
         
-        self.assertIsNone( self._read( 'file_viewer_zoom', hash_a ) )
-        self.assertEqual( self._read( 'file_viewer_zoom', hash_b ), 0.25 )
+        self.assertEqual( self._read( 'file_viewer_zoom', hash_a ), ( None, None ) )
+        self.assertEqual( self._read( 'file_viewer_zoom', hash_b ), ( 0.25, None ) )
+        
+        # where it was panned to goes with the zoom
+        self._write( 'file_viewer_zoom', hash_a, 2.0, ( 0.25, 0.75 ) )
+        
+        self.assertEqual( self._read( 'file_viewer_zoom', hash_a ), ( 2.0, ( 0.25, 0.75 ) ) )
+        
+        # a file at its normal zoom can still be panned
+        self._write( 'file_viewer_zoom', hash_a, None, ( 0.1, 0.9 ) )
+        
+        self.assertEqual( self._read( 'file_viewer_zoom', hash_a ), ( None, ( 0.1, 0.9 ) ) )
+        
+        # zooming again without a pan centers it
+        self._write( 'file_viewer_zoom', hash_a, 3.0 )
+        
+        self.assertEqual( self._read( 'file_viewer_zoom', hash_a ), ( 3.0, None ) )
+        
+        # neither is the file back to normal
+        self._write( 'file_viewer_zoom', hash_a, None, None )
+        
+        self.assertEqual( self._read( 'file_viewer_zoom', hash_a ), ( None, None ) )
         
     
     def test_file_scripted_events( self ):
@@ -1232,8 +1252,8 @@ class TestClientDB( unittest.TestCase ):
         self._write( 'clear_all_file_viewer_zooms' )
         
         self.assertEqual( self._read( 'num_file_viewer_zooms' ), 0 )
-        self.assertIsNone( self._read( 'file_viewer_zoom', hash_a ) )
-        self.assertIsNone( self._read( 'file_viewer_zoom', hash_b ) )
+        self.assertEqual( self._read( 'file_viewer_zoom', hash_a ), ( None, None ) )
+        self.assertEqual( self._read( 'file_viewer_zoom', hash_b ), ( None, None ) )
         
         self.assertEqual( self._read( 'num_files_with_zoom_timestamps' ), num_files_with_zoom_timestamps + 2 )
         self.assertEqual( self._read( 'file_zoom_timestamps', hash_c ), [ ( 250, 2.0, True, 0.1, 0.9 ) ] )
@@ -1247,7 +1267,7 @@ class TestClientDB( unittest.TestCase ):
         # and saving new ones afterwards works as normal
         self._write( 'file_viewer_zoom', hash_b, 3.0 )
         
-        self.assertEqual( self._read( 'file_viewer_zoom', hash_b ), 3.0 )
+        self.assertEqual( self._read( 'file_viewer_zoom', hash_b ), ( 3.0, None ) )
         self.assertEqual( self._read( 'num_file_viewer_zooms' ), 1 )
         
     

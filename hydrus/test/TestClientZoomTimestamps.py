@@ -50,6 +50,19 @@ class TestZoomTimestamps( unittest.TestCase ):
         self.assertEqual( ClientGUICanvasMedia.ConvertZoomTimestampRowsToRelative( [], 0.5 ), ( [], False ) )
         
     
+    def test_saved_pan_centered( self ):
+        
+        # within a pixel of the middle is centered, so there is nothing to save
+        self.assertTrue( ClientGUICanvasMedia.PanCenterIsCentered( ( 0.5, 0.5 ), ( 1000, 500 ) ) )
+        self.assertTrue( ClientGUICanvasMedia.PanCenterIsCentered( ( 0.5005, 0.499 ), ( 1000, 500 ) ) )
+        
+        self.assertFalse( ClientGUICanvasMedia.PanCenterIsCentered( ( 0.502, 0.5 ), ( 1000, 500 ) ) )
+        self.assertFalse( ClientGUICanvasMedia.PanCenterIsCentered( ( 0.5, 0.25 ), ( 1000, 500 ) ) )
+        
+        # a tiny file is always about centered
+        self.assertTrue( ClientGUICanvasMedia.PanCenterIsCentered( ( 0.9, 0.9 ), ( 1, 1 ) ) )
+        
+    
     def test_zoom_timestamp_pan( self ):
         
         # a 1000x500 window, with a 2000x1000 file panned so its top left quarter is showing

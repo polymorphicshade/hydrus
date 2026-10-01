@@ -238,6 +238,18 @@ def GetMediaPosForZoomCenter( canvas_size: tuple[ int, int ], media_size: tuple[
     return ( round( ( canvas_width / 2 ) - ( center_x * media_width ) ), round( ( canvas_height / 2 ) - ( center_y * media_height ) ) )
     
 
+# after the user pans, we wait this long for them to stop before saving where the file is
+PAN_SAVE_DELAY_S = 0.5
+
+def PanCenterIsCentered( center: tuple[ float, float ], media_size: tuple[ int, int ] ) -> bool:
+    
+    # centering rounds to a pixel, so anything within a pixel of the middle is centered
+    ( center_x, center_y ) = center
+    ( media_width, media_height ) = media_size
+    
+    return abs( center_x - 0.5 ) * max( 1, media_width ) < 1 and abs( center_y - 0.5 ) * max( 1, media_height ) < 1
+    
+
 def GetZoomCenter( canvas_size: tuple[ int, int ], media_pos: tuple[ int, int ], media_size: tuple[ int, int ] ) -> tuple[ float, float ]:
     
     # the point of the media in the middle of the canvas, as a fraction of its width and height. zoom timestamps save their pan like this, so it follows the window's size like their zoom does
@@ -1910,6 +1922,12 @@ class MediaContainer( QW.QWidget ):
         self._saved_zoom: float | None = None
         self._saved_zoom_load_id = 0
         
+        # and where it was panned to, saved with the zoom. the part of the file in the middle of the window, as a fraction of its width and height. None is centered
+        self._saved_center: tuple[ float, float ] | None = None
+        
+        # a pan is lots of little moves, so we save it once they stop for a moment. this is bumped on each one, so only the last one saves
+        self._pan_save_id = 0
+        
         # after a move to a screen location, the file sits at the default zoom until the user zooms or we go to another file. its saved zoom stays in the db for next time
         self._holding_default_zoom = False
         
@@ -1925,13 +1943,13 @@ class MediaContainer( QW.QWidget ):
         self._standby_media: ClientMediaSingle.MediaSingle | None = None
         self._standby_start_ms: int | None = None
         
-        # the standby file's saved zoom and zoom timestamp rows, looked up ahead of time, so its zoom is right from the first frame. ( hash, saved_zoom, zoom_timestamp_rows ). None until they come back
-        self._standby_zoom_data: tuple[ bytes, float | None, list ] | None = None
+        # the standby file's saved zoom and zoom timestamp rows, looked up ahead of time, so its zoom is right from the first frame. ( hash, ( saved_zoom, saved_center ), zoom_timestamp_rows ). None until they come back
+        self._standby_zoom_data: tuple[ bytes, tuple, list ] | None = None
         self._standby_zoom_data_load_id = 0
         self._standby_zoom_data_hash: bytes | None = None
         
         # what the new file got from that, waiting for its zoom to be set up. ( load_id, value )
-        self._saved_zoom_from_standby: tuple[ int, float | None ] | None = None
+        self._saved_zoom_from_standby: tuple[ int, tuple ] | None = None
         self._zoom_timestamp_rows_from_standby: tuple[ int, list ] | None = None
         
         self._zoom_types_to_zooms = {
@@ -2600,7 +2618,7 @@ class MediaContainer( QW.QWidget ):
         
         def work_callable():
             
-            saved_zoom = CG.client_controller.Read( 'file_viewer_zoom', hash ) if remembers_file_zooms else None
+            saved_zoom = CG.client_controller.Read( 'file_viewer_zoom', hash ) if remembers_file_zooms else ( None, None )
             zoom_timestamp_rows = CG.client_controller.Read( 'file_zoom_timestamps', hash ) if does_zoom_timestamps else []
             
             return ( saved_zoom, zoom_timestamp_rows )
@@ -2677,15 +2695,26 @@ class MediaContainer( QW.QWidget ):
             
         
     
-    def _SetLoadedSavedZoom( self, zoom: float | None ):
+    def _SetLoadedSavedZoom( self, saved_zoom_and_center: tuple[ float | None, tuple[ float, float ] | None ] ):
         
-        self._saved_zoom = zoom
+        ( self._saved_zoom, self._saved_center ) = saved_zoom_and_center
         
-        if self._saved_zoom is not None and self.IsZoomable() and not self._holding_default_zoom:
+        if ( self._saved_zoom is not None or self._saved_center is not None ) and self.IsZoomable() and not self._holding_default_zoom:
             
-            self._SetZoom( self._GetZoomWithinMaxDimension( self._saved_zoom ) )
+            if self._saved_zoom is not None:
+                
+                self._SetZoom( self._GetZoomWithinMaxDimension( self._saved_zoom ) )
+                
             
-            self.ResetCenterPosition()
+            if self._saved_center is None:
+                
+                self.ResetCenterPosition()
+                
+            else:
+                
+                # the same part of the file in the middle of the window as when it was left
+                self._MoveToZoomCenter( self._saved_center )
+                
             
             # a zoom timestamp we are already in wins over this
             self._current_zoom_timestamp_needs_reapply = True
@@ -2824,6 +2853,7 @@ class MediaContainer( QW.QWidget ):
         load_id = self._saved_zoom_load_id
         
         self._saved_zoom = None
+        self._saved_center = None
         self._saved_zoom_from_standby = None
         
         self._holding_default_zoom = False
@@ -2852,7 +2882,7 @@ class MediaContainer( QW.QWidget ):
             return CG.client_controller.Read( 'file_viewer_zoom', hash )
             
         
-        def publish_callable( zoom ):
+        def publish_callable( saved_zoom_and_center ):
             
             # the media changed, or the user zoomed, while we were waiting
             if load_id != self._saved_zoom_load_id:
@@ -2860,7 +2890,7 @@ class MediaContainer( QW.QWidget ):
                 return
                 
             
-            self._SetLoadedSavedZoom( zoom )
+            self._SetLoadedSavedZoom( saved_zoom_and_center )
             
         
         job = ClientGUIAsync.AsyncQtJob( self, work_callable, publish_callable )
@@ -3225,14 +3255,60 @@ class MediaContainer( QW.QWidget ):
             zoom = self._current_zoom
             
         
+        center = self._GetPanCenterToSave()
+        
         # anything we are still loading is now out of date
         self._saved_zoom_load_id += 1
         
         self._saved_zoom = zoom
+        self._saved_center = center
         
         self._holding_default_zoom = False
         
-        CG.client_controller.Write( 'file_viewer_zoom', self._media.GetHash(), zoom )
+        CG.client_controller.Write( 'file_viewer_zoom', self._media.GetHash(), zoom, center )
+        
+    
+    def _SavePanSoon( self ):
+        
+        # the user moved the file. once they stop for a moment, we remember where it is, with its zoom
+        if self._media is None or not self._remembers_file_zooms:
+            
+            return
+            
+        
+        self._pan_save_id += 1
+        
+        pan_save_id = self._pan_save_id
+        media = self._media
+        
+        def do_it():
+            
+            if pan_save_id != self._pan_save_id or media != self._media:
+                
+                return
+                
+            
+            self._SaveZoom()
+            
+        
+        CG.client_controller.CallLaterQtSafe( self, PAN_SAVE_DELAY_S, 'save media viewer pan', do_it )
+        
+    
+    def _GetPanCenterToSave( self ) -> tuple[ float, float ] | None:
+        
+        # where the file is panned to, as a fraction of it. None if it is centered, give or take a pixel
+        canvas_size = self.parentWidget().size()
+        my_pos = self.pos()
+        my_size = self.size()
+        
+        ( center_x, center_y ) = GetZoomCenter( ( canvas_size.width(), canvas_size.height() ), ( my_pos.x(), my_pos.y() ), ( my_size.width(), my_size.height() ) )
+        
+        if PanCenterIsCentered( ( center_x, center_y ), ( my_size.width(), my_size.height() ) ):
+            
+            return None
+            
+        
+        return ( center_x, center_y )
         
     
     def _SaveZoomTimestamps( self, zoom_timestamps: list[ ZoomTimestamp ] ):
@@ -3864,6 +3940,8 @@ class MediaContainer( QW.QWidget ):
         
         self._MoveDelta( delta )
         
+        self._SavePanSoon()
+        
     
     def DoManualPan( self, delta_x_step, delta_y_step ):
         
@@ -3884,6 +3962,8 @@ class MediaContainer( QW.QWidget ):
         delta = QC.QPoint( delta_x, delta_y )
         
         self._MoveDelta( delta )
+        
+        self._SavePanSoon()
         
     
     def EventEmbedButton( self, event ):
@@ -3936,10 +4016,12 @@ class MediaContainer( QW.QWidget ):
             
         
         self._saved_zoom_load_id += 1
+        self._pan_save_id += 1
         
         self._saved_zoom = None
+        self._saved_center = None
         
-        CG.client_controller.Write( 'file_viewer_zoom', self._media.GetHash(), None )
+        CG.client_controller.Write( 'file_viewer_zoom', self._media.GetHash(), None, None )
         
         self.ZoomReinit()
         
@@ -4141,7 +4223,7 @@ class MediaContainer( QW.QWidget ):
     
     def HasSavedZoom( self ):
         
-        return self._saved_zoom is not None
+        return self._saved_zoom is not None or self._saved_center is not None
         
     
     def IsAtMaxZoom( self ):
@@ -4226,9 +4308,14 @@ class MediaContainer( QW.QWidget ):
         return False
         
     
-    def MoveDelta( self, delta: QC.QPoint ):
+    def MoveDelta( self, delta: QC.QPoint, user_pan: bool = False ):
         
         self._MoveDelta( delta )
+        
+        if user_pan:
+            
+            self._SavePanSoon()
+            
         
     
     def NotifyAllSavedZoomsReset( self, clear_file_viewer_zooms: bool, clear_zoom_timestamps: bool ):
@@ -4243,9 +4330,12 @@ class MediaContainer( QW.QWidget ):
             # anything we are still loading is now out of date
             self._saved_zoom_load_id += 1
             
-            if self._saved_zoom is not None:
+            self._pan_save_id += 1
+            
+            if self._saved_zoom is not None or self._saved_center is not None:
                 
                 self._saved_zoom = None
+                self._saved_center = None
                 
                 # like 'forget this file's zoom', we go back to the normal default zoom
                 if self.IsZoomable():

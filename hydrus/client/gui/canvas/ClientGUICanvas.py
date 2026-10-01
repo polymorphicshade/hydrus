@@ -3617,7 +3617,8 @@ class CanvasWithHovers( Canvas ):
                     self._last_drag_pos = QC.QPoint( event_pos )
                     
                 
-                self._media_container.MoveDelta( delta )
+                # the user dragging the file about
+                self._media_container.MoveDelta( delta, user_pan = True )
                 
             
         else:
@@ -5399,7 +5400,7 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
                     
                     ClientGUIMenus.AppendSeparator( zoom_menu )
                     
-                    ClientGUIMenus.AppendMenuItem( zoom_menu, "forget this file's zoom", 'This file opens at the zoom you last set on it. Go back to the normal default zoom, and open at that from now on.', self._media_container.ForgetSavedZoom )
+                    ClientGUIMenus.AppendMenuItem( zoom_menu, "forget this file's zoom and pan", 'This file opens at the zoom and pan you last left it at. Go back to the normal default zoom, centered, and open like that from now on.', self._media_container.ForgetSavedZoom )
                     
                 
                 ClientGUIMenus.AppendMenu( menu, zoom_menu, 'zoom: {}'.format( ClientData.ConvertZoomToPercentage( self._media_container.GetCurrentZoom() ) ) )
