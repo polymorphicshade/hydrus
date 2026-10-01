@@ -235,3 +235,127 @@ class TestPlaylistNavigation( unittest.TestCase ):
         TG.test_controller.CallBlockingToQtTLW( self._DoHoverButtonsTest )
         
     
+
+class FakeViewMediaContainer( object ):
+    
+    # just the zoom and pan, as ( relative_zoom, center )
+    def __init__( self, media ):
+        
+        self.media = media
+        self.view = ( 1.0, ( 0.5, 0.5 ) )
+        self.ready = True
+        
+    
+    def GetCurrentView( self ):
+        
+        return self.view
+        
+    
+    def GetMedia( self ):
+        
+        return self.media
+        
+    
+    def SetCurrentView( self, relative_zoom, center ):
+        
+        if not self.ready:
+            
+            return False
+            
+        
+        self.view = ( relative_zoom, center )
+        
+        return True
+        
+    
+
+class TestPlaylistLockPosition( unittest.TestCase ):
+    
+    def test_lock_position( self ):
+        
+        canvas = ClientGUICanvas.CanvasPlaylist.__new__( ClientGUICanvas.CanvasPlaylist )
+        
+        media = object()
+        
+        container = FakeViewMediaContainer( media )
+        
+        canvas._current_media = media
+        canvas._media_container = container
+        canvas._playlist_lock_position = False
+        canvas._playlist_locked_view = None
+        canvas._playlist_item_view_applied = False
+        
+        new_options = TG.test_controller.new_options
+        
+        old_value = new_options.GetBoolean( 'playlists_lock_position' )
+        
+        new_options.SetBoolean( 'playlists_lock_position', False )
+        
+        try:
+            
+            # turning it on takes what the item is at now
+            container.view = ( 2.0, ( 0.25, 0.75 ) )
+            
+            canvas._FlipPlaylistLockPosition()
+            
+            self.assertTrue( canvas._playlist_lock_position )
+            self.assertTrue( new_options.GetBoolean( 'playlists_lock_position' ) )
+            self.assertEqual( canvas._playlist_locked_view, ( 2.0, ( 0.25, 0.75 ) ) )
+            
+            # the user zooms this item some more, and that is what the next one gets
+            container.view = ( 3.0, ( 0.5, 0.5 ) )
+            
+            canvas._CapturePlaylistLockedView()
+            
+            self.assertEqual( canvas._playlist_locked_view, ( 3.0, ( 0.5, 0.5 ) ) )
+            
+            # the next item comes up at its own zoom
+            next_media = object()
+            
+            canvas._current_media = next_media
+            container.media = next_media
+            container.view = ( 1.0, ( 0.5, 0.5 ) )
+            
+            canvas._playlist_item_view_applied = False
+            
+            # until it has gone to the locked view, its own zoom is not what the rest get
+            canvas._CapturePlaylistLockedView()
+            
+            self.assertEqual( canvas._playlist_locked_view, ( 3.0, ( 0.5, 0.5 ) ) )
+            
+            # it is not ready to zoom yet, so we try again next time
+            container.ready = False
+            
+            canvas._ApplyPlaylistLockedView()
+            
+            self.assertFalse( canvas._playlist_item_view_applied )
+            self.assertEqual( container.view, ( 1.0, ( 0.5, 0.5 ) ) )
+            
+            container.ready = True
+            
+            canvas._ApplyPlaylistLockedView()
+            
+            self.assertTrue( canvas._playlist_item_view_applied )
+            self.assertEqual( container.view, ( 3.0, ( 0.5, 0.5 ) ) )
+            
+            # turning it off forgets it
+            canvas._FlipPlaylistLockPosition()
+            
+            self.assertFalse( canvas._playlist_lock_position )
+            self.assertIsNone( canvas._playlist_locked_view )
+            
+            # on with nothing locked yet, the next item keeps its own zoom, and that is what the rest get
+            canvas._playlist_lock_position = True
+            canvas._playlist_item_view_applied = False
+            
+            canvas._ApplyPlaylistLockedView()
+            
+            self.assertTrue( canvas._playlist_item_view_applied )
+            self.assertEqual( container.view, ( 3.0, ( 0.5, 0.5 ) ) )
+            
+        finally:
+            
+            new_options.SetBoolean( 'playlists_lock_position', old_value )
+            
+        
+    

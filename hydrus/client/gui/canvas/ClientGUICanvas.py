@@ -5858,6 +5858,12 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         # when locked, the user cannot go to the next/previous item themselves--the playlist moves itself along
         self._playlist_lock_navigation = CG.client_controller.new_options.GetBoolean( 'playlists_lock_navigation' )
         
+        # when the position is locked, every item opens at the zoom and pan the last one was left at
+        self._playlist_lock_position = CG.client_controller.new_options.GetBoolean( 'playlists_lock_position' )
+        
+        # ( relative_zoom, center ), like a media viewer layout, so it follows the window's size. None until we have one
+        self._playlist_locked_view: tuple[ float, tuple[ float, float ] ] | None = None
+        
         self._playlist_index = 0
         
         # when randomize is on, we play the items in this order, as indices into the playlist items. None when it is off
@@ -5917,6 +5923,11 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         if self._current_media != media or self._media_container.GetMedia() != media:
             
             return
+            
+        
+        if self._playlist_lock_position and not self._playlist_item_view_applied:
+            
+            self._ApplyPlaylistLockedView()
             
         
         if not self._media_container.CurrentlyPresentingMediaWithDuration():
@@ -6046,6 +6057,54 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         
         # the hover window's navigation buttons follow this
         CG.client_controller.pub( 'canvas_new_index_string', self._canvas_key, self._GetIndexString() )
+        
+    
+    def _ApplyPlaylistLockedView( self ):
+        
+        if self._playlist_locked_view is None:
+            
+            # nothing to go to yet. this item's zoom and pan will be the one the rest get
+            self._playlist_item_view_applied = True
+            
+            return
+            
+        
+        ( relative_zoom, center ) = self._playlist_locked_view
+        
+        # this is False if the file is not ready to be zoomed yet, so we try again next tick
+        self._playlist_item_view_applied = self._media_container.SetCurrentView( relative_zoom, center )
+        
+    
+    def _CapturePlaylistLockedView( self ):
+        
+        # the zoom and pan this item is at now, which the next ones get. the user may have changed it since we locked it
+        # an item we have not got to the locked view yet still has its own zoom, which we do not want
+        if self._current_media is None or self._media_container.GetMedia() != self._current_media or not self._playlist_item_view_applied:
+            
+            return
+            
+        
+        view = self._media_container.GetCurrentView()
+        
+        if view is not None:
+            
+            self._playlist_locked_view = view
+            
+        
+    
+    def _FlipPlaylistLockPosition( self ):
+        
+        self._playlist_lock_position = CG.client_controller.new_options.FlipBoolean( 'playlists_lock_position' )
+        
+        self._playlist_locked_view = None
+        
+        if self._playlist_lock_position:
+            
+            # what the current item is at now is what they all get
+            self._playlist_item_view_applied = True
+            
+            self._CapturePlaylistLockedView()
+            
         
     
     def _FlipPlaylistLoop( self ):
@@ -6259,6 +6318,7 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         ClientGUIMenus.AppendMenuCheckItem( playlist_menu, 'loop playlist', 'When the playlist ends, start it again from the top.', self._playlist_loop, self._FlipPlaylistLoop )
         ClientGUIMenus.AppendMenuCheckItem( playlist_menu, 'randomize', 'Play everything after this item in a random order. Turn it off to go back to the item you turned it on at, and carry on in order from there.', self._playlist_shuffle_order is not None, self._FlipPlaylistRandomize )
         ClientGUIMenus.AppendMenuCheckItem( playlist_menu, 'lock navigation', 'Stop next/previous/first/last/random from moving to another item, however you ask for them. The playlist still moves itself along.', self._playlist_lock_navigation, self._FlipPlaylistLockNavigation )
+        ClientGUIMenus.AppendMenuCheckItem( playlist_menu, 'lock position', 'Give every item the same zoom and pan: each item opens zoomed and panned like the one before it was left. Zoom or pan an item, and the ones after it follow. Turn it off, and items open at their own zoom again.', self._playlist_lock_position, self._FlipPlaylistLockPosition )
         
         ClientGUIMenus.AppendSeparator( playlist_menu )
         
@@ -6324,6 +6384,9 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         
         self._playlist_item_ready = False
         self._playlist_item_had_played_once_at_start = False
+        
+        # whether this item has gone to the locked zoom and pan yet
+        self._playlist_item_view_applied = False
         
         self._playlist_item_seek_confirmed = False
         self._playlist_item_seek_attempts = 0
@@ -6392,6 +6455,12 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
             
         
         ( media, start_ms, end_ms ) = self._playlist_items[ index ]
+        
+        if self._playlist_lock_position:
+            
+            # the item we are leaving is how the next one should look
+            self._CapturePlaylistLockedView()
+            
         
         if media == self._current_media:
             

@@ -300,6 +300,7 @@ class ClientOptions( HydrusSerialisable.SerialisableBase ):
             'allow_blurhash_fallback' : True,
             'fade_thumbnails' : True,
             'slideshow_always_play_duration_media_once_through' : False,
+            'playlists_lock_position' : False,
             'playlists_loop' : True,
             'playlists_lock_navigation' : True,
             'reopen_media_viewers_on_start' : True,
