@@ -5800,6 +5800,17 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
         return self._slideshow_is_running
         
     
+    def SetNextMediaStartMS( self, hash: bytes, start_ms: int ):
+        
+        # the next time the file with this hash comes up, it starts playing here. only a player that can start part way in, like mpv, does this
+        medias = self._media_list.GetMediaByHashes( { hash } )
+        
+        if len( medias ) > 0:
+            
+            self._media_container.SetNextMediaStartMS( medias[0], start_ms )
+            
+        
+    
     def SupportsSlideshow( self ) -> bool:
         
         return True

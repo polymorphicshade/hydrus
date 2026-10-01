@@ -5,21 +5,26 @@ from qtpy import QtCore as QC
 from qtpy import QtWidgets as QW
 
 from hydrus.core import HydrusConstants as HC
+from hydrus.core import HydrusData
 from hydrus.core import HydrusExceptions
+from hydrus.core import HydrusLists
 from hydrus.core import HydrusNumbers
 from hydrus.core import HydrusPaths
 
 from hydrus.client import ClientConstants as CC
 from hydrus.client import ClientGlobals as CG
+from hydrus.client import ClientLocation
 from hydrus.client.exporting import ClientExportingPlaylists
 from hydrus.client.gui import ClientGUIDialogsMessage
 from hydrus.client.gui import ClientGUIDialogsQuick
+from hydrus.client.gui import ClientGUIFunctions
 from hydrus.client.gui import ClientGUITopLevelWindowsPanels
 from hydrus.client.gui import QtPorting as QP
 from hydrus.client.gui.canvas import ClientGUICanvasMedia
 from hydrus.client.gui.lists import ClientGUIListBoxes
 from hydrus.client.gui.panels import ClientGUIScrolledPanels
 from hydrus.client.gui.widgets import ClientGUICommon
+from hydrus.client.media import ClientMedia
 from hydrus.client.media import ClientMediaPlaylists
 from hydrus.client.media import ClientMediaResult
 from hydrus.client.media import ClientMediaSingle
@@ -230,6 +235,51 @@ def SelectPlaylistOrNewPlaylist( win: QW.QWidget, title: str, playlists: list[ C
         
         raise HydrusExceptions.CancelledException( 'Dialog cancelled.' )
         
+    
+
+def ViewPlaylistItems( win: QW.QWidget, items: list[ PlaylistItem ] ):
+    
+    # opens a media viewer on these items' files, so you can see what they are. it starts on the first one, at the start of its part
+    # it belongs to win's window, so it works while that is a modal dialog, like the playlist editor
+    # the canvas modules import this one, so we cannot import them at the top
+    from hydrus.client.gui.canvas import ClientGUICanvas
+    from hydrus.client.gui.canvas import ClientGUICanvasFrame
+    
+    hashes = HydrusLists.DedupeList( [ hash for ( hash, start_ms, end_ms ) in items ] )
+    
+    media_results = CG.client_controller.Read( 'media_results', hashes )
+    
+    # a file that was deleted, or that the media viewer cannot show, is skipped
+    hashes_to_media_results = { media_result.GetHash() : media_result for media_result in media_results if media_result.GetLocationsManager().IsLocal() and ClientMedia.CanDisplayMediaResult( media_result ) }
+    
+    viewable_items = [ ( hash, start_ms, end_ms ) for ( hash, start_ms, end_ms ) in items if hash in hashes_to_media_results ]
+    
+    if len( viewable_items ) == 0:
+        
+        ClientGUIDialogsMessage.ShowWarning( win, 'Sorry, that file cannot be shown--it was probably deleted.' if len( hashes ) == 1 else 'Sorry, none of those files can be shown--they were probably deleted.' )
+        
+        return
+        
+    
+    ( first_hash, first_start_ms, first_end_ms ) = viewable_items[0]
+    
+    media_results = [ hashes_to_media_results[ hash ] for hash in HydrusLists.DedupeList( [ hash for ( hash, start_ms, end_ms ) in viewable_items ] ) ]
+    
+    canvas_frame = ClientGUICanvasFrame.CanvasFrame( win.window(), set_parent = True )
+    
+    page_key = HydrusData.GenerateKey()
+    location_context = ClientLocation.LocationContext.STATICCreateSimple( CC.COMBINED_LOCAL_FILE_DOMAINS_SERVICE_KEY )
+    
+    canvas_window = ClientGUICanvas.CanvasMediaListBrowser( canvas_frame, page_key, location_context, media_results, first_hash )
+    
+    canvas_window.canvasWithHoversExiting.connect( CG.client_controller.gui.NotifyMediaViewerExiting )
+    
+    if first_start_ms is not None:
+        
+        canvas_window.SetNextMediaStartMS( first_hash, first_start_ms )
+        
+    
+    canvas_frame.SetCanvas( canvas_window )
     
 
 class EditPlaylistsPanel( ClientGUIScrolledPanels.EditPanel ):
@@ -508,6 +558,8 @@ class EditPlaylistItemsPanel( ClientGUIScrolledPanels.EditPanel ):
         self._next_key = 0
         
         help_text = 'Drag and drop to change the order, or select some and move them up and down. Duplicate an item to have it play again somewhere else, and remove items you do not want.'
+        help_text += '\n' * 2
+        help_text += 'Double-click an item, or select some and hit \'view\', to see what they are in a media viewer. It starts on the first one, at the start of its part (with mpv), and you can step through the others.'
         
         st = ClientGUICommon.BetterStaticText( self, label = help_text )
         st.setWordWrap( True )
@@ -516,6 +568,9 @@ class EditPlaylistItemsPanel( ClientGUIScrolledPanels.EditPanel ):
         self._items_list.setSelectionMode( QW.QAbstractItemView.SelectionMode.ExtendedSelection )
         self._items_list.setDragDropMode( QW.QAbstractItemView.DragDropMode.InternalMove )
         self._items_list.setDefaultDropAction( QC.Qt.DropAction.MoveAction )
+        
+        self._view_button = ClientGUICommon.BetterButton( self, 'view', self._View )
+        self._view_button.setToolTip( ClientGUIFunctions.WrapToolTip( 'Open the selected items in a media viewer, to see what they are.' ) )
         
         self._move_up_button = ClientGUICommon.BetterButton( self, 'move up', self._Move, -1 )
         self._move_down_button = ClientGUICommon.BetterButton( self, 'move down', self._Move, 1 )
@@ -535,6 +590,7 @@ class EditPlaylistItemsPanel( ClientGUIScrolledPanels.EditPanel ):
         
         button_hbox = QP.HBoxLayout()
         
+        QP.AddToLayout( button_hbox, self._view_button, CC.FLAGS_EXPAND_BOTH_WAYS )
         QP.AddToLayout( button_hbox, self._move_up_button, CC.FLAGS_EXPAND_BOTH_WAYS )
         QP.AddToLayout( button_hbox, self._move_down_button, CC.FLAGS_EXPAND_BOTH_WAYS )
         QP.AddToLayout( button_hbox, self._duplicate_button, CC.FLAGS_EXPAND_BOTH_WAYS )
@@ -549,6 +605,7 @@ class EditPlaylistItemsPanel( ClientGUIScrolledPanels.EditPanel ):
         self.widget().setLayout( vbox )
         
         self._items_list.itemSelectionChanged.connect( self._UpdateButtons )
+        self._items_list.itemDoubleClicked.connect( self._View )
         
         # a drag and drop moves rows around by itself, so the numbers need catching up after
         self._items_list.model().rowsMoved.connect( self._NotifyRowsChanged )
@@ -651,6 +708,7 @@ class EditPlaylistItemsPanel( ClientGUIScrolledPanels.EditPanel ):
         
         num_selected = len( selected_indices )
         
+        self._view_button.setEnabled( num_selected > 0 )
         self._move_up_button.setEnabled( num_selected > 0 and min( selected_indices ) > 0 )
         self._move_down_button.setEnabled( num_selected > 0 and max( selected_indices ) < self._items_list.count() - 1 )
         self._duplicate_button.setEnabled( num_selected > 0 )
@@ -676,6 +734,25 @@ class EditPlaylistItemsPanel( ClientGUIScrolledPanels.EditPanel ):
             
             list_widget_item.setText( f'{HydrusNumbers.ToHumanInt( index + 1 )}. {ConvertPlaylistItemToPretty( name, start_ms, end_ms )}' )
             
+        
+    
+    def _GetSelectedItems( self ) -> list[ PlaylistItem ]:
+        
+        keys = self._items_list.GetData()
+        
+        return [ self._keys_to_items[ keys[ index ] ] for index in sorted( self._items_list.GetSelectedIndices() ) ]
+        
+    
+    def _View( self, *args ):
+        
+        items = self._GetSelectedItems()
+        
+        if len( items ) == 0:
+            
+            return
+            
+        
+        ViewPlaylistItems( self, items )
         
     
     def GetValue( self ) -> list[ PlaylistItem ]:
