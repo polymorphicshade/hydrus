@@ -3989,6 +3989,11 @@ ATTACH "client.mappings.db" as external_mappings;'''
         ClientGUIMenus.AppendMenuItem( special_menu, 'new duplicates processing page', 'Open a new tab to discover and filter duplicate files.', self.ProcessApplicationCommand, CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_NEW_DUPLICATE_FILTER_PAGE ) )
         ClientGUIMenus.AppendMenuItem( special_menu, 'new quick view page' + HC.UNICODE_ELLIPSIS, 'Enter a tag or a tag preset, and open a new tab of those files in a random order, with the media viewer open on the first one.', self.ProcessApplicationCommand, CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_NEW_QUICK_VIEW_PAGE ) )
         
+        ClientGUIMenus.AppendSeparator( special_menu )
+        
+        ClientGUIMenus.AppendMenuItem( special_menu, 'load media viewers' + HC.UNICODE_ELLIPSIS, 'Open a group of media viewers you saved before, each on its file, where it was on your screens, and zoomed and panned like it was.', self.LoadMediaViewerLayout )
+        ClientGUIMenus.AppendMenuItem( special_menu, 'save media viewers' + HC.UNICODE_ELLIPSIS, 'Save the media viewers that are open now--their files, where they are on your screens, and how they are zoomed and panned--to a json file, so you can open them all again like this later.', self.SaveMediaViewerLayout )
+        
         ClientGUIMenus.AppendMenu( menu, special_menu, 'special' )
         
         #
@@ -8162,6 +8167,16 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
             
         
         return mpv_widget
+        
+    
+    def LoadMediaViewerLayout( self ):
+        
+        ClientGUIMediaViewerLayouts.LoadMediaViewerLayoutFromFile( self )
+        
+    
+    def SaveMediaViewerLayout( self ):
+        
+        ClientGUIMediaViewerLayouts.SaveMediaViewerLayoutToFile( self )
         
     
     def GetCanvasFrames( self ) -> list[ ClientGUICanvasFrame.CanvasFrame ]:

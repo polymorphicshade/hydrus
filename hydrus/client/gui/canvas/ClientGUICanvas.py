@@ -5442,6 +5442,10 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
             ClientGUIMenus.AppendMenuItem( screen_menu, 'save location' + HC.UNICODE_ELLIPSIS, 'Give where this media viewer is on your screens, and its size, a name, so you can snap back to it later.', ClientGUIScreenLocations.SaveScreenLocationForWindow, self, self.window() )
             ClientGUIMenus.AppendMenuItem( screen_menu, 'move to location' + HC.UNICODE_ELLIPSIS, 'Snap this media viewer to one of your saved screen locations, size and all.', self._MoveToScreenLocation )
             
+            ClientGUIMenus.AppendSeparator( screen_menu )
+            
+            ClientGUIMenus.AppendMenuItem( screen_menu, 'save all open media viewers' + HC.UNICODE_ELLIPSIS, 'Save the media viewers that are open now--their files, where they are on your screens, and how they are zoomed and panned--to a json file, so you can open them all again like this later with pages->special->load media viewers.', CG.client_controller.gui.SaveMediaViewerLayout )
+            
             ClientGUIMenus.AppendMenu( menu, screen_menu, 'screen' )
             
             ClientGUICanvasOverlays.AppendOverlaysMenu( menu, self )

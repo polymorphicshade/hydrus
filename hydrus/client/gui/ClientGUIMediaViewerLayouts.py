@@ -1,16 +1,25 @@
+import os
+
 from qtpy import QtWidgets as QW
 
 from hydrus.core import HydrusData
+from hydrus.core import HydrusNumbers
 
 from hydrus.client import ClientConstants as CC
 from hydrus.client import ClientGlobals as CG
 from hydrus.client import ClientLocation
 from hydrus.client import ClientMediaViewerLayouts
 from hydrus.client import ClientScreenLocations
+from hydrus.client.gui import ClientGUIDialogsMessage
 from hydrus.client.gui import ClientGUIScreenLocations
 from hydrus.client.gui.canvas import ClientGUICanvas
 from hydrus.client.gui.canvas import ClientGUICanvasFrame
 from hydrus.client.media import ClientMedia
+
+# where the last layout file was saved or loaded, this session, so the next one starts there
+LAST_MEDIA_VIEWER_LAYOUT_DIR = None
+
+MEDIA_VIEWER_LAYOUT_FILE_WILDCARD = 'media viewer layout (*.json)'
 
 def CanvasIsSaveableInALayout( canvas_window ) -> bool:
     
@@ -205,4 +214,118 @@ def MoveWindowToMediaViewerLayout( window: QW.QWidget, media_viewer_layout: Clie
         
         window.showMaximized()
         
+    
+
+
+def _GetFileDialogOptions():
+    
+    options = QW.QFileDialog.Option.DontResolveSymlinks
+    
+    if CG.client_controller.new_options.GetBoolean( 'use_qt_file_dialogs' ):
+        
+        options |= QW.QFileDialog.Option.DontUseNativeDialog
+        
+    
+    return options
+    
+
+def _GetStartingDir() -> str:
+    
+    return LAST_MEDIA_VIEWER_LAYOUT_DIR if LAST_MEDIA_VIEWER_LAYOUT_DIR is not None else os.path.expanduser( '~' )
+    
+
+def LoadMediaViewerLayoutFromFile( win: QW.QWidget ):
+    
+    # asks for a layout file, and opens its media viewers where they were
+    global LAST_MEDIA_VIEWER_LAYOUT_DIR
+    
+    path = QW.QFileDialog.getOpenFileName( win, 'load media viewer layout', _GetStartingDir(), filter = MEDIA_VIEWER_LAYOUT_FILE_WILDCARD, selectedFilter = MEDIA_VIEWER_LAYOUT_FILE_WILDCARD, options = _GetFileDialogOptions() )[0]
+    
+    if path == '':
+        
+        return
+        
+    
+    LAST_MEDIA_VIEWER_LAYOUT_DIR = os.path.dirname( path )
+    
+    try:
+        
+        with open( path, 'r', encoding = 'utf-8' ) as f:
+            
+            text = f.read()
+            
+        
+        media_viewer_layouts = ClientMediaViewerLayouts.ConvertJSONToMediaViewerLayouts( text )
+        
+    except ( OSError, UnicodeDecodeError, ValueError ) as e:
+        
+        ClientGUIDialogsMessage.ShowWarning( win, f'Could not load that media viewer layout!\n\n{e}' )
+        
+        return
+        
+    
+    if len( media_viewer_layouts ) == 0:
+        
+        ClientGUIDialogsMessage.ShowInformation( win, 'That media viewer layout has no media viewers in it!' )
+        
+        return
+        
+    
+    ( num_opened, num_skipped ) = OpenMediaViewerLayouts( media_viewer_layouts )
+    
+    if num_skipped > 0:
+        
+        message = f'{HydrusNumbers.ToHumanInt( num_skipped )} of the media viewers in that layout were not opened, since none of their files can be shown--they were probably deleted.'
+        
+        ClientGUIDialogsMessage.ShowWarning( win, message )
+        
+    
+
+def SaveMediaViewerLayoutToFile( win: QW.QWidget ):
+    
+    # saves the media viewers that are open now, so they can all be opened again, just like this, later
+    global LAST_MEDIA_VIEWER_LAYOUT_DIR
+    
+    media_viewer_layouts = GetOpenMediaViewerLayouts()
+    
+    if len( media_viewer_layouts ) == 0:
+        
+        ClientGUIDialogsMessage.ShowInformation( win, 'There are no media viewers open to save! Open the files you want, put their media viewers where you like them, zoom and pan them how you like, and then save them.' )
+        
+        return
+        
+    
+    starting_path = os.path.join( _GetStartingDir(), 'media viewers.json' )
+    
+    path = QW.QFileDialog.getSaveFileName( win, 'save media viewer layout', starting_path, filter = MEDIA_VIEWER_LAYOUT_FILE_WILDCARD, selectedFilter = MEDIA_VIEWER_LAYOUT_FILE_WILDCARD, options = _GetFileDialogOptions() )[0]
+    
+    if path == '':
+        
+        return
+        
+    
+    if not path.lower().endswith( '.json' ):
+        
+        path += '.json'
+        
+    
+    LAST_MEDIA_VIEWER_LAYOUT_DIR = os.path.dirname( path )
+    
+    text = ClientMediaViewerLayouts.ConvertMediaViewerLayoutsToJSON( media_viewer_layouts )
+    
+    try:
+        
+        with open( path, 'w', encoding = 'utf-8' ) as f:
+            
+            f.write( text )
+            
+        
+    except OSError as e:
+        
+        ClientGUIDialogsMessage.ShowWarning( win, f'Could not save the media viewer layout!\n\n{e}' )
+        
+        return
+        
+    
+    HydrusData.ShowText( f'Saved {HydrusNumbers.ToHumanInt( len( media_viewer_layouts ) )} media viewers to {path}.' )
     

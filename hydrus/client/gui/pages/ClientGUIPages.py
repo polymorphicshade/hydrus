@@ -24,6 +24,7 @@ from hydrus.client.gui import ClientGUICore as CGC
 from hydrus.client.gui import ClientGUIDialogsMessage
 from hydrus.client.gui import ClientGUIDialogsQuick
 from hydrus.client.gui import ClientGUIFunctions
+from hydrus.client.gui import ClientGUIMediaViewerLayouts
 from hydrus.client.gui import ClientGUIMenus
 from hydrus.client.gui import ClientGUIReviewWindowsQuick
 from hydrus.client.gui import QtPorting as QP
@@ -1345,6 +1346,22 @@ class PagesNotebook( ClientGUIPagesTreeView.TabWidgetWithDnD ):
                         
                         return
                         
+                    
+                elif page_type in ( 'media_viewer_layout_load', 'media_viewer_layout_save' ):
+                    
+                    # no new page for these
+                    self._next_new_page_index = None
+                    
+                    if page_type == 'media_viewer_layout_load':
+                        
+                        ClientGUIMediaViewerLayouts.LoadMediaViewerLayoutFromFile( self )
+                        
+                    else:
+                        
+                        ClientGUIMediaViewerLayouts.SaveMediaViewerLayoutToFile( self )
+                        
+                    
+                    return
                     
                 self.layoutChanged.emit( 0, self.count() - 1 )
                 

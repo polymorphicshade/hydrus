@@ -136,6 +136,16 @@ class DialogPageChooser( ClientGUIDialogs.Dialog ):
             
             button.setText( 'quick view' )
             
+        elif entry_type == 'media_viewer_layout_load':
+            
+            button.setText( 'load media viewers' )
+            button.setToolTip( ClientGUIFunctions.WrapToolTip( 'Open a group of media viewers you saved before, each on its file, where it was on your screens, and zoomed and panned like it was.' ) )
+            
+        elif entry_type == 'media_viewer_layout_save':
+            
+            button.setText( 'save media viewers' )
+            button.setToolTip( ClientGUIFunctions.WrapToolTip( 'Save the media viewers that are open now--their files, where they are on your screens, and how they are zoomed and panned--to a json file, so you can open them all again like this later.' ) )
+            
         elif entry_type in ( 'page_query', 'page_petitions' ):
             
             name = CG.client_controller.services_manager.GetService( obj ).GetName()
@@ -209,6 +219,11 @@ class DialogPageChooser( ClientGUIDialogs.Dialog ):
                     
                     # the notebook asks for the tag once we are closed, since this dialog closes itself when it loses focus
                     self._result = ( 'quick_view', None )
+                    
+                elif entry_type in ( 'media_viewer_layout_load', 'media_viewer_layout_save' ):
+                    
+                    # these are not pages. the notebook does them once we are closed, since they open file dialogs
+                    self._result = ( entry_type, None )
                     
                 elif entry_type == 'page_import_gallery':
                     
@@ -310,6 +325,8 @@ class DialogPageChooser( ClientGUIDialogs.Dialog ):
             entries.append( ( 'pages_notebook', None ) )
             entries.append( ( 'page_duplicate_filter', None ) )
             entries.append( ( 'page_quick_view', None ) )
+            entries.append( ( 'media_viewer_layout_load', None ) )
+            entries.append( ( 'media_viewer_layout_save', None ) )
             
         
         if len( entries ) <= 4:
