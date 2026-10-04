@@ -71,6 +71,7 @@ def GetPlaylistCanvas( num_items: int ):
     canvas._playlist_finished = False
     canvas._playlist_lock_navigation = True
     canvas._media_container = FakeMediaContainer()
+    canvas._playback_gap_ms = 0
     
     shown = []
     

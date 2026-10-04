@@ -4656,6 +4656,28 @@ class CanvasMediaListNavigable( CanvasMediaList ):
 PENDING_LAYOUT_VIEW_RETRY_PERIOD_S = 0.5
 PENDING_LAYOUT_VIEW_MAX_ATTEMPTS = 20
 
+# the 'gap between items' choices in the media viewer menu, in ms. anything else is 'custom'
+PLAYBACK_GAP_CHOICES_MS = ( 250, 500, 1000, 2000, 5000 )
+PLAYBACK_GAP_MAX_MS = 600 * 1000
+
+# how often we check whether a gap is done. the ui update timer is too slow for gaps in ms
+PLAYBACK_GAP_TICK_MS = 5
+
+def ConvertPlaybackGapToString( gap_ms: int ) -> str:
+    
+    if gap_ms == 0:
+        
+        return 'none'
+        
+    
+    return f'{HydrusNumbers.ToHumanInt( gap_ms )}ms'
+    
+
+def PlaybackGapIsDone( gap_ms: int, gap_time_s: float ) -> bool:
+    
+    return gap_time_s * 1000 >= gap_ms
+    
+
 class CanvasMediaListBrowser( CanvasMediaListNavigable ):
     
     def __init__( self, parent, page_key, location_context: ClientLocation.LocationContext, media_results, first_hash ):
@@ -4676,6 +4698,20 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
         # a media viewer layout being put back: ( hash, relative_zoom, center, playback_ms ), waiting for that file to be up and ready
         self._pending_layout_view: tuple[ bytes, float | None, tuple[ float, float ] | None, int | None ] | None = None
         self._pending_layout_view_attempts = 0
+        
+        # a moment of nothing--no picture, no sound--between items, when a slideshow or playlist moves itself on. it is just for this media viewer, while it is open
+        self._playback_gap_ms = 0
+        
+        # while a gap is up, what moves us on when it is done. None when there is no gap up
+        self._playback_gap_move_on_callable = None
+        self._playback_gap_time_s = 0.0
+        self._playback_gap_last_tick_time = 0.0
+        self._playback_gap_was_playing = False
+        
+        self._playback_gap_timer = QC.QTimer( self )
+        self._playback_gap_timer.setTimerType( QC.Qt.TimerType.PreciseTimer )
+        self._playback_gap_timer.setInterval( PLAYBACK_GAP_TICK_MS )
+        self._playback_gap_timer.timeout.connect( self._DoPlaybackGapWork )
         
         if first_hash is None:
             
@@ -4881,11 +4917,77 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
             
         
     
+    def _AppendPlaybackGapMenu( self, menu: QW.QMenu ):
+        
+        gap_menu = ClientGUIMenus.GenerateMenu( menu )
+        
+        when = 'when a slideshow or playlist moves on to the next item by itself. Going to another item yourself has no gap. This is just for this media viewer, while it is open.'
+        
+        ClientGUIMenus.AppendMenuCheckItem( gap_menu, 'no gap', 'Go straight on to the next item.', self._playback_gap_ms == 0, self._SetPlaybackGap, 0 )
+        
+        ClientGUIMenus.AppendSeparator( gap_menu )
+        
+        gap_choices = list( PLAYBACK_GAP_CHOICES_MS )
+        
+        if self._playback_gap_ms > 0 and self._playback_gap_ms not in gap_choices:
+            
+            gap_choices.append( self._playback_gap_ms )
+            
+        
+        for gap_ms in sorted( gap_choices ):
+            
+            pretty_gap = ConvertPlaybackGapToString( gap_ms )
+            
+            ClientGUIMenus.AppendMenuCheckItem( gap_menu, pretty_gap, f'Show nothing and play nothing for {pretty_gap} {when}', self._playback_gap_ms == gap_ms, self._SetPlaybackGap, gap_ms )
+            
+        
+        ClientGUIMenus.AppendMenuItem( gap_menu, 'custom' + HC.UNICODE_ELLIPSIS, f'Enter how many milliseconds of nothing to put in {when}', self._SetPlaybackGapCustom )
+        
+        ClientGUIMenus.AppendMenu( menu, gap_menu, f'gap between items: {ConvertPlaybackGapToString( self._playback_gap_ms )}' )
+        
+    
+    def _DoPlaybackGapWork( self ):
+        
+        if self._playback_gap_move_on_callable is None:
+            
+            self._playback_gap_timer.stop()
+            
+            return
+            
+        
+        now = HydrusTime.GetNowPrecise()
+        
+        tick_s = now - self._playback_gap_last_tick_time
+        
+        self._playback_gap_last_tick_time = now
+        
+        # it holds still while the user is doing something, like a slideshow does
+        if CGC.core().MenuIsOpen() or self._SubWindowIsOpen():
+            
+            return
+            
+        
+        self._playback_gap_time_s += tick_s
+        
+        if not PlaybackGapIsDone( self._playback_gap_ms, self._playback_gap_time_s ):
+            
+            return
+            
+        
+        move_on_callable = self._playback_gap_move_on_callable
+        
+        # this usually goes to the next item, which ends the gap and puts the media back on show
+        move_on_callable()
+        
+        # if it did not--the playlist is over, say--the item we were on comes back, but stays paused
+        self._EndPlaybackGap( False )
+        
+    
     def _DoSlideshowWork( self ):
         
         if self._slideshow_is_running:
             
-            if self._current_media is None:
+            if self._current_media is None or self._PlaybackGapIsUp():
                 
                 return
                 
@@ -4938,17 +5040,30 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
                 return
                 
             
-            if self._slideshow_is_shuffling:
-                
-                self._ShowRandom()
-                
-            else:
-                
-                self._ShowNext()
-                
-                
+            self._MoveOnWithPlaybackGap( self._MoveSlideshowOn )
             
-            self._RegisterNextSlideshowPresentation()
+        
+    
+    def _EndPlaybackGap( self, resume_playback: bool ):
+        
+        # the media goes back on show. resume_playback is for when we stay on the same item, which was paused for the gap
+        if self._playback_gap_move_on_callable is None:
+            
+            return
+            
+        
+        self._playback_gap_move_on_callable = None
+        
+        self._playback_gap_timer.stop()
+        
+        if self._media_container.GetMedia() is not None:
+            
+            self._media_container.show()
+            
+            if resume_playback and self._playback_gap_was_playing and self._media_container.IsPaused():
+                
+                self._media_container.PausePlay()
+                
             
         
     
@@ -4999,6 +5114,33 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
             
         
     
+    def _MoveOnWithPlaybackGap( self, move_on_callable ):
+        
+        # what a slideshow or playlist calls when it moves itself on. if there is a gap, there is nothing for a moment first
+        if self._playback_gap_ms > 0 and self._current_media is not None:
+            
+            self._StartPlaybackGap( move_on_callable )
+            
+        else:
+            
+            move_on_callable()
+            
+        
+    
+    def _MoveSlideshowOn( self ):
+        
+        if self._slideshow_is_shuffling:
+            
+            self._ShowRandom()
+            
+        else:
+            
+            self._ShowNext()
+            
+        
+        self._RegisterNextSlideshowPresentation()
+        
+    
     def _MoveToScreenLocation( self ):
         
         try:
@@ -5044,6 +5186,11 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
             
             self._StartSlideshow( self._normal_slideshow_period )
             
+        
+    
+    def _PlaybackGapIsUp( self ) -> bool:
+        
+        return self._playback_gap_move_on_callable is not None
         
     
     def _PopulatePlaylistMenu( self, playlist_menu: QW.QMenu ):
@@ -5183,6 +5330,40 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
         self._StartSlideshow( period )
         
     
+    def _SetPlaybackGap( self, gap_ms: int ):
+        
+        # a gap that is up now takes the new length, so 'no gap' ends it as soon as the menu closes
+        self._playback_gap_ms = gap_ms
+        
+    
+    def _SetPlaybackGapCustom( self ):
+        
+        try:
+            
+            gap_ms = ClientGUIDialogsQuick.EnterNumber( self, 'Enter how many milliseconds of nothing--no picture, no sound--to put between items when a slideshow or playlist moves on by itself. 1000ms is a second.', default = self._playback_gap_ms if self._playback_gap_ms > 0 else 1000, min_value = 1, max_value = PLAYBACK_GAP_MAX_MS, title = 'gap between items' )
+            
+        except HydrusExceptions.CancelledException:
+            
+            return
+            
+        
+        self._SetPlaybackGap( gap_ms )
+        
+    
+    def _StartPlaybackGap( self, move_on_callable ):
+        
+        # the item we are on goes out of sight and quiet, and when the gap is done, move_on_callable moves us on
+        self._playback_gap_move_on_callable = move_on_callable
+        self._playback_gap_time_s = 0.0
+        self._playback_gap_last_tick_time = HydrusTime.GetNowPrecise()
+        self._playback_gap_was_playing = not self._media_container.IsPaused()
+        
+        self._media_container.Pause()
+        self._media_container.hide()
+        
+        self._playback_gap_timer.start()
+        
+    
     def _StopSlideshow( self ):
         
         if self._slideshow_is_running:
@@ -5192,6 +5373,9 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
             self._slideshow_paused_for_sub_window_since = None
             
             self._media_container.StopForSlideshow( False )
+            
+            # a gap the slideshow was in goes, and we stay where we were
+            self._EndPlaybackGap( True )
             
         
     
@@ -5461,6 +5645,8 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
                     slideshow_is_playing_once_through = self._slideshow_is_playing_once_through
                 )
                 
+            
+            self._AppendPlaybackGapMenu( menu )
             
             ClientGUIMenus.AppendSeparator( menu )
             
@@ -5805,6 +5991,17 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
         return self._slideshow_is_running
         
     
+    def SetMedia( self, media, start_paused = None ):
+        
+        # going to another item, whether a gap is done or the user moved on during it, ends the gap
+        if self._PlaybackGapIsUp():
+            
+            self._EndPlaybackGap( media == self._current_media )
+            
+        
+        super().SetMedia( media, start_paused = start_paused )
+        
+    
     def SetNextMediaStartMS( self, hash: bytes, start_ms: int ):
         
         # the next time the file with this hash comes up, it starts playing here. only a player that can start part way in, like mpv, does this
@@ -5900,6 +6097,19 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
     
     def _AdvancePlaylist( self ):
         
+        if self._PlaylistIsAtTheEnd():
+            
+            # no gap before holding on the last item
+            self._GoToNextPlaylistItem()
+            
+        else:
+            
+            self._MoveOnWithPlaybackGap( self._GoToNextPlaylistItem )
+            
+        
+    
+    def _GoToNextPlaylistItem( self ):
+        
         next_index = self._GetNextPlaylistItemIndex( 1, self._playlist_loop )
         
         if next_index is None:
@@ -5994,6 +6204,12 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         self._playlist_last_tick_time = now
         
         if self._playlist_finished or len( self._playlist_items ) == 0:
+            
+            return
+            
+        
+        # during a gap between items, the gap moves us on when it is done
+        if self._PlaybackGapIsUp():
             
             return
             
@@ -6476,6 +6692,22 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
             
         
         return now >= self._playlist_item_last_frame_end_time
+        
+    
+    def _PlaylistIsAtTheEnd( self ) -> bool:
+        
+        # whether moving on would run off the end, rather than go to another item
+        if self._playlist_loop:
+            
+            return False
+            
+        
+        if self._playlist_shuffle_order is None:
+            
+            return self._playlist_index >= len( self._playlist_items ) - 1
+            
+        
+        return self._playlist_shuffle_position >= len( self._playlist_shuffle_order ) - 1
         
     
     def _PlaylistIsHeld( self ) -> bool:
