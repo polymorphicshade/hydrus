@@ -5844,12 +5844,13 @@ PLAYLIST_ITEM_LOOP_TIMES_CHOICES = ( 2, 3, 5 )
 
 class CanvasPlaylist( CanvasMediaListBrowser ):
     
-    def __init__( self, parent, page_key, location_context: ClientLocation.LocationContext, playlist_id: int, playlist_name: str, playlist_items: list[ tuple[ ClientMediaResult.MediaResult, int | None, int | None, bool ] ] ):
+    def __init__( self, parent, page_key, location_context: ClientLocation.LocationContext, playlist_id: int, playlist_name: str, playlist_items: list[ tuple[ ClientMediaResult.MediaResult | None, int | None, int | None, bool ] ] ):
         
         # the media list holds each file once, but a playlist can have a file many times over, so we step through the playlist with our own index
-        hashes_to_media_results = { media_result.GetHash() : media_result for ( media_result, start_ms, end_ms, reverse ) in playlist_items }
+        # a blank item has no media result, and its end_ms is how long it lasts. there has to be at least one file
+        hashes_to_media_results = { media_result.GetHash() : media_result for ( media_result, start_ms, end_ms, reverse ) in playlist_items if media_result is not None }
         
-        ( first_media_result, first_start_ms, first_end_ms, first_reverse ) = playlist_items[0]
+        ( first_media_result, first_start_ms, first_end_ms, first_reverse ) = [ playlist_item for playlist_item in playlist_items if playlist_item[0] is not None ][0]
         
         super().__init__( parent, page_key, location_context, list( hashes_to_media_results.values() ), first_media_result.GetHash() )
         
@@ -5859,7 +5860,8 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         hashes_to_medias = { media.GetHash() : media for media in self._media_list.GetFlatMedia() }
         
         # ( media, start_ms, end_ms, reverse ). the span is None, None for the whole file. reverse plays it backwards
-        self._playlist_items = [ ( hashes_to_medias[ media_result.GetHash() ], start_ms, end_ms, reverse ) for ( media_result, start_ms, end_ms, reverse ) in playlist_items if media_result.GetHash() in hashes_to_medias ]
+        # a blank is ( None, None, duration_ms, False ): nothing on screen and no sound for that long
+        self._playlist_items = [ ( None if media_result is None else hashes_to_medias[ media_result.GetHash() ], start_ms, end_ms, reverse ) for ( media_result, start_ms, end_ms, reverse ) in playlist_items if media_result is None or media_result.GetHash() in hashes_to_medias ]
         
         self._playlist_loop = CG.client_controller.new_options.GetBoolean( 'playlists_loop' )
         
@@ -5964,6 +5966,25 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         ClientGUIMenus.AppendMenu( playlist_menu, looping_menu, label )
         
     
+    def _DoPlaylistBlankWork( self, duration_ms: int, tick_s: float ):
+        
+        # a blank shows nothing and plays nothing. it holds still while the user is doing something, like an image does, and then the playlist goes on
+        if self._PlaylistIsHeld():
+            
+            return
+            
+        
+        # the next file can get ready while there is nothing to see
+        self._MaintainPlaylistPreload()
+        
+        self._playlist_item_still_time_s += tick_s
+        
+        if ClientMediaPlaylists.PlaylistBlankIsDone( duration_ms, self._playlist_item_still_time_s ):
+            
+            self._AdvancePlaylist()
+            
+        
+    
     def _DoPlaylistWork( self ):
         
         now = HydrusTime.GetNowPrecise()
@@ -5972,12 +5993,25 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         
         self._playlist_last_tick_time = now
         
-        if self._playlist_finished or self._current_media is None or len( self._playlist_items ) == 0:
+        if self._playlist_finished or len( self._playlist_items ) == 0:
             
             return
             
         
         ( media, start_ms, end_ms, reverse ) = self._playlist_items[ self._playlist_index ]
+        
+        if media is None:
+            
+            # for a blank, end_ms is how long it lasts
+            self._DoPlaylistBlankWork( end_ms, tick_s )
+            
+            return
+            
+        
+        if self._current_media is None:
+            
+            return
+            
         
         # the media container can be a moment behind while it finishes up with the previous file
         if self._current_media != media or self._media_container.GetMedia() != media:
@@ -6138,10 +6172,10 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
     
     def _ExportPlayingPlaylist( self ):
         
-        # in playlist order, even if it is playing randomized. the export always plays forwards
-        playlist_items = [ ( media.GetMediaResult(), start_ms, end_ms ) for ( media, start_ms, end_ms, reverse ) in self._playlist_items ]
+        # in playlist order, even if it is playing randomized. the export always plays forwards, and blanks are black and silence
+        playlist_items = [ ( None if media is None else media.GetMediaResult(), start_ms, end_ms ) for ( media, start_ms, end_ms, reverse ) in self._playlist_items ]
         
-        if len( playlist_items ) == 0:
+        if len( [ playlist_item for playlist_item in playlist_items if playlist_item[0] is not None ] ) == 0:
             
             return
             
@@ -6359,6 +6393,12 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
             
             ( media, start_ms, end_ms, reverse ) = self._playlist_items[ play_order[ ( position + offset ) % num_items ] ]
             
+            if media is None:
+                
+                # a blank has nothing to render
+                continue
+                
+            
             if media not in media_looked_at:
                 
                 to_render.append( media.GetMediaResult() )
@@ -6390,8 +6430,8 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         
         ( media, start_ms, end_ms, reverse ) = self._playlist_items[ upcoming_index ]
         
-        # the same file again just goes back to where it starts
-        if media == self._current_media:
+        # a blank has nothing to get ready, and the same file again just goes back to where it starts
+        if media is None or media == self._current_media:
             
             return
             
@@ -6444,8 +6484,21 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         return CGC.core().MenuIsOpen() or self._SubWindowIsOpen()
         
     
+    def _PlaylistIsOnBlank( self ) -> bool:
+        
+        return len( self._playlist_items ) > 0 and self._playlist_items[ self._playlist_index ][0] is None
+        
+    
     def _PopulatePlaylistMenu( self, playlist_menu: QW.QMenu ):
         
+        self._PopulatePlayingPlaylistMenu( playlist_menu )
+        
+        super()._PopulatePlaylistMenu( playlist_menu )
+        
+    
+    def _PopulatePlayingPlaylistMenu( self, playlist_menu: QW.QMenu ):
+        
+        # the things to do with the playlist that is playing, which do not need a file up
         ClientGUIMenus.AppendMenuLabel( playlist_menu, f'playing {self._GetIndexString()}' )
         
         ClientGUIMenus.AppendMenuCheckItem( playlist_menu, 'loop playlist', 'When the playlist ends, start it again from the top.', self._playlist_loop, self._FlipPlaylistLoop )
@@ -6456,8 +6509,6 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         self._AppendPlaylistItemLoopingMenu( playlist_menu )
         
         ClientGUIMenus.AppendSeparator( playlist_menu )
-        
-        super()._PopulatePlaylistMenu( playlist_menu )
         
     
     def _Remove( self ):
@@ -6475,14 +6526,16 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         
         ( current_media, current_start_ms, current_end_ms, current_reverse ) = self._playlist_items[ self._playlist_index ]
         
-        kept_indices = [ index for ( index, ( media, start_ms, end_ms, reverse ) ) in enumerate( self._playlist_items ) if media not in medias ]
+        # blanks have no media, so they stay
+        kept_indices = [ index for ( index, ( media, start_ms, end_ms, reverse ) ) in enumerate( self._playlist_items ) if media is None or media not in medias ]
         
         self._playlist_items = [ self._playlist_items[ index ] for index in kept_indices ]
         
         # what comes next may have gone
         self._playlist_item_preload_done = False
         
-        if len( self._playlist_items ) == 0:
+        # blanks on their own are nothing to watch
+        if len( [ playlist_item for playlist_item in self._playlist_items if playlist_item[0] is not None ] ) == 0:
             
             self._TryToCloseWindow()
             
@@ -6502,7 +6555,7 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
             new_index = self._playlist_shuffle_order[ self._playlist_shuffle_position ]
             
         
-        if current_media in medias:
+        if current_media is not None and current_media in medias:
             
             # we go on to whatever came after it
             self._ShowPlaylistItem( new_index % len( self._playlist_items ) )
@@ -6662,13 +6715,23 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
             self._CapturePlaylistLockedView()
             
         
-        if media == self._current_media:
+        if media is not None and media == self._current_media:
             
             # A-B repeat points belong to the file, but the same file again is a fresh start
             self._media_container.ClearABLoopPoints()
             
         
         self._ResetPlaylistItemState()
+        
+        if media is None:
+            
+            # a blank: nothing on screen, and no sound
+            self.SetMedia( None )
+            
+            CG.client_controller.pub( 'canvas_new_index_string', self._canvas_key, self._GetIndexString() )
+            
+            return
+            
         
         if media != self._current_media:
             
@@ -6725,7 +6788,8 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
     
     def ProcessContentUpdatePackage( self, content_update_package: ClientContentUpdates.ContentUpdatePackage ):
         
-        if self._current_media is None:
+        # during a blank there is no current media, but the files to come can still be deleted
+        if self._current_media is None and not self._PlaylistIsOnBlank():
             
             return
             
@@ -6733,7 +6797,7 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         self._media_list.ProcessContentUpdatePackage( content_update_package )
         
         # a file that was deleted drops out of the media list, and so out of what we play
-        gone_medias = { media for ( media, start_ms, end_ms, reverse ) in self._playlist_items if not self._media_list.HasMedia( media ) }
+        gone_medias = { media for ( media, start_ms, end_ms, reverse ) in self._playlist_items if media is not None and not self._media_list.HasMedia( media ) }
         
         if len( gone_medias ) > 0:
             
@@ -6741,6 +6805,46 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
             
         
         self.update()
+        
+    
+    def ShowMenuFromSignal( self, pos ):
+        
+        if self._current_media is not None or not self._PlaylistIsOnBlank():
+            
+            super().ShowMenuFromSignal( pos )
+            
+            return
+            
+        
+        # during a blank there is no file to have a menu for, but the playlist can still be steered
+        self.EndDrag()
+        
+        ( media, start_ms, duration_ms, reverse ) = self._playlist_items[ self._playlist_index ]
+        
+        menu = ClientGUIMenus.GenerateMenu( self )
+        
+        ClientGUIMenus.AppendMenuLabel( menu, ClientMediaPlaylists.ConvertPlaylistBlankToString( duration_ms ) )
+        
+        ClientGUIMenus.AppendSeparator( menu )
+        
+        playlist_menu = ClientGUIMenus.GenerateMenu( menu )
+        
+        self._PopulatePlayingPlaylistMenu( playlist_menu )
+        
+        self._AppendPlaylistExportMenuItem( playlist_menu )
+        
+        ClientGUIMenus.AppendMenu( menu, playlist_menu, 'playlist' )
+        
+        if self.parentWidget().isFullScreen():
+            
+            ClientGUIMenus.AppendMenuItem( menu, 'exit fullscreen', 'Make this media viewer a regular window with borders.', self.ProcessApplicationCommand, CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_SWITCH_BETWEEN_FULLSCREEN_BORDERLESS_AND_REGULAR_FRAMED_WINDOW ) )
+            
+        else:
+            
+            ClientGUIMenus.AppendMenuItem( menu, 'go fullscreen', 'Make this media viewer a fullscreen window without borders.', self.ProcessApplicationCommand, CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_SWITCH_BETWEEN_FULLSCREEN_BORDERLESS_AND_REGULAR_FRAMED_WINDOW ) )
+            
+        
+        CGC.core().PopupMenu( self, menu )
         
     
     def SupportsSlideshow( self ) -> bool:

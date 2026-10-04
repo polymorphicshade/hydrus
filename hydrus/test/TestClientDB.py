@@ -970,6 +970,38 @@ class TestClientDB( unittest.TestCase ):
         self.assertEqual( self._read( 'playlists' ), [ ( new_one_id, 'new one', 2 ) ] )
         self.assertEqual( self._read( 'playlist_items', new_one_id ), [ ( hash_a, 1000, 5000, False ), ( hash_b, None, None, False ) ] )
         
+        # blanks: no file, just a length. they keep their place among the files, and count as items
+        
+        self._write( 'playlist_items', new_one_id, [ ( None, None, 1500, False ), ( hash_a, 1000, 5000, False ), ( None, None, 250, False ), ( hash_b, None, None, True ) ] )
+        
+        self.assertEqual( self._read( 'playlist_items', new_one_id ), [ ( None, None, 1500, False ), ( hash_a, 1000, 5000, False ), ( None, None, 250, False ), ( hash_b, None, None, True ) ] )
+        self.assertEqual( self._read( 'playlists' ), [ ( new_one_id, 'new one', 4 ) ] )
+        
+        # they are not files, so they are not in the 'containing file' counts
+        self.assertEqual( self._read( 'playlists_containing_file', hash_a ), [ ( new_one_id, 'new one', 1 ) ] )
+        
+        # a new item goes after a blank at the end
+        self._write( 'playlist_items', new_one_id, [ ( hash_a, None, None, False ), ( None, None, 1000, False ) ] )
+        self._write( 'playlist_add_item', new_one_id, hash_b, None, None )
+        
+        self.assertEqual( self._read( 'playlist_items', new_one_id ), [ ( hash_a, None, None, False ), ( None, None, 1000, False ), ( hash_b, None, None, False ) ] )
+        
+        # removing a file leaves the blanks
+        self._write( 'playlist_remove_file', new_one_id, hash_a )
+        
+        self.assertEqual( self._read( 'playlist_items', new_one_id ), [ ( None, None, 1000, False ), ( hash_b, None, None, False ) ] )
+        
+        # and deleting the playlist takes them too
+        self._write( 'playlists', [] )
+        
+        self.assertEqual( self._read( 'playlist_items', new_one_id ), [] )
+        
+        self._write( 'playlists', [ ( None, 'reborn' ) ] )
+        
+        ( ( reborn_id, reborn_name, reborn_count ), ) = self._read( 'playlists' )
+        
+        self.assertEqual( reborn_count, 0 )
+        
         self._write( 'playlists', [] )
         
     

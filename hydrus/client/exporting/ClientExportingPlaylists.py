@@ -24,6 +24,7 @@ PLAYLIST_EXPORT_KIND_MOTION = 0 # ffmpeg plays it, with its audio if it has some
 PLAYLIST_EXPORT_KIND_AUDIO = 1 # the audio, over black
 PLAYLIST_EXPORT_KIND_STILL = 2 # an image, held for a while, like the playlist player does
 PLAYLIST_EXPORT_KIND_UNSUPPORTED = 3
+PLAYLIST_EXPORT_KIND_BLANK = 4 # a playlist blank: black and silence, for as long as it lasts
 
 # the animations ffmpeg can play. hydrus draws the others itself, so they go in as a still of their first frame
 PLAYLIST_EXPORT_MOTION_MIMES = set( HC.VIDEO ) | { HC.ANIMATION_GIF, HC.ANIMATION_APNG }
@@ -216,6 +217,14 @@ def GetPlaylistExportSegmentCommand(
         
         filter_complex = f'[0:v:0]{video_filter}[v];[1:a:0]anull[a]'
         
+    elif kind == PLAYLIST_EXPORT_KIND_BLANK:
+        
+        # there is no file, so input_path is not used
+        cmd += [ '-f', 'lavfi', '-i', f'color=c=black:s={width}x{height}:r={framerate}' ]
+        cmd += [ '-f', 'lavfi', '-i', silence ]
+        
+        filter_complex = f'[0:v:0]{video_filter}[v];[1:a:0]anull[a]'
+        
     else:
         
         raise HydrusExceptions.UnsupportedFileException( 'That kind of file cannot go in a video!' )
@@ -375,7 +384,7 @@ def RunPlaylistExportFFMPEG( cmd: list[ str ], job_status: ClientThreading.JobSt
         
     
 
-def ExportPlaylistToMP4( job_status: ClientThreading.JobStatus, playlist_name: str, playlist_items: list[ tuple[ ClientMediaResult.MediaResult, int | None, int | None ] ], output_path: str ):
+def ExportPlaylistToMP4( job_status: ClientThreading.JobStatus, playlist_name: str, playlist_items: list[ tuple[ ClientMediaResult.MediaResult | None, int | None, int | None ] ], output_path: str ):
     
     # this runs in a worker thread
     ffmpeg_path = HydrusFFMPEG.GetCurrentFFMPEGPath()
@@ -388,6 +397,14 @@ def ExportPlaylistToMP4( job_status: ClientThreading.JobStatus, playlist_name: s
     skipped = []
     
     for ( media_result, start_ms, end_ms ) in playlist_items:
+        
+        if media_result is None:
+            
+            # a blank, and end_ms is how long it lasts
+            plan.append( ( None, PLAYLIST_EXPORT_KIND_BLANK, None, end_ms ) )
+            
+            continue
+            
         
         kind = GetPlaylistExportKind( media_result.GetMime() )
         
@@ -403,7 +420,7 @@ def ExportPlaylistToMP4( job_status: ClientThreading.JobStatus, playlist_name: s
         plan.append( ( media_result, kind, item_start_ms, length_ms ) )
         
     
-    if len( plan ) == 0:
+    if len( [ kind for ( media_result, kind, start_ms, length_ms ) in plan if kind != PLAYLIST_EXPORT_KIND_BLANK ] ) == 0:
         
         job_status.SetStatusText( 'Nothing in this playlist can go in a video!' )
         
@@ -412,7 +429,7 @@ def ExportPlaylistToMP4( job_status: ClientThreading.JobStatus, playlist_name: s
         return
         
     
-    resolution = GetPlaylistExportResolution( [ ( kind, media_result.GetResolution() ) for ( media_result, kind, start_ms, length_ms ) in plan ] )
+    resolution = GetPlaylistExportResolution( [ ( kind, media_result.GetResolution() ) for ( media_result, kind, start_ms, length_ms ) in plan if media_result is not None ] )
     framerate = GetPlaylistExportFramerate( [ media_result.GetFileInfoManager().GetFramerate() for ( media_result, kind, start_ms, length_ms ) in plan if kind == PLAYLIST_EXPORT_KIND_MOTION ] )
     
     def get_estimated_length_ms( media_result, length_ms ):
@@ -457,10 +474,23 @@ def ExportPlaylistToMP4( job_status: ClientThreading.JobStatus, playlist_name: s
             
             progress_callable( 0 )
             
+            segment_path = os.path.join( temp_dir, f'{i:05}.mp4' )
+            
+            if media_result is None:
+                
+                cmd = GetPlaylistExportSegmentCommand( ffmpeg_path, kind, '', False, None, length_ms, None, resolution, framerate, segment_path )
+                
+                RunPlaylistExportFFMPEG( cmd, job_status, stderr_path, progress_callable )
+                
+                segment_paths.append( segment_path )
+                
+                done_ms += estimated_length_ms
+                
+                continue
+                
+            
             hash = media_result.GetHash()
             mime = media_result.GetMime()
-            
-            segment_path = os.path.join( temp_dir, f'{i:05}.mp4' )
             
             try:
                 
@@ -594,7 +624,7 @@ def ExportPlaylistToMP4( job_status: ClientThreading.JobStatus, playlist_name: s
         
     
 
-def StartPlaylistExport( playlist_name: str, playlist_items: list[ tuple[ ClientMediaResult.MediaResult, int | None, int | None ] ], output_path: str ):
+def StartPlaylistExport( playlist_name: str, playlist_items: list[ tuple[ ClientMediaResult.MediaResult | None, int | None, int | None ] ], output_path: str ):
     
     job_status = ClientThreading.JobStatus( cancellable = True )
     

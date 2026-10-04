@@ -82,6 +82,7 @@ from hydrus.test import TestClientNetworking
 from hydrus.test import TestClientNetworkingSettings
 from hydrus.test import TestClientParsing
 from hydrus.test import TestClientPlaybackPoints
+from hydrus.test import TestClientPlaylistBlanks
 from hydrus.test import TestClientPlaylistItems
 from hydrus.test import TestClientPlaylistLooping
 from hydrus.test import TestClientPlaylistNavigation
@@ -959,6 +960,7 @@ class Controller( object ):
             TestClientMediaViewerLayouts,
             TestClientMediaViewerLayoutFiles,
             TestClientPlaybackPoints,
+            TestClientPlaylistBlanks,
             TestClientPlaylistItems,
             TestClientPlaylistLooping,
             TestClientPlaylistNavigation,

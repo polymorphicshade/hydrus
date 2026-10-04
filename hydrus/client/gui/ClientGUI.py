@@ -5443,14 +5443,15 @@ ATTACH "client.mappings.db" as external_mappings;'''
             return
             
         
-        media_results = CG.client_controller.Read( 'media_results', { hash for ( hash, start_ms, end_ms, reverse ) in items } )
+        media_results = CG.client_controller.Read( 'media_results', { hash for ( hash, start_ms, end_ms, reverse ) in items if hash is not None } )
         
         # a file that was deleted, or that the media viewer cannot show, is skipped
         hashes_to_media_results = { media_result.GetHash() : media_result for media_result in media_results if media_result.GetLocationsManager().IsLocal() and ClientMedia.CanDisplayMediaResult( media_result ) }
         
-        playlist_items = [ ( hashes_to_media_results[ hash ], start_ms, end_ms, reverse ) for ( hash, start_ms, end_ms, reverse ) in items if hash in hashes_to_media_results ]
+        # a blank has no file, and goes in as it is
+        playlist_items = [ ( None if hash is None else hashes_to_media_results[ hash ], start_ms, end_ms, reverse ) for ( hash, start_ms, end_ms, reverse ) in items if hash is None or hash in hashes_to_media_results ]
         
-        if len( playlist_items ) == 0:
+        if len( [ playlist_item for playlist_item in playlist_items if playlist_item[0] is not None ] ) == 0:
             
             ClientGUIDialogsMessage.ShowWarning( self, f'None of the files in "{playlist_name}" can be shown--they were probably deleted.' )
             

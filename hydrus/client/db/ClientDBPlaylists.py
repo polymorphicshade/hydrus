@@ -36,9 +36,11 @@ class ClientDBPlaylists( ClientDBModule.ClientDBModule ):
         
         # start_ms and end_ms are both NULL when the item is the whole file
         # reverse is 1 when the item plays backwards, from its end to its start
+        # blank items have no file, so they go in their own table, which shares its positions with playlist_items. that way hash_id is never NULL
         return {
             'main.playlists' : ( 'CREATE TABLE IF NOT EXISTS {} ( playlist_id INTEGER PRIMARY KEY, name TEXT UNIQUE );', 688 ),
-            'main.playlist_items' : ( 'CREATE TABLE IF NOT EXISTS {} ( playlist_id INTEGER, position INTEGER, hash_id INTEGER, start_ms INTEGER, end_ms INTEGER, reverse INTEGER NOT NULL DEFAULT 0, PRIMARY KEY ( playlist_id, position ) );', 688 )
+            'main.playlist_items' : ( 'CREATE TABLE IF NOT EXISTS {} ( playlist_id INTEGER, position INTEGER, hash_id INTEGER, start_ms INTEGER, end_ms INTEGER, reverse INTEGER NOT NULL DEFAULT 0, PRIMARY KEY ( playlist_id, position ) );', 688 ),
+            'main.playlist_blank_items' : ( 'CREATE TABLE IF NOT EXISTS {} ( playlist_id INTEGER, position INTEGER, duration_ms INTEGER, PRIMARY KEY ( playlist_id, position ) );', 688 )
         }
         
     
@@ -46,9 +48,7 @@ class ClientDBPlaylists( ClientDBModule.ClientDBModule ):
         
         hash_id = self.modules_hashes_local_cache.GetHashId( hash )
         
-        ( max_position, ) = self._Execute( 'SELECT MAX( position ) FROM playlist_items WHERE playlist_id = ?;', ( playlist_id, ) ).fetchone()
-        
-        position = 0 if max_position is None else max_position + 1
+        position = self._GetNextPosition( playlist_id )
         
         self._Execute( 'INSERT INTO playlist_items ( playlist_id, position, hash_id, start_ms, end_ms ) VALUES ( ?, ?, ?, ?, ? );', ( playlist_id, position, hash_id, start_ms, end_ms ) )
         
@@ -67,18 +67,32 @@ class ClientDBPlaylists( ClientDBModule.ClientDBModule ):
         return playlist_id
         
     
-    def GetPlaylistItems( self, playlist_id: int ) -> list[ tuple[ bytes, int | None, int | None, bool ] ]:
+    def _GetNextPosition( self, playlist_id: int ) -> int:
         
-        rows = self._Execute( 'SELECT hash_id, start_ms, end_ms, reverse FROM playlist_items WHERE playlist_id = ? ORDER BY position;', ( playlist_id, ) ).fetchall()
+        # the end of the playlist, after its files and its blanks
+        ( max_position, ) = self._Execute( 'SELECT MAX( position ) FROM ( SELECT position FROM playlist_items WHERE playlist_id = ? UNION ALL SELECT position FROM playlist_blank_items WHERE playlist_id = ? );', ( playlist_id, playlist_id ) ).fetchone()
         
-        hash_ids_to_hashes = self.modules_hashes_local_cache.GetHashIdsToHashes( hash_ids = { hash_id for ( hash_id, start_ms, end_ms, reverse ) in rows } )
+        return 0 if max_position is None else max_position + 1
         
-        return [ ( hash_ids_to_hashes[ hash_id ], start_ms, end_ms, bool( reverse ) ) for ( hash_id, start_ms, end_ms, reverse ) in rows ]
+    
+    def GetPlaylistItems( self, playlist_id: int ) -> list[ tuple[ bytes | None, int | None, int | None, bool ] ]:
+        
+        # a blank item is ( None, None, duration_ms, False )
+        rows = self._Execute( 'SELECT position, hash_id, start_ms, end_ms, reverse FROM playlist_items WHERE playlist_id = ?;', ( playlist_id, ) ).fetchall()
+        
+        blank_rows = self._Execute( 'SELECT position, NULL, NULL, duration_ms, 0 FROM playlist_blank_items WHERE playlist_id = ?;', ( playlist_id, ) ).fetchall()
+        
+        hash_ids_to_hashes = self.modules_hashes_local_cache.GetHashIdsToHashes( hash_ids = { hash_id for ( position, hash_id, start_ms, end_ms, reverse ) in rows } )
+        
+        all_rows = sorted( rows + blank_rows, key = lambda row: row[0] )
+        
+        return [ ( None if hash_id is None else hash_ids_to_hashes[ hash_id ], start_ms, end_ms, bool( reverse ) ) for ( position, hash_id, start_ms, end_ms, reverse ) in all_rows ]
         
     
     def GetPlaylists( self ) -> list[ ClientMediaPlaylists.PlaylistSummary ]:
         
-        playlists = self._Execute( 'SELECT playlist_id, name, COUNT( hash_id ) FROM playlists LEFT OUTER JOIN playlist_items USING ( playlist_id ) GROUP BY playlist_id;' ).fetchall()
+        # blanks count as items
+        playlists = self._Execute( 'SELECT playlist_id, name, ( SELECT COUNT( * ) FROM playlist_items WHERE playlist_items.playlist_id = playlists.playlist_id ) + ( SELECT COUNT( * ) FROM playlist_blank_items WHERE playlist_blank_items.playlist_id = playlists.playlist_id ) FROM playlists;' ).fetchall()
         
         return sorted( playlists, key = lambda playlist: playlist[1].lower() )
         
@@ -131,7 +145,7 @@ class ClientDBPlaylists( ClientDBModule.ClientDBModule ):
     def Repair( self, current_db_version, cursor_transaction_wrapper: HydrusDBBase.DBCursorTransactionWrapper ):
         
         # these tables are not from an official db update, so a db from before they existed would otherwise get a scary 'missing tables' warning. we just quietly make them
-        if not self._TableExists( 'main.playlists' ) or not self._TableExists( 'main.playlist_items' ):
+        if not self._TableExists( 'main.playlists' ) or not self._TableExists( 'main.playlist_items' ) or not self._TableExists( 'main.playlist_blank_items' ):
             
             self.CreateInitialTables()
             self.CreateInitialIndices()
@@ -152,9 +166,9 @@ class ClientDBPlaylists( ClientDBModule.ClientDBModule ):
         super().Repair( current_db_version, cursor_transaction_wrapper )
         
     
-    def SetPlaylistItems( self, playlist_id: int, items: collections.abc.Sequence[ tuple[ bytes, int | None, int | None, bool ] ] ):
+    def SetPlaylistItems( self, playlist_id: int, items: collections.abc.Sequence[ tuple[ bytes | None, int | None, int | None, bool ] ] ):
         
-        # the whole playlist, in order. this is how the playlist editor moves, duplicates, and removes items
+        # the whole playlist, in order. this is how the playlist editor moves, duplicates, and removes items, and puts in blanks
         result = self._Execute( 'SELECT 1 FROM playlists WHERE playlist_id = ?;', ( playlist_id, ) ).fetchone()
         
         if result is None:
@@ -164,10 +178,16 @@ class ClientDBPlaylists( ClientDBModule.ClientDBModule ):
             
         
         self._Execute( 'DELETE FROM playlist_items WHERE playlist_id = ?;', ( playlist_id, ) )
+        self._Execute( 'DELETE FROM playlist_blank_items WHERE playlist_id = ?;', ( playlist_id, ) )
         
-        rows = [ ( playlist_id, position, self.modules_hashes_local_cache.GetHashId( hash ), start_ms, end_ms, int( reverse ) ) for ( position, ( hash, start_ms, end_ms, reverse ) ) in enumerate( items ) ]
+        rows = [ ( playlist_id, position, self.modules_hashes_local_cache.GetHashId( hash ), start_ms, end_ms, int( reverse ) ) for ( position, ( hash, start_ms, end_ms, reverse ) ) in enumerate( items ) if hash is not None ]
         
         self._ExecuteMany( 'INSERT INTO playlist_items ( playlist_id, position, hash_id, start_ms, end_ms, reverse ) VALUES ( ?, ?, ?, ?, ?, ? );', rows )
+        
+        # for a blank, end_ms is how long it lasts
+        blank_rows = [ ( playlist_id, position, end_ms ) for ( position, ( hash, start_ms, end_ms, reverse ) ) in enumerate( items ) if hash is None ]
+        
+        self._ExecuteMany( 'INSERT INTO playlist_blank_items ( playlist_id, position, duration_ms ) VALUES ( ?, ?, ? );', blank_rows )
         
     
     def SetPlaylists( self, playlists: collections.abc.Collection[ tuple[ int | None, str ] ] ):
@@ -180,6 +200,7 @@ class ClientDBPlaylists( ClientDBModule.ClientDBModule ):
         deletee_playlist_ids = existing_playlist_ids.difference( kept_playlist_ids )
         
         self._ExecuteMany( 'DELETE FROM playlist_items WHERE playlist_id = ?;', ( ( playlist_id, ) for playlist_id in deletee_playlist_ids ) )
+        self._ExecuteMany( 'DELETE FROM playlist_blank_items WHERE playlist_id = ?;', ( ( playlist_id, ) for playlist_id in deletee_playlist_ids ) )
         self._ExecuteMany( 'DELETE FROM playlists WHERE playlist_id = ?;', ( ( playlist_id, ) for playlist_id in deletee_playlist_ids ) )
         
         # names are unique, so renames that swap names would collide halfway through. we clear them all first

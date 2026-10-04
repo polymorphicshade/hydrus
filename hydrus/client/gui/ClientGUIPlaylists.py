@@ -29,8 +29,8 @@ from hydrus.client.media import ClientMediaPlaylists
 from hydrus.client.media import ClientMediaResult
 from hydrus.client.media import ClientMediaSingle
 
-# ( hash, start_ms, end_ms, reverse )
-PlaylistItem = tuple[ bytes, int | None, int | None, bool ]
+# ( hash, start_ms, end_ms, reverse ). a blank has no hash, and its end_ms is how long it lasts
+PlaylistItem = tuple[ bytes | None, int | None, int | None, bool ]
 
 # where the last playlist export went, this session, so the next one starts there
 LAST_PLAYLIST_EXPORT_DIR = None
@@ -79,7 +79,7 @@ def EditPlaylists( win: QW.QWidget ):
         
     
 
-def ExportPlaylist( win: QW.QWidget, playlist_name: str, playlist_items: list[ tuple[ ClientMediaResult.MediaResult, int | None, int | None ] ] ):
+def ExportPlaylist( win: QW.QWidget, playlist_name: str, playlist_items: list[ tuple[ ClientMediaResult.MediaResult | None, int | None, int | None ] ] ):
     
     # asks where to save the mp4, and then makes it in the background, with a popup to follow along
     global LAST_PLAYLIST_EXPORT_DIR
@@ -189,15 +189,15 @@ def PickAndExportPlaylist( win: QW.QWidget ):
         return
         
     
-    media_results = CG.client_controller.Read( 'media_results', { hash for ( hash, start_ms, end_ms, reverse ) in items } )
+    media_results = CG.client_controller.Read( 'media_results', { hash for ( hash, start_ms, end_ms, reverse ) in items if hash is not None } )
     
     # a file that was deleted is skipped, like when the playlist plays
     hashes_to_media_results = { media_result.GetHash() : media_result for media_result in media_results if media_result.GetLocationsManager().IsLocal() }
     
-    # the export always plays forwards
-    playlist_items = [ ( hashes_to_media_results[ hash ], start_ms, end_ms ) for ( hash, start_ms, end_ms, reverse ) in items if hash in hashes_to_media_results ]
+    # the export always plays forwards. a blank goes in as black and silence
+    playlist_items = [ ( None if hash is None else hashes_to_media_results[ hash ], start_ms, end_ms ) for ( hash, start_ms, end_ms, reverse ) in items if hash is None or hash in hashes_to_media_results ]
     
-    if len( playlist_items ) == 0:
+    if len( [ item for item in playlist_items if item[0] is not None ] ) == 0:
         
         ClientGUIDialogsMessage.ShowWarning( win, f'None of the files in "{playlist_name}" are in your files any more--they were probably deleted.' )
         
@@ -251,7 +251,13 @@ def ViewPlaylistItems( win: QW.QWidget, items: list[ PlaylistItem ] ):
     from hydrus.client.gui.canvas import ClientGUICanvas
     from hydrus.client.gui.canvas import ClientGUICanvasFrame
     
-    hashes = HydrusLists.DedupeList( [ hash for ( hash, start_ms, end_ms, reverse ) in items ] )
+    # blanks have nothing to see
+    hashes = HydrusLists.DedupeList( [ hash for ( hash, start_ms, end_ms, reverse ) in items if hash is not None ] )
+    
+    if len( hashes ) == 0:
+        
+        return
+        
     
     media_results = CG.client_controller.Read( 'media_results', hashes )
     
@@ -301,7 +307,7 @@ class EditPlaylistsPanel( ClientGUIScrolledPanels.EditPanel ):
         help_text += '\n' * 2
         help_text += 'To put a file in a playlist, open it in the media viewer and right-click->playlist->add. If the A-B repeat points are set, only that part of the file goes in. To play a playlist, hit playlists->open.'
         help_text += '\n' * 2
-        help_text += 'Hit \'edit items\' to change the order a playlist plays in, repeat items, or take them out.'
+        help_text += 'Hit \'edit items\' to change the order a playlist plays in, repeat items, take them out, or put in blanks.'
         
         st = ClientGUICommon.BetterStaticText( self, label = help_text )
         st.setWordWrap( True )
@@ -422,7 +428,7 @@ class EditPlaylistsPanel( ClientGUIScrolledPanels.EditPanel ):
             items = CG.client_controller.Read( 'playlist_items', playlist_id )
             
         
-        hashes_to_names = GetPlaylistItemNames( { hash for ( hash, start_ms, end_ms, reverse ) in items } )
+        hashes_to_names = GetPlaylistItemNames( { hash for ( hash, start_ms, end_ms, reverse ) in items if hash is not None } )
         
         with ClientGUITopLevelWindowsPanels.DialogEdit( self, f'edit items: {name}' ) as dlg:
             
@@ -568,6 +574,8 @@ class EditPlaylistItemsPanel( ClientGUIScrolledPanels.EditPanel ):
         help_text += 'Double-click an item, or select some and hit \'view\', to see what they are in a media viewer. It starts on the first one, at the start of its part (with mpv), and you can step through the others.'
         help_text += '\n' * 2
         help_text += '\'reverse\' makes the selected items play backwards, from their end to their start, or back to normal if they all already do. Only mpv can play backwards, so with the other players, and for images, they play as normal. A playlist export always plays forwards.'
+        help_text += '\n' * 2
+        help_text += '\'add blank\' puts in a stretch of nothing--no picture and no sound--for as many milliseconds as you say, after the selected items, or at the end. Double-click a blank to change how long it lasts. A playlist export has black and silence there.'
         
         st = ClientGUICommon.BetterStaticText( self, label = help_text )
         st.setWordWrap( True )
@@ -584,6 +592,8 @@ class EditPlaylistItemsPanel( ClientGUIScrolledPanels.EditPanel ):
         self._move_down_button = ClientGUICommon.BetterButton( self, 'move down', self._Move, 1 )
         self._duplicate_button = ClientGUICommon.BetterButton( self, 'duplicate', self._Duplicate )
         self._reverse_button = ClientGUICommon.BetterButton( self, 'reverse', self._FlipReverse )
+        self._add_blank_button = ClientGUICommon.BetterButton( self, 'add blank' + HC.UNICODE_ELLIPSIS, self._AddBlank )
+        self._add_blank_button.setToolTip( ClientGUIFunctions.WrapToolTip( 'Put in a stretch of nothing, with no picture and no sound, for a number of milliseconds. It goes after the selected items, or at the end if none are selected.' ) )
         self._remove_button = ClientGUICommon.BetterButton( self, 'remove', self._Remove )
         
         #
@@ -604,6 +614,7 @@ class EditPlaylistItemsPanel( ClientGUIScrolledPanels.EditPanel ):
         QP.AddToLayout( button_hbox, self._move_down_button, CC.FLAGS_EXPAND_BOTH_WAYS )
         QP.AddToLayout( button_hbox, self._duplicate_button, CC.FLAGS_EXPAND_BOTH_WAYS )
         QP.AddToLayout( button_hbox, self._reverse_button, CC.FLAGS_EXPAND_BOTH_WAYS )
+        QP.AddToLayout( button_hbox, self._add_blank_button, CC.FLAGS_EXPAND_BOTH_WAYS )
         QP.AddToLayout( button_hbox, self._remove_button, CC.FLAGS_EXPAND_BOTH_WAYS )
         
         vbox = QP.VBoxLayout()
@@ -615,13 +626,41 @@ class EditPlaylistItemsPanel( ClientGUIScrolledPanels.EditPanel ):
         self.widget().setLayout( vbox )
         
         self._items_list.itemSelectionChanged.connect( self._UpdateButtons )
-        self._items_list.itemDoubleClicked.connect( self._View )
+        self._items_list.itemDoubleClicked.connect( self._ItemDoubleClicked )
         
         # a drag and drop moves rows around by itself, so the numbers need catching up after
         self._items_list.model().rowsMoved.connect( self._NotifyRowsChanged )
         self._items_list.model().rowsInserted.connect( self._NotifyRowsChanged )
         
         self._UpdateButtons()
+        
+    
+    def _AddBlank( self ):
+        
+        try:
+            
+            duration_ms = self._EnterBlankDuration( 1000 )
+            
+        except HydrusExceptions.CancelledException:
+            
+            return
+            
+        
+        selected_indices = self._items_list.GetSelectedIndices()
+        
+        index = max( selected_indices ) + 1 if len( selected_indices ) > 0 else self._items_list.count()
+        
+        new_key = self._AddItem( ClientMediaPlaylists.CreatePlaylistBlankItem( duration_ms ) )
+        
+        list_widget_item = QW.QListWidgetItem()
+        
+        list_widget_item.setData( QC.Qt.ItemDataRole.UserRole, new_key )
+        
+        self._items_list.insertItem( index, list_widget_item )
+        
+        self._items_list.SelectData( [ new_key ] )
+        
+        self._UpdateLabels()
         
     
     def _AddItem( self, item: PlaylistItem ) -> int:
@@ -633,6 +672,30 @@ class EditPlaylistItemsPanel( ClientGUIScrolledPanels.EditPanel ):
         self._keys_to_items[ key ] = item
         
         return key
+        
+    
+    def _EditBlank( self, key: int ):
+        
+        ( hash, start_ms, duration_ms, reverse ) = self._keys_to_items[ key ]
+        
+        try:
+            
+            duration_ms = self._EnterBlankDuration( duration_ms )
+            
+        except HydrusExceptions.CancelledException:
+            
+            return
+            
+        
+        self._keys_to_items[ key ] = ClientMediaPlaylists.CreatePlaylistBlankItem( duration_ms )
+        
+        self._UpdateLabels()
+        
+    
+    def _EnterBlankDuration( self, default: int ) -> int:
+        
+        # raises CancelledException if the user backs out
+        return ClientGUIDialogsQuick.EnterNumber( self, 'Enter how long the blank lasts, in milliseconds. There is nothing on screen and no sound for that long. 1000ms is a second.', default = default, min_value = ClientMediaPlaylists.PLAYLIST_BLANK_MIN_MS, max_value = ClientMediaPlaylists.PLAYLIST_BLANK_MAX_MS, title = 'blank' )
         
     
     def _Duplicate( self ):
@@ -678,7 +741,13 @@ class EditPlaylistItemsPanel( ClientGUIScrolledPanels.EditPanel ):
         
         keys = self._items_list.GetData()
         
-        selected_keys = [ keys[ index ] for index in selected_indices ]
+        # a blank has nothing to play backwards
+        selected_keys = [ keys[ index ] for index in selected_indices if self._keys_to_items[ keys[ index ] ][0] is not None ]
+        
+        if len( selected_keys ) == 0:
+            
+            return
+            
         
         # if any are forwards, they all go in reverse. if they are all in reverse already, they all go back to forwards
         reverse = not all( self._keys_to_items[ key ][3] for key in selected_keys )
@@ -691,6 +760,20 @@ class EditPlaylistItemsPanel( ClientGUIScrolledPanels.EditPanel ):
             
         
         self._UpdateLabels()
+        
+    
+    def _ItemDoubleClicked( self, list_widget_item: QW.QListWidgetItem ):
+        
+        key = list_widget_item.data( QC.Qt.ItemDataRole.UserRole )
+        
+        if key in self._keys_to_items and self._keys_to_items[ key ][0] is None:
+            
+            self._EditBlank( key )
+            
+        else:
+            
+            self._View()
+            
         
     
     def _Move( self, direction: int ):
@@ -744,11 +827,14 @@ class EditPlaylistItemsPanel( ClientGUIScrolledPanels.EditPanel ):
         
         num_selected = len( selected_indices )
         
-        self._view_button.setEnabled( num_selected > 0 )
+        # blanks have nothing to view or play backwards
+        num_files_selected = len( [ item for item in self._GetSelectedItems() if item[0] is not None ] )
+        
+        self._view_button.setEnabled( num_files_selected > 0 )
         self._move_up_button.setEnabled( num_selected > 0 and min( selected_indices ) > 0 )
         self._move_down_button.setEnabled( num_selected > 0 and max( selected_indices ) < self._items_list.count() - 1 )
         self._duplicate_button.setEnabled( num_selected > 0 )
-        self._reverse_button.setEnabled( num_selected > 0 )
+        self._reverse_button.setEnabled( num_files_selected > 0 )
         self._remove_button.setEnabled( num_selected > 0 )
         
     
@@ -767,9 +853,18 @@ class EditPlaylistItemsPanel( ClientGUIScrolledPanels.EditPanel ):
             
             ( hash, start_ms, end_ms, reverse ) = self._keys_to_items[ key ]
             
-            name = self._hashes_to_names.get( hash, hash.hex()[:12] )
+            if hash is None:
+                
+                pretty_item = ClientMediaPlaylists.ConvertPlaylistBlankToString( end_ms )
+                
+            else:
+                
+                name = self._hashes_to_names.get( hash, hash.hex()[:12] )
+                
+                pretty_item = ConvertPlaylistItemToPretty( name, start_ms, end_ms, reverse = reverse )
+                
             
-            list_widget_item.setText( f'{HydrusNumbers.ToHumanInt( index + 1 )}. {ConvertPlaylistItemToPretty( name, start_ms, end_ms, reverse = reverse )}' )
+            list_widget_item.setText( f'{HydrusNumbers.ToHumanInt( index + 1 )}. {pretty_item}' )
             
         
     
@@ -782,7 +877,7 @@ class EditPlaylistItemsPanel( ClientGUIScrolledPanels.EditPanel ):
     
     def _View( self, *args ):
         
-        items = self._GetSelectedItems()
+        items = [ item for item in self._GetSelectedItems() if item[0] is not None ]
         
         if len( items ) == 0:
             

@@ -7,6 +7,7 @@ from hydrus.core import HydrusTime
 
 # playlists are named, ordered lists of files. each item is a whole file, or just the span between two timestamps of it
 # an item can play in reverse, from its end back to its start. only mpv can do that, so with the other players it plays forwards
+# an item can also be a blank: no file at all, just a stretch of nothing on screen and no sound, for a set time
 # they live in the db. these are the bits of logic the gui and the db share
 
 # playback that jumps back more than this from near the end of an item has looped round to the start
@@ -29,6 +30,27 @@ PlaylistSummary = tuple[ int, str, int ]
 PLAYLIST_ITEM_LOOP_ONCE = 0 # the normal way: once through
 PLAYLIST_ITEM_LOOP_TIMES = 1 # a number of times through
 PLAYLIST_ITEM_LOOP_SECONDS = 2 # round and round for a time, like a slideshow, moving on when the time is up even part way through
+
+# a blank item has no hash, and its end_ms is how long it lasts: ( None, None, duration_ms, False )
+PLAYLIST_BLANK_MIN_MS = 1
+PLAYLIST_BLANK_MAX_MS = 3600 * 1000
+
+def ConvertPlaylistBlankToString( duration_ms: int ) -> str:
+    
+    return f'blank for {HydrusNumbers.ToHumanInt( duration_ms )}ms'
+    
+
+def CreatePlaylistBlankItem( duration_ms: int ) -> tuple[ None, None, int, bool ]:
+    
+    duration_ms = max( PLAYLIST_BLANK_MIN_MS, min( int( duration_ms ), PLAYLIST_BLANK_MAX_MS ) )
+    
+    return ( None, None, duration_ms, False )
+    
+
+def PlaylistBlankIsDone( duration_ms: int, blank_time_s: float ) -> bool:
+    
+    return blank_time_s * 1000 >= duration_ms
+    
 
 def ConvertPlaylistItemLoopToString( loop_type: int, loop_times: int, loop_seconds: float ) -> str:
     
