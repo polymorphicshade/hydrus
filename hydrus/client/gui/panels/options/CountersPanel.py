@@ -26,6 +26,8 @@ class CountersPanel( ClientGUIOptionsPanelBase.OptionsPagePanel ):
         help_text += 'You can search for them with system:counter, for instance "system:counter tally > 2". Names are not case-sensitive.'
         help_text += '\n' * 2
         help_text += 'Renaming a counter keeps its counts. Deleting a counter also deletes its counts for every file.'
+        help_text += '\n' * 2
+        help_text += 'To turn tags like "items:72" into counts, use tags->to counter in the main menu.'
         
         st = ClientGUICommon.BetterStaticText( self, label = help_text )
         st.setWordWrap( True )

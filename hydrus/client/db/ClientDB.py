@@ -4,6 +4,7 @@ import hashlib
 import itertools    
 import math
 import os
+import re
 import sqlite3
 import time
 import traceback
@@ -1172,6 +1173,49 @@ class DB( HydrusDB.HydrusDB ):
             
             job_status.FinishAndDismiss()
             
+        
+    
+    def _ConvertTagsToCounters( self, tag_service_key: bytes, namespace_wildcard: str, subtag_wildcard: str, namespaces_to_counter_ids: dict[ str, bytes ] ) -> tuple[ int, int ]:
+        
+        tag_service_id = self.modules_services.GetServiceId( tag_service_key )
+        
+        # a namespace that has turned up since the user said ok has no counter to go to, so it is left alone
+        rows = [ row for row in self._GetTagsToCountersRows( tag_service_id, namespace_wildcard, subtag_wildcard ) if row[0] in namespaces_to_counter_ids ]
+        
+        counter_ids_to_hash_ids_to_counts = collections.defaultdict( dict )
+        
+        content_updates = []
+        
+        for ( namespace, tag, count, hash_ids ) in rows:
+            
+            hash_ids_to_counts = counter_ids_to_hash_ids_to_counts[ namespaces_to_counter_ids[ namespace ] ]
+            
+            for hash_id in hash_ids:
+                
+                # a file with both items:3 and items:5 gets the higher
+                hash_ids_to_counts[ hash_id ] = max( count, hash_ids_to_counts.get( hash_id, 0 ) )
+                
+            
+            hashes = self.modules_hashes_local_cache.GetHashes( hash_ids )
+            
+            content_updates.append( ClientContentUpdates.ContentUpdate( HC.CONTENT_TYPE_MAPPINGS, HC.CONTENT_UPDATE_DELETE, ( tag, hashes ) ) )
+            
+        
+        for ( counter_id, hash_ids_to_counts ) in counter_ids_to_hash_ids_to_counts.items():
+            
+            self.modules_files_counters.SetCountsForHashIds( counter_id, hash_ids_to_counts )
+            
+        
+        if len( content_updates ) > 0:
+            
+            content_update_package = ClientContentUpdates.ContentUpdatePackage.STATICCreateFromContentUpdates( tag_service_key, content_updates )
+            
+            self.modules_content_updates.ProcessContentUpdatePackage( content_update_package )
+            
+        
+        num_files = len( set( itertools.chain.from_iterable( ( hash_ids for ( namespace, tag, count, hash_ids ) in rows ) ) ) )
+        
+        return ( len( rows ), num_files )
         
     
     def _CreateDB( self ):
@@ -3636,6 +3680,81 @@ class DB( HydrusDB.HydrusDB ):
         return HydrusLists.MassExtend( ( module.GetTablesAndColumnsThatUseDefinitions( content_type ) for module in self._modules ) )
         
     
+    def _GetTagsToCountersPreview( self, tag_service_key: bytes, namespace_wildcard: str, subtag_wildcard: str ) -> dict[ str, tuple[ int, int ] ]:
+        
+        tag_service_id = self.modules_services.GetServiceId( tag_service_key )
+        
+        namespaces_to_num_tags = collections.Counter()
+        namespaces_to_hash_ids = collections.defaultdict( set )
+        
+        for ( namespace, tag, count, hash_ids ) in self._GetTagsToCountersRows( tag_service_id, namespace_wildcard, subtag_wildcard ):
+            
+            namespaces_to_num_tags[ namespace ] += 1
+            namespaces_to_hash_ids[ namespace ].update( hash_ids )
+            
+        
+        return { namespace : ( num_tags, len( namespaces_to_hash_ids[ namespace ] ) ) for ( namespace, num_tags ) in namespaces_to_num_tags.items() }
+        
+    
+    def _GetTagsToCountersRows( self, tag_service_id: int, namespace_wildcard: str, subtag_wildcard: str ) -> list[ tuple[ str, str, int, list[ int ] ] ]:
+        
+        # the 'namespace:number' tags in this service that match the filter, as ( namespace, tag, number, hash_ids )
+        
+        service = self.modules_services.GetService( tag_service_id )
+        
+        if service.GetServiceType() != HC.LOCAL_TAG:
+            
+            raise HydrusExceptions.VetoException( 'Tags can only be converted to counters on a local tag service!' )
+            
+        
+        ( current_mappings_table_name, deleted_mappings_table_name, pending_mappings_table_name, petitioned_mappings_table_name ) = ClientDBMappingsStorage.GenerateMappingsTableNames( tag_service_id )
+        
+        subtag_re = re.compile( re.escape( subtag_wildcard ).replace( r'\*', '.*' ) )
+        
+        rows = []
+        
+        for namespace_id in self.modules_tag_search.GetNamespaceIdsFromWildcard( namespace_wildcard ):
+            
+            ( namespace, ) = self._Execute( 'SELECT namespace FROM namespaces WHERE namespace_id = ?;', ( namespace_id, ) ).fetchone()
+            
+            # an unnamespaced tag has no name to give a counter
+            if namespace == '':
+                
+                continue
+                
+            
+            # just the subtags that are all digits
+            tag_ids_and_subtags = self._Execute( 'SELECT tag_id, subtag FROM tags CROSS JOIN subtags USING ( subtag_id ) WHERE namespace_id = ? AND subtag != ? AND subtag NOT GLOB ?;', ( namespace_id, '', '*[^0-9]*' ) ).fetchall()
+            
+            for ( tag_id, subtag ) in tag_ids_and_subtags:
+                
+                if subtag_re.fullmatch( subtag ) is None:
+                    
+                    continue
+                    
+                
+                count = int( subtag )
+                
+                # too big to store
+                if not ClientDBTagSearch.CanCacheInteger( count ):
+                    
+                    continue
+                    
+                
+                hash_ids = self._STL( self._Execute( f'SELECT hash_id FROM {current_mappings_table_name} WHERE tag_id = ?;', ( tag_id, ) ) )
+                
+                if len( hash_ids ) == 0:
+                    
+                    continue
+                    
+                
+                rows.append( ( namespace, HydrusTags.CombineTag( namespace, subtag ), count, hash_ids ) )
+                
+            
+        
+        return rows
+        
+    
     def _GetTrashHashes( self, limit = None, minimum_age = None ):
         
         # TODO: rework the filedeletelock to be a thing that kicks in _during_ the search, so the LIMIT remains valid. otherwise too many locked files means this chokes
@@ -3939,6 +4058,7 @@ class DB( HydrusDB.HydrusDB ):
                 'options' : self._GetOptions,
                 'pending' : self._GetPending,
                 'related_tags' : self._GetRelatedTags,
+                'tags_to_counters_preview' : self._GetTagsToCountersPreview,
                 'service_info' : self._GetServiceInfo,
                 'tables_and_columns_using_definitions' : self._GetTablesAndColumnsUsingDefinitions,
                 'tag_display_maintenance_status' : self._CacheTagDisplayGetApplicationStatusNumbers,
@@ -4091,6 +4211,7 @@ class DB( HydrusDB.HydrusDB ):
                 'clear_internal_false_positive_relations' : self.modules_files_duplicates_updates.ClearInternalFalsePositivesHashes,
                 'clear_orphan_tables' : self.modules_db_maintenance.ClearOrphanTables,
                 'content_updates' : self.modules_content_updates.ProcessContentUpdatePackage,
+                'convert_tags_to_counters' : self._ConvertTagsToCounters,
                 'cull_file_viewing_statistics' : self.modules_files_viewing_stats.CullFileViewingStatistics,
                 'delete_serialisable_named' : self.modules_serialisable.DeleteJSONDumpNamed,
                 'delete_potential_duplicate_pairs' : self.modules_files_duplicates_updates.DeleteAllPotentialDuplicatePairs,

@@ -127,3 +127,12 @@ class ClientDBFilesCounters( ClientDBModule.ClientDBModule ):
             
         
     
+    def SetCountsForHashIds( self, counter_id: bytes, hash_ids_to_counts: dict[ int, int ] ):
+        
+        counter_id = sqlite3.Binary( counter_id )
+        
+        self._ExecuteMany( 'DELETE FROM file_counters WHERE hash_id = ? AND counter_id = ?;', ( ( hash_id, counter_id ) for ( hash_id, count ) in hash_ids_to_counts.items() if count <= 0 ) )
+        
+        self._ExecuteMany( 'INSERT OR REPLACE INTO file_counters ( hash_id, counter_id, count ) VALUES ( ?, ?, ? );', ( ( hash_id, counter_id, count ) for ( hash_id, count ) in hash_ids_to_counts.items() if count > 0 ) )
+        
+    

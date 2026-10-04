@@ -74,6 +74,7 @@ from hydrus.client.gui.metadata import ClientGUIManageTagParents
 from hydrus.client.gui.metadata import ClientGUIManageTagSiblings
 from hydrus.client.gui.metadata import ClientGUIMigrateTags
 from hydrus.client.gui.metadata import ClientGUITagFilter
+from hydrus.client.gui.metadata import ClientGUITagsToCounters
 from hydrus.client.gui.metadata import ClientGUITagDisplayOptions
 from hydrus.client.gui.metadata import ClientGUITagDisplayMaintenanceReview
 from hydrus.client.gui.metadata import ClientGUITime
@@ -1215,6 +1216,13 @@ class FrameGUI( CAC.ApplicationCommandProcessorMixin, ClientGUITopLevelWindows.M
             
             self._controller.Write( 'clear_orphan_tables' )
             
+        
+    
+    def _ConvertTagsToCounters( self ):
+        
+        default_tag_service_key = self._controller.new_options.GetKey( 'default_tag_service_tab' )
+        
+        ClientGUITagsToCounters.ConvertTagsToCounters( self, default_tag_service_key )
         
     
     def _CullFileViewingStats( self ):
@@ -4056,6 +4064,7 @@ ATTACH "client.mappings.db" as external_mappings;'''
         menu = ClientGUIMenus.GenerateMenu( self )
         
         ClientGUIMenus.AppendMenuItem( menu, 'migrate' + HC.UNICODE_ELLIPSIS, 'Migrate tags from one place to another.', self._MigrateTags )
+        ClientGUIMenus.AppendMenuItem( menu, 'to counter' + HC.UNICODE_ELLIPSIS, 'Convert "namespace:number" tags, like items:72, into counters.', self._ConvertTagsToCounters )
         
         ClientGUIMenus.AppendSeparator( menu )
         

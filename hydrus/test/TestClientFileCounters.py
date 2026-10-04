@@ -2,9 +2,12 @@ import unittest
 
 from qtpy import QtWidgets as QW
 
+from hydrus.core import HydrusExceptions
 from hydrus.core import HydrusSerialisable
 
+from hydrus.client import ClientConstants as CC
 from hydrus.client.gui.media import ClientGUIMediaCounters
+from hydrus.client.gui.metadata import ClientGUITagsToCounters
 
 class TestFileCounters( unittest.TestCase ):
     
@@ -52,6 +55,50 @@ class TestFileCounters( unittest.TestCase ):
         panel._filter.setText( '' )
         
         self.assertEqual( len( [ counter.name for ( counter, label, spinbox ) in panel._rows if not spinbox.isHidden() ] ), 3 )
+        
+        dialog.deleteLater()
+        
+    
+    def test_tags_to_counters_filter( self ):
+        
+        for ( text, result ) in [
+            ( 'items:72', ( 'items', '72' ) ),
+            ( 'items:*', ( 'items', '*' ) ),
+            ( 'items', ( 'items', '*' ) ),
+            ( 'items:', ( 'items', '*' ) ),
+            ( ' Items : 7* ', ( 'items', '7*' ) ),
+            ( '*:*', ( '*', '*' ) ),
+            ( 'series:part:3', None ),
+            ( 'items:many', None ),
+            ( ':72', None ),
+            ( '', None )
+        ]:
+            
+            if result is None:
+                
+                with self.assertRaises( HydrusExceptions.VetoException, msg = text ):
+                    
+                    ClientGUITagsToCounters.ParseTagsToCountersFilter( text )
+                    
+                
+            else:
+                
+                self.assertEqual( ClientGUITagsToCounters.ParseTagsToCountersFilter( text ), result, text )
+                
+            
+        
+        dialog = QW.QDialog()
+        
+        panel = ClientGUITagsToCounters.EditTagsToCountersPanel( dialog, CC.DEFAULT_LOCAL_TAG_SERVICE_KEY )
+        
+        with self.assertRaises( HydrusExceptions.VetoException ):
+            
+            panel.CheckValid()
+            
+        
+        panel._tag_filter.setText( 'items:*' )
+        
+        self.assertEqual( panel.GetValue(), ( CC.DEFAULT_LOCAL_TAG_SERVICE_KEY, 'items', '*' ) )
         
         dialog.deleteLater()
         

@@ -375,6 +375,95 @@ class TestClientDB( unittest.TestCase ):
             
         
     
+    def test_tags_to_counters( self ):
+        
+        TestClientDB._clear_db()
+        
+        hash_a = os.urandom( 32 )
+        hash_b = os.urandom( 32 )
+        hash_c = os.urandom( 32 )
+        
+        items_id = os.urandom( 32 )
+        pages_id = os.urandom( 32 )
+        
+        tag_service_key = CC.DEFAULT_LOCAL_TAG_SERVICE_KEY
+        
+        content_updates = []
+        
+        for ( tag, hashes ) in [
+            ( 'items:72', ( hash_a, ) ),
+            ( 'items:80', ( hash_a, ) ),
+            ( 'items:5', ( hash_b, ) ),
+            ( 'items:many', ( hash_a, ) ),
+            ( 'pages:3', ( hash_a, ) ),
+            ( 'pages:010', ( hash_b, ) ),
+            ( 'volume:2', ( hash_c, ) ),
+            ( 'character:samus', ( hash_c, ) ),
+            ( '12', ( hash_c, ) )
+        ]:
+            
+            content_updates.append( ClientContentUpdates.ContentUpdate( HC.CONTENT_TYPE_MAPPINGS, HC.CONTENT_UPDATE_ADD, ( tag, hashes ) ) )
+            
+        
+        self._write( 'content_updates', ClientContentUpdates.ContentUpdatePackage.STATICCreateFromContentUpdates( tag_service_key, content_updates ) )
+        
+        def get_tags( search_text ):
+            
+            location_context = ClientLocation.LocationContext.STATICCreateSimple( CC.COMBINED_FILE_SERVICE_KEY )
+            tag_context = ClientSearchTagContext.TagContext( service_key = tag_service_key )
+            
+            file_search_context = ClientSearchFileSearchContext.FileSearchContext( location_context = location_context, tag_context = tag_context )
+            
+            return { predicate.GetValue() for predicate in self._read( 'autocomplete_predicates', ClientTags.TAG_DISPLAY_STORAGE, file_search_context, search_text = search_text ) }
+            
+        
+        # preview is { namespace : ( num_tags, num_files ) }, just for numbers
+        
+        self.assertEqual( self._read( 'tags_to_counters_preview', tag_service_key, 'items', '*' ), { 'items' : ( 3, 2 ) } )
+        self.assertEqual( self._read( 'tags_to_counters_preview', tag_service_key, 'items', '72' ), { 'items' : ( 1, 1 ) } )
+        self.assertEqual( self._read( 'tags_to_counters_preview', tag_service_key, 'items', '*0' ), { 'items' : ( 1, 1 ) } )
+        self.assertEqual( self._read( 'tags_to_counters_preview', tag_service_key, 'items', '99' ), {} )
+        self.assertEqual( self._read( 'tags_to_counters_preview', tag_service_key, 'nothing', '*' ), {} )
+        self.assertEqual( self._read( 'tags_to_counters_preview', tag_service_key, 'char*', '*' ), {} )
+        
+        # unnamespaced tags are not included
+        self.assertEqual( self._read( 'tags_to_counters_preview', tag_service_key, '*', '*' ), { 'items' : ( 3, 2 ), 'pages' : ( 2, 2 ), 'volume' : ( 1, 1 ) } )
+        
+        # convert
+        
+        result = self._write( 'convert_tags_to_counters', tag_service_key, 'items', '*', { 'items' : items_id } )
+        
+        self.assertEqual( result, ( 3, 2 ) )
+        
+        # the higher number wins
+        self.assertEqual( self._read( 'file_counters', hash_a ), { items_id : 80 } )
+        self.assertEqual( self._read( 'file_counters', hash_b ), { items_id : 5 } )
+        
+        self.assertEqual( get_tags( 'items:*' ), { 'items:many' } )
+        
+        self.assertEqual( self._read( 'tags_to_counters_preview', tag_service_key, 'items', '*' ), {} )
+        
+        # an existing count is replaced, and a namespace with no counter to go to is left alone
+        
+        self._write( 'file_counter_set', hash_b, pages_id, 7 )
+        
+        result = self._write( 'convert_tags_to_counters', tag_service_key, '*', '*', { 'pages' : pages_id } )
+        
+        self.assertEqual( result, ( 2, 2 ) )
+        
+        self.assertEqual( self._read( 'file_counters', hash_a ), { items_id : 80, pages_id : 3 } )
+        self.assertEqual( self._read( 'file_counters', hash_b ), { items_id : 5, pages_id : 10 } )
+        self.assertEqual( self._read( 'file_counters', hash_c ), {} )
+        
+        self.assertEqual( get_tags( 'pages:*' ), set() )
+        self.assertEqual( get_tags( 'volume:*' ), { 'volume:2' } )
+        self.assertEqual( get_tags( 'character:*' ), { 'character:samus' } )
+        
+        # nothing left to do
+        
+        self.assertEqual( self._write( 'convert_tags_to_counters', tag_service_key, 'items', '*', { 'items' : items_id } ), ( 0, 0 ) )
+        
+    
     def test_file_playback_skips( self ):
         
         hash_a = os.urandom( 32 )
