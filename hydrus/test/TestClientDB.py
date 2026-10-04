@@ -1198,6 +1198,36 @@ class TestClientDB( unittest.TestCase ):
         self.assertEqual( self._read( 'file_scripted_events', hash_b ), [ ( 250, 'echo b' ) ] )
         
     
+    def test_file_image_overlay( self ):
+        
+        hash_a = os.urandom( 32 )
+        hash_b = os.urandom( 32 )
+        
+        self.assertIsNone( self._read( 'file_image_overlay', hash_a ) )
+        
+        image_overlay_a = ( 'C:\\overlays\\frame.png', 0.75, ( 0.1, 0.2, 0.3, 0.4 ), True, False )
+        image_overlay_b = ( '/home/me/watermark.png', 1.0, ( 0.0, 0.0, 1.0, 1.0 ), False, True )
+        
+        self._write( 'file_image_overlay', hash_a, image_overlay_a )
+        self._write( 'file_image_overlay', hash_b, image_overlay_b )
+        
+        self.assertEqual( self._read( 'file_image_overlay', hash_a ), image_overlay_a )
+        self.assertEqual( self._read( 'file_image_overlay', hash_b ), image_overlay_b )
+        
+        # a file has one, so a new one replaces it
+        image_overlay_a = ( 'C:\\overlays\\other.png', 0.5, ( 0.25, 0.25, 0.5, 0.5 ), False, False )
+        
+        self._write( 'file_image_overlay', hash_a, image_overlay_a )
+        
+        self.assertEqual( self._read( 'file_image_overlay', hash_a ), image_overlay_a )
+        
+        # None takes it away
+        self._write( 'file_image_overlay', hash_a, None )
+        
+        self.assertIsNone( self._read( 'file_image_overlay', hash_a ) )
+        self.assertEqual( self._read( 'file_image_overlay', hash_b ), image_overlay_b )
+        
+    
     def test_file_viewer_rotation( self ):
         
         hash_a = os.urandom( 32 )

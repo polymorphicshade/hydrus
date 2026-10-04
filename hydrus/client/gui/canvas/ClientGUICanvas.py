@@ -4713,6 +4713,12 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
         self._playback_gap_timer.setInterval( PLAYBACK_GAP_TICK_MS )
         self._playback_gap_timer.timeout.connect( self._DoPlaybackGapWork )
         
+        # the image each file can have drawn over it. it follows the file that is up
+        self._image_overlay_manager = ClientGUICanvasOverlays.CanvasImageOverlayManager( self )
+        
+        self.mediaChanged.connect( self._image_overlay_manager.SetMedia )
+        self.mediaCleared.connect( self._image_overlay_manager.ClearMedia )
+        
         if first_hash is None:
             
             first_media = self._media_list.GetFirst()
@@ -5632,7 +5638,7 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
             
             ClientGUIMenus.AppendMenu( menu, screen_menu, 'screen' )
             
-            ClientGUICanvasOverlays.AppendOverlaysMenu( menu, self )
+            ClientGUICanvasOverlays.AppendOverlaysMenu( menu, self, image_overlay_manager = self._image_overlay_manager )
             
             if self.SupportsSlideshow():
                 

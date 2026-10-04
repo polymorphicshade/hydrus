@@ -42,6 +42,7 @@ from hydrus.client.db import ClientDBFilesDuplicatesStorage
 from hydrus.client.db import ClientDBFilesDuplicatesUpdates
 from hydrus.client.db import ClientDBFilesInbox
 from hydrus.client.db import ClientDBFilesMaintenance
+from hydrus.client.db import ClientDBFilesImageOverlays
 from hydrus.client.db import ClientDBFilesMaintenanceQueue
 from hydrus.client.db import ClientDBFilesMetadataBasic
 from hydrus.client.db import ClientDBFilesMetadataRich
@@ -3966,6 +3967,7 @@ class DB( HydrusDB.HydrusDB ):
                 'playlists_containing_file' : self.modules_playlists.GetPlaylistsContainingFile,
                 'file_duplicate_info' : self.modules_files_duplicates_storage.GetFileDuplicateInfo,
                 'file_hashes' : self.modules_hashes.GetFileHashes,
+                'file_image_overlay' : self.modules_files_image_overlays.GetImageOverlay,
                 'file_info_managers' : self.modules_media_results.GetFileInfoManagersFromHashes,
                 'file_info_managers_from_ids' : self.modules_media_results.GetFileInfoManagers,
                 'file_maintenance_get_job_counts' : self.modules_files_maintenance_queue.GetJobCounts,
@@ -4129,6 +4131,7 @@ class DB( HydrusDB.HydrusDB ):
                 'file_playback_skips' : self.modules_files_playback_skips.SetPlaybackSkips,
                 'file_scripted_events' : self.modules_files_scripted_events.SetScriptedEvents,
                 'file_segments' : self.modules_files_segments.SetSegments,
+                'file_image_overlay' : self.modules_files_image_overlays.SetImageOverlay,
                 'file_viewer_rotation' : self.modules_files_viewer_rotations.SetViewerRotation,
                 'file_viewer_zoom' : self.modules_files_viewer_zooms.SetViewerZoom,
                 'file_zoom_timestamps' : self.modules_files_zoom_timestamps.SetZoomTimestamps,
@@ -4318,6 +4321,10 @@ class DB( HydrusDB.HydrusDB ):
         self.modules_files_viewer_rotations = ClientDBFilesViewerRotations.ClientDBFilesViewerRotations( self._c, self.modules_hashes_local_cache )
         
         self._modules.append( self.modules_files_viewer_rotations )
+        
+        self.modules_files_image_overlays = ClientDBFilesImageOverlays.ClientDBFilesImageOverlays( self._c, self.modules_hashes_local_cache )
+        
+        self._modules.append( self.modules_files_image_overlays )
         
         self.modules_files_counters = ClientDBFilesCounters.ClientDBFilesCounters( self._c, self.modules_hashes_local_cache )
         

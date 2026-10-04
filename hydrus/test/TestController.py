@@ -69,6 +69,7 @@ from hydrus.test import TestClientDuplicatesAutoResolution
 from hydrus.test import TestClientFileCounters
 from hydrus.test import TestClientFileStorage
 from hydrus.test import TestClientImageHandling
+from hydrus.test import TestClientImageOverlays
 from hydrus.test import TestClientImportObjects
 from hydrus.test import TestClientImportOptions
 from hydrus.test import TestClientImportSubscriptions
@@ -958,6 +959,7 @@ class Controller( object ):
             TestClientAudioExport,
             TestClientCanvasOverlays,
             TestClientFileCounters,
+            TestClientImageOverlays,
             TestClientMediaViewerLayouts,
             TestClientMediaViewerLayoutFiles,
             TestClientPlaybackGaps,
