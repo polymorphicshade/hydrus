@@ -24,8 +24,10 @@ class ClientDBFilesZoomTimestamps( ClientDBModule.ClientDBModule ):
         # zoom is relative to the zoom that fits the file in the media viewer window, so it follows the window's size
         # zoom_is_relative is 0 for rows from before that, which are the plain zoom
         # center_x and center_y are the point of the file in the middle of the window, as a fraction of the file's width and height, so they follow the window's size too. they are NULL for rows from before we saved them, which are centered
+        # rotation is how the file is turned, in degrees clockwise. it is NULL for rows from before we saved it, which leave the file turned however it is
+        # these are 'position timestamps' in the ui
         return {
-            'main.file_zoom_timestamps' : ( 'CREATE TABLE IF NOT EXISTS {} ( hash_id INTEGER, timestamp_ms INTEGER, zoom REAL, zoom_is_relative INTEGER NOT NULL DEFAULT 0, center_x REAL, center_y REAL, PRIMARY KEY ( hash_id, timestamp_ms ) );', 688 )
+            'main.file_zoom_timestamps' : ( 'CREATE TABLE IF NOT EXISTS {} ( hash_id INTEGER, timestamp_ms INTEGER, zoom REAL, zoom_is_relative INTEGER NOT NULL DEFAULT 0, center_x REAL, center_y REAL, rotation INTEGER, PRIMARY KEY ( hash_id, timestamp_ms ) );', 688 )
         }
         
     
@@ -41,11 +43,11 @@ class ClientDBFilesZoomTimestamps( ClientDBModule.ClientDBModule ):
         return num_files
         
     
-    def GetZoomTimestamps( self, hash: bytes ) -> list[ tuple[ int, float, bool, float | None, float | None ] ]:
+    def GetZoomTimestamps( self, hash: bytes ) -> list[ tuple[ int, float, bool, float | None, float | None, int | None ] ]:
         
         hash_id = self.modules_hashes_local_cache.GetHashId( hash )
         
-        return [ ( timestamp_ms, zoom, bool( zoom_is_relative ), center_x, center_y ) for ( timestamp_ms, zoom, zoom_is_relative, center_x, center_y ) in self._Execute( 'SELECT timestamp_ms, zoom, zoom_is_relative, center_x, center_y FROM file_zoom_timestamps WHERE hash_id = ? ORDER BY timestamp_ms;', ( hash_id, ) ) ]
+        return [ ( timestamp_ms, zoom, bool( zoom_is_relative ), center_x, center_y, rotation ) for ( timestamp_ms, zoom, zoom_is_relative, center_x, center_y, rotation ) in self._Execute( 'SELECT timestamp_ms, zoom, zoom_is_relative, center_x, center_y, rotation FROM file_zoom_timestamps WHERE hash_id = ? ORDER BY timestamp_ms;', ( hash_id, ) ) ]
         
     
     def GetTablesAndColumnsThatUseDefinitions( self, content_type: int ) -> list[ tuple[ str, str ] ]:
@@ -82,18 +84,24 @@ class ClientDBFilesZoomTimestamps( ClientDBModule.ClientDBModule ):
                 
             
         
+        if 'rotation' not in column_names:
+            
+            # the table is from before they saved how the file was turned. what is in it leaves the file turned however it is
+            self._Execute( 'ALTER TABLE file_zoom_timestamps ADD COLUMN rotation INTEGER;' )
+            
+        
         cursor_transaction_wrapper.CommitAndBegin()
         
         super().Repair( current_db_version, cursor_transaction_wrapper )
         
     
-    def SetZoomTimestamps( self, hash: bytes, zoom_timestamps: list[ tuple[ int, float, float | None, float | None ] ] ):
+    def SetZoomTimestamps( self, hash: bytes, zoom_timestamps: list[ tuple[ int, float, float | None, float | None, int | None ] ] ):
         
-        # ( timestamp_ms, zoom, center_x, center_y ). these are always relative zooms
+        # ( timestamp_ms, zoom, center_x, center_y, rotation ). these are always relative zooms
         hash_id = self.modules_hashes_local_cache.GetHashId( hash )
         
         self._Execute( 'DELETE FROM file_zoom_timestamps WHERE hash_id = ?;', ( hash_id, ) )
         
-        self._ExecuteMany( 'INSERT OR REPLACE INTO file_zoom_timestamps ( hash_id, timestamp_ms, zoom, zoom_is_relative, center_x, center_y ) VALUES ( ?, ?, ?, ?, ?, ? );', ( ( hash_id, timestamp_ms, zoom, 1, center_x, center_y ) for ( timestamp_ms, zoom, center_x, center_y ) in zoom_timestamps ) )
+        self._ExecuteMany( 'INSERT OR REPLACE INTO file_zoom_timestamps ( hash_id, timestamp_ms, zoom, zoom_is_relative, center_x, center_y, rotation ) VALUES ( ?, ?, ?, ?, ?, ?, ? );', ( ( hash_id, timestamp_ms, zoom, 1, center_x, center_y, rotation ) for ( timestamp_ms, zoom, center_x, center_y, rotation ) in zoom_timestamps ) )
         
     

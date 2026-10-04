@@ -19,7 +19,7 @@ def GetResetSavedZoomsQuestion( num_file_viewer_zooms: int, num_files_with_zoom_
     
     if num_files_with_zoom_timestamps > 0:
         
-        lines.append( f'{HydrusNumbers.ToHumanInt( num_files_with_zoom_timestamps )} files have zoom timestamps, which save a zoom and where the file was panned to at points in playback.' )
+        lines.append( f'{HydrusNumbers.ToHumanInt( num_files_with_zoom_timestamps )} files have position timestamps, which save a zoom, where the file was panned to, and how it was turned, at points in playback.' )
         
     
     message = '\n'.join( lines )
@@ -32,7 +32,7 @@ def GetResetSavedZoomsQuestion( num_file_viewer_zooms: int, num_files_with_zoom_
         
         yes_tuples.append( ( 'reset both', ( True, True ) ) )
         yes_tuples.append( ( 'just the saved zooms', ( True, False ) ) )
-        yes_tuples.append( ( 'just the zoom timestamps', ( False, True ) ) )
+        yes_tuples.append( ( 'just the position timestamps', ( False, True ) ) )
         
     elif num_file_viewer_zooms > 0:
         
@@ -40,7 +40,7 @@ def GetResetSavedZoomsQuestion( num_file_viewer_zooms: int, num_files_with_zoom_
         
     else:
         
-        yes_tuples.append( ( 'reset the zoom timestamps', ( False, True ) ) )
+        yes_tuples.append( ( 'reset the position timestamps', ( False, True ) ) )
         
     
     return ( message, yes_tuples )
@@ -53,7 +53,7 @@ def AskToResetAllSavedZooms( win: QW.QWidget ):
     
     if num_file_viewer_zooms == 0 and num_files_with_zoom_timestamps == 0:
         
-        ClientGUIDialogsMessage.ShowInformation( win, 'No files have a saved zoom or zoom timestamps, so there is nothing to reset.' )
+        ClientGUIDialogsMessage.ShowInformation( win, 'No files have a saved zoom or position timestamps, so there is nothing to reset.' )
         
         return
         

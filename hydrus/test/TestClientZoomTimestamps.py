@@ -1,5 +1,7 @@
 import unittest
 
+from unittest import mock
+
 from hydrus.client.gui.canvas import ClientGUICanvasMedia
 from hydrus.client.gui.media import ClientGUIMediaZooms
 
@@ -33,18 +35,18 @@ class TestZoomTimestamps( unittest.TestCase ):
     
     def test_relative_zoom_timestamps( self ):
         
-        # the window fits the file at 50%. an old one at a plain 150% is three times that
-        rows = [ ( 0, 1.0, True, 0.25, 0.75 ), ( 5000, 1.5, False, None, None ), ( 13000, 0.7, True, None, None ) ]
+        # the window fits the file at 50%. an old one at a plain 150% is three times that. the orientation comes through as it is
+        rows = [ ( 0, 1.0, True, 0.25, 0.75, 90 ), ( 5000, 1.5, False, None, None, None ), ( 13000, 0.7, True, None, None, 0 ) ]
         
         ( zoom_timestamps, converted_some ) = ClientGUICanvasMedia.ConvertZoomTimestampRowsToRelative( rows, 0.5 )
         
-        self.assertEqual( zoom_timestamps, [ ( 0, 1.0, 0.25, 0.75 ), ( 5000, 3.0, None, None ), ( 13000, 0.7, None, None ) ] )
+        self.assertEqual( zoom_timestamps, [ ( 0, 1.0, 0.25, 0.75, 90 ), ( 5000, 3.0, None, None, None ), ( 13000, 0.7, None, None, 0 ) ] )
         self.assertTrue( converted_some )
         
         # relative ones are left alone
-        ( zoom_timestamps, converted_some ) = ClientGUICanvasMedia.ConvertZoomTimestampRowsToRelative( [ ( 5000, 1.5, True, 0.5, 0.5 ) ], 0.5 )
+        ( zoom_timestamps, converted_some ) = ClientGUICanvasMedia.ConvertZoomTimestampRowsToRelative( [ ( 5000, 1.5, True, 0.5, 0.5, 180 ) ], 0.5 )
         
-        self.assertEqual( zoom_timestamps, [ ( 5000, 1.5, 0.5, 0.5 ) ] )
+        self.assertEqual( zoom_timestamps, [ ( 5000, 1.5, 0.5, 0.5, 180 ) ] )
         self.assertFalse( converted_some )
         
         self.assertEqual( ClientGUICanvasMedia.ConvertZoomTimestampRowsToRelative( [], 0.5 ), ( [], False ) )
@@ -89,8 +91,79 @@ class TestZoomTimestamps( unittest.TestCase ):
         # no size, no pan
         self.assertEqual( ClientGUICanvasMedia.GetZoomCenter( ( 1000, 500 ), ( 0, 0 ), ( 0, 0 ) ), ( 0.5, 0.5 ) )
         
-        # the pan does not get in the way of finding which one we are in
-        self.assertEqual( ClientGUICanvasMedia.GetZoomTimestampAt( [ ( 5000, 1.5, 0.2, 0.3 ), ( 0, 1.0, None, None ) ], 6000 ), ( 5000, 1.5, 0.2, 0.3 ) )
+        # the pan and orientation do not get in the way of finding which one we are in
+        self.assertEqual( ClientGUICanvasMedia.GetZoomTimestampAt( [ ( 5000, 1.5, 0.2, 0.3, 90 ), ( 0, 1.0, None, None, None ) ], 6000 ), ( 5000, 1.5, 0.2, 0.3, 90 ) )
+        
+    
+    def test_position_timestamp_pretty( self ):
+        
+        self.assertEqual( ClientGUICanvasMedia.ConvertZoomTimestampToPrettyString( ( 5000, 1.5, 0.2, 0.3, 90 ) ), '0:05.000: 150% of fit, turned 90\u00b0' )
+        
+        # old ones are centered and leave the orientation alone
+        self.assertEqual( ClientGUICanvasMedia.ConvertZoomTimestampToPrettyString( ( 5000, 1.5, None, None, None ) ), '0:05.000: 150% of fit, centered' )
+        
+    
+    def test_position_timestamp_orientation( self ):
+        
+        # just enough of a media container to go to a position timestamp
+        container = ClientGUICanvasMedia.MediaContainer.__new__( ClientGUICanvasMedia.MediaContainer )
+        
+        calls = []
+        
+        container._rotation = 0
+        container._file_rotation = 0
+        container._zoom_types_to_zooms = { ClientGUICanvasMedia.MEDIA_VIEWER_ZOOM_TYPE_CANVAS : 0.5 }
+        
+        def set_rotation( rotation ):
+            
+            calls.append( ( 'rotate', rotation ) )
+            
+            container._rotation = rotation
+            
+            # turned on its side, it fits the window at a different zoom
+            container._zoom_types_to_zooms = { ClientGUICanvasMedia.MEDIA_VIEWER_ZOOM_TYPE_CANVAS : 0.25 if rotation in ( 90, 270 ) else 0.5 }
+            
+        
+        with mock.patch.object( container, '_SetRotation', side_effect = set_rotation ), mock.patch.object( container, 'CanRotate', return_value = True ), mock.patch.object( container, 'ZoomReinit', side_effect = lambda: calls.append( ( 'reinit', ) ) ), mock.patch.object( container, 'ResetCenterPosition', side_effect = lambda: calls.append( ( 'center', ) ) ), mock.patch.object( container, '_GetZoomWithinMaxDimension', side_effect = lambda zoom: zoom ), mock.patch.object( container, '_SetZoom', side_effect = lambda zoom: calls.append( ( 'zoom', zoom ) ) ), mock.patch.object( container, '_MoveToZoomCenter', side_effect = lambda center: calls.append( ( 'pan', center ) ) ), mock.patch.object( container, 'update' ):
+            
+            # it is turned first, so the zoom is relative to how it fits once it is turned
+            container._ZoomToZoomTimestamp( ( 5000, 2.0, 0.25, 0.75, 90 ) )
+            
+            self.assertEqual( calls, [ ( 'rotate', 90 ), ( 'zoom', 0.5 ), ( 'pan', ( 0.25, 0.75 ) ) ] )
+            
+            # the file's own orientation is not touched
+            self.assertEqual( container._file_rotation, 0 )
+            self.assertEqual( container._current_zoom_timestamp, ( 5000, 2.0, 0.25, 0.75, 90 ) )
+            
+            # one turned the same way does not turn it again
+            calls.clear()
+            
+            container._ZoomToZoomTimestamp( ( 6000, 1.0, None, None, 90 ) )
+            
+            self.assertEqual( calls, [ ( 'zoom', 0.25 ), ( 'center', ) ] )
+            
+            # an old one with no orientation leaves it as it is
+            calls.clear()
+            
+            container._ZoomToZoomTimestamp( ( 7000, 1.0, None, None, None ) )
+            
+            self.assertEqual( calls, [ ( 'zoom', 0.25 ), ( 'center', ) ] )
+            
+            # back to the start, it goes back to the file's own orientation and zoom
+            calls.clear()
+            
+            container._ZoomToZoomTimestamp( None )
+            
+            self.assertEqual( calls, [ ( 'rotate', 0 ), ( 'reinit', ) , ( 'center', ) ] )
+            self.assertIsNone( container._current_zoom_timestamp )
+            
+            # and when it is already turned its own way, it is not turned again
+            calls.clear()
+            
+            container._ZoomToZoomTimestamp( None )
+            
+            self.assertEqual( calls, [ ( 'reinit', ), ( 'center', ) ] )
+            
         
     
     def test_reset_saved_zooms_question( self ):
@@ -99,14 +172,14 @@ class TestZoomTimestamps( unittest.TestCase ):
         ( message, yes_tuples ) = ClientGUIMediaZooms.GetResetSavedZoomsQuestion( 1234, 5 )
         
         self.assertIn( '1,234 files open at a zoom', message )
-        self.assertIn( '5 files have zoom timestamps', message )
+        self.assertIn( '5 files have position timestamps', message )
         
         self.assertEqual( [ value for ( label, value ) in yes_tuples ], [ ( True, True ), ( True, False ), ( False, True ) ] )
         
         # with just one kind, that is all that is offered
         ( message, yes_tuples ) = ClientGUIMediaZooms.GetResetSavedZoomsQuestion( 3, 0 )
         
-        self.assertNotIn( 'zoom timestamps,', message )
+        self.assertNotIn( 'position timestamps,', message )
         self.assertEqual( [ value for ( label, value ) in yes_tuples ], [ ( True, False ) ] )
         
         ( message, yes_tuples ) = ClientGUIMediaZooms.GetResetSavedZoomsQuestion( 0, 3 )

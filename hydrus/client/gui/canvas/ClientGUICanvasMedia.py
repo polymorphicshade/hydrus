@@ -17,6 +17,7 @@ from hydrus.core.files.images import HydrusImageHandling
 
 from hydrus.client import ClientApplicationCommand as CAC
 from hydrus.client import ClientConstants as CC
+from hydrus.client import ClientData
 from hydrus.client import ClientGlobals as CG
 from hydrus.client import ClientRendering
 from hydrus.client import ClientUgoiraHandling
@@ -201,11 +202,13 @@ def GetFrameIndexAtPlaybackPoint( point_ms: float, num_frames: int, get_frame_st
     return lo
     
 
-# ( timestamp_ms, relative_zoom, center_x, center_y ). relative_zoom is relative to the zoom that fits the file in the window
+# position timestamps (called zoom timestamps in the code, which is what they started as) save how the file is shown at a point in playback
+# ( timestamp_ms, relative_zoom, center_x, center_y, rotation ). relative_zoom is relative to the zoom that fits the file in the window, turned as it is
 # center_x and center_y are the point of the file in the middle of the window, as a fraction of its width and height. None for both means centered
-ZoomTimestamp = tuple[ int, float, float | None, float | None ]
+# rotation is degrees clockwise. None, for ones from before we saved it, leaves the file turned however it is
+ZoomTimestamp = tuple[ int, float, float | None, float | None, int | None ]
 
-def ConvertZoomTimestampRowsToRelative( rows: list[ tuple[ int, float, bool, float | None, float | None ] ], canvas_zoom: float ) -> tuple[ list[ ZoomTimestamp ], bool ]:
+def ConvertZoomTimestampRowsToRelative( rows: list[ tuple[ int, float, bool, float | None, float | None, int | None ] ], canvas_zoom: float ) -> tuple[ list[ ZoomTimestamp ], bool ]:
     
     # zoom timestamps are relative to the zoom that fits the file in the window. ones from before that are the plain zoom, which we take as being for the window as it is now
     # returns the zoom timestamps, and whether any needed converting
@@ -213,7 +216,7 @@ def ConvertZoomTimestampRowsToRelative( rows: list[ tuple[ int, float, bool, flo
     
     converted_some = False
     
-    for ( timestamp_ms, zoom, zoom_is_relative, center_x, center_y ) in rows:
+    for ( timestamp_ms, zoom, zoom_is_relative, center_x, center_y, rotation ) in rows:
         
         if not zoom_is_relative:
             
@@ -222,7 +225,7 @@ def ConvertZoomTimestampRowsToRelative( rows: list[ tuple[ int, float, bool, flo
             converted_some = True
             
         
-        zoom_timestamps.append( ( timestamp_ms, zoom, center_x, center_y ) )
+        zoom_timestamps.append( ( timestamp_ms, zoom, center_x, center_y, rotation ) )
         
     
     return ( zoom_timestamps, converted_some )
@@ -303,6 +306,26 @@ def CalculateCanvasMediaSize( media, canvas_size: QC.QSize, show_action ):
 def ConvertRotationToPrettyString( rotation: int ) -> str:
     
     return f'{rotation}\u00b0'
+    
+
+def ConvertZoomTimestampToPrettyString( zoom_timestamp: ZoomTimestamp ) -> str:
+    
+    # for the position timestamps menu
+    ( timestamp_ms, relative_zoom, center_x, center_y, rotation ) = zoom_timestamp
+    
+    pretty_string = f'{ConvertPlaybackTimestampToString( timestamp_ms )}: {ClientData.ConvertZoomToPercentage( relative_zoom )} of fit'
+    
+    if center_x is None or center_y is None:
+        
+        pretty_string += ', centered'
+        
+    
+    if rotation is not None:
+        
+        pretty_string += f', turned {ConvertRotationToPrettyString( rotation )}'
+        
+    
+    return pretty_string
     
 
 # the orientations the media viewer's right-click menu offers. anything else is 'custom'
@@ -1932,7 +1955,9 @@ class MediaContainer( QW.QWidget ):
         self._holding_default_zoom = False
         
         # degrees clockwise that the current file is turned. each file has its own, saved in the db
+        # a position timestamp can turn it for a while, so the file's own is kept too, to go back to
         self._rotation = 0
+        self._file_rotation = 0
         self._rotation_load_id = 0
         
         # where the next file should start playing, as ( media, start_ms ). a playlist sets this for a part of a file, so the player never shows what comes before it
@@ -2748,7 +2773,7 @@ class MediaContainer( QW.QWidget ):
         else:
             
             # we cannot work out what old ones should be yet, so we leave them in the db for next time
-            zoom_timestamps = [ ( timestamp_ms, zoom, center_x, center_y ) for ( timestamp_ms, zoom, zoom_is_relative, center_x, center_y ) in rows if zoom_is_relative ]
+            zoom_timestamps = [ ( timestamp_ms, zoom, center_x, center_y, rotation ) for ( timestamp_ms, zoom, zoom_is_relative, center_x, center_y, rotation ) in rows if zoom_is_relative ]
             
         
         self._SetZoomTimestamps( zoom_timestamps )
@@ -2806,6 +2831,7 @@ class MediaContainer( QW.QWidget ):
         load_id = self._rotation_load_id
         
         self._rotation = 0
+        self._file_rotation = 0
         
         self._ApplyRotationToMediaWindow()
         
@@ -2828,6 +2854,8 @@ class MediaContainer( QW.QWidget ):
                 
                 return
                 
+            
+            self._file_rotation = NormaliseRotation( rotation )
             
             if rotation != 0:
                 
@@ -3673,14 +3701,25 @@ class MediaContainer( QW.QWidget ):
         
         if zoom_timestamp is None:
             
-            # the zoom the file starts at, centered
+            # the file turned its own way, at the zoom it starts at, centered
+            if self.CanRotate() and self._rotation != self._file_rotation:
+                
+                self._SetRotation( self._file_rotation )
+                
+            
             self.ZoomReinit()
             
             self.ResetCenterPosition()
             
         else:
             
-            ( timestamp_ms, relative_zoom, center_x, center_y ) = zoom_timestamp
+            ( timestamp_ms, relative_zoom, center_x, center_y, rotation ) = zoom_timestamp
+            
+            if rotation is not None and self.CanRotate() and NormaliseRotation( rotation ) != self._rotation:
+                
+                # turned first, since that changes the zoom that fits the window, and the shape the pan is a fraction of. the file's own orientation is not touched
+                self._SetRotation( rotation )
+                
             
             # relative to the zoom that fits the file in the window, so a smaller window gets a smaller zoom. a resize puts it back on, at the new size
             zoom = relative_zoom * self._zoom_types_to_zooms[ MEDIA_VIEWER_ZOOM_TYPE_CANVAS ]
@@ -4864,6 +4903,11 @@ class MediaContainer( QW.QWidget ):
         
         self._SetRotation( rotation )
         
+        self._file_rotation = self._rotation
+        
+        # turning it by hand is not fought by a position timestamp we are in. it holds until the next one
+        self._current_zoom_timestamp_needs_reapply = False
+        
         CG.client_controller.Write( 'file_viewer_rotation', self._media.GetHash(), self._rotation )
         
     
@@ -5609,7 +5653,10 @@ class MediaContainer( QW.QWidget ):
         
         ( center_x, center_y ) = GetZoomCenter( ( canvas_size.width(), canvas_size.height() ), ( my_pos.x(), my_pos.y() ), ( my_size.width(), my_size.height() ) )
         
-        zoom_timestamp = ( timestamp_ms, self._current_zoom / canvas_zoom, center_x, center_y )
+        # and how it is turned. a file that cannot be turned has no orientation to save
+        rotation = self._rotation if self.CanRotate() else None
+        
+        zoom_timestamp = ( timestamp_ms, self._current_zoom / canvas_zoom, center_x, center_y, rotation )
         
         # one at the same point is replaced
         zoom_timestamps = [ existing for existing in self._zoom_timestamps if existing[0] != timestamp_ms ]

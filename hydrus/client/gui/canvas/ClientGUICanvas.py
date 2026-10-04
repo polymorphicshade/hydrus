@@ -2596,13 +2596,45 @@ class CanvasWithHovers( Canvas ):
         self._media_container.ClearPlaybackSkips()
         
     
+    def _AppendPositionTimestampsMenu( self, menu: QW.QMenu ):
+        
+        # a position timestamp is what we call a zoom timestamp now it does more than zoom
+        position_menu = ClientGUIMenus.GenerateMenu( menu )
+        
+        ClientGUIMenus.AppendMenuItem( position_menu, 'save position at current timestamp', 'Save how the file is shown now--its zoom, where it is panned to, and how it is turned--at this point in playback. Every time playback gets here, the media viewer goes back to that, and stays there until the next position timestamp, or until playback ends, when it goes back to how the file started. It is saved relative to the window, so in a smaller window, it zooms less, and the same part of the file is in the middle. Turning it here does not change the orientation the file is saved with.', self._SaveZoomTimestamp )
+        ClientGUIMenus.AppendMenuItem( position_menu, 'clear position timestamps', 'Remove all of this file\'s position timestamps.', self._media_container.ClearZoomTimestamps )
+        
+        zoom_timestamps = self._media_container.GetZoomTimestamps()
+        
+        if len( zoom_timestamps ) > 0:
+            
+            ClientGUIMenus.AppendSeparator( position_menu )
+            
+            for zoom_timestamp in zoom_timestamps:
+                
+                ClientGUIMenus.AppendMenuItem( position_menu, ClientGUICanvasMedia.ConvertZoomTimestampToPrettyString( zoom_timestamp ), 'Delete this position timestamp. You will be asked to confirm.', self._DeleteZoomTimestamp, zoom_timestamp )
+                
+            
+        
+        label = f'position timestamps ({HydrusNumbers.ToHumanInt( len( zoom_timestamps ) )})' if len( zoom_timestamps ) > 0 else 'position timestamps'
+        
+        ClientGUIMenus.AppendMenu( menu, position_menu, label )
+        
+    
     def _DeleteZoomTimestamp( self, zoom_timestamp: ClientGUICanvasMedia.ZoomTimestamp ):
         
-        ( timestamp_ms, relative_zoom, center_x, center_y ) = zoom_timestamp
+        ( timestamp_ms, relative_zoom, center_x, center_y, rotation ) = zoom_timestamp
         
-        message = f'Delete the zoom timestamp at {ClientGUICanvasMedia.ConvertPlaybackTimestampToString( timestamp_ms )}, which zooms to {ClientData.ConvertZoomToPercentage( relative_zoom )} of the zoom that fits the window?'
+        message = f'Delete the position timestamp at {ClientGUICanvasMedia.ConvertPlaybackTimestampToString( timestamp_ms )}, which zooms to {ClientData.ConvertZoomToPercentage( relative_zoom )} of the zoom that fits the window'
         
-        result = ClientGUIDialogsQuick.GetYesNo( self, message, title = 'Delete zoom timestamp?', yes_label = 'delete it', no_label = 'keep it' )
+        if rotation is not None:
+            
+            message += f', turned {ClientGUICanvasMedia.ConvertRotationToPrettyString( rotation )}'
+            
+        
+        message += '?'
+        
+        result = ClientGUIDialogsQuick.GetYesNo( self, message, title = 'Delete position timestamp?', yes_label = 'delete it', no_label = 'keep it' )
         
         if result == QW.QDialog.DialogCode.Accepted:
             
@@ -5562,30 +5594,6 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
                     ClientGUIMenus.AppendMenuItem( zoom_menu, 'zoom to max', 'Set the zoom to the maximum possible.', self._media_container.ZoomMax )
                     
                 
-                if self._media_container.SupportsZoomTimestamps():
-                    
-                    ClientGUIMenus.AppendSeparator( zoom_menu )
-                    
-                    ClientGUIMenus.AppendMenuItem( zoom_menu, 'save current zoom at timestamp', 'Save the current zoom at this point in playback. Every time playback gets here, the media viewer zooms to it, and pans to where the file is now, and stays there until the next zoom timestamp, or until playback ends, when it goes back to the zoom the file started at. It is saved relative to the window, so in a smaller window, it zooms less, and the same part of the file is in the middle.', self._SaveZoomTimestamp )
-                    ClientGUIMenus.AppendMenuItem( zoom_menu, 'clear zoom timestamps', 'Remove all of this file\'s zoom timestamps.', self._media_container.ClearZoomTimestamps )
-                    
-                    zoom_timestamps = self._media_container.GetZoomTimestamps()
-                    
-                    if len( zoom_timestamps ) > 0:
-                        
-                        ClientGUIMenus.AppendSeparator( zoom_menu )
-                        
-                        for zoom_timestamp in zoom_timestamps:
-                            
-                            ( timestamp_ms, relative_zoom, center_x, center_y ) = zoom_timestamp
-                            
-                            label = f'{ClientGUICanvasMedia.ConvertPlaybackTimestampToString( timestamp_ms )}: {ClientData.ConvertZoomToPercentage( relative_zoom )} of fit'
-                            
-                            ClientGUIMenus.AppendMenuItem( zoom_menu, label, 'Delete this zoom timestamp. You will be asked to confirm.', self._DeleteZoomTimestamp, zoom_timestamp )
-                            
-                        
-                    
-                
                 if self._media_container.HasSavedZoom():
                     
                     ClientGUIMenus.AppendSeparator( zoom_menu )
@@ -5616,6 +5624,11 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
                 ClientGUIMenus.AppendMenuCheckItem( orientation_menu, custom_label + HC.UNICODE_ELLIPSIS, 'Turn this file clockwise by any number of degrees. It stays like this every time it is shown, until you change it.', is_custom, self._SetCustomRotation )
                 
                 ClientGUIMenus.AppendMenu( menu, orientation_menu, f'orientation: {ClientGUICanvasMedia.ConvertRotationToPrettyString( current_rotation )}' )
+                
+            
+            if self._media_container.IsZoomable() and self._media_container.SupportsZoomTimestamps():
+                
+                self._AppendPositionTimestampsMenu( menu )
                 
             
             if self.parentWidget().isFullScreen():
