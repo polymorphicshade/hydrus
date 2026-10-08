@@ -136,6 +136,14 @@ class EditAPIPermissionsPanel( ClientGUIScrolledPanels.EditPanel ):
         
         self._permissions_panel.Add( ClientGUICommon.WrapInText( self._permits_everything, self._permissions_panel, 'permits everything: ' ), CC.FLAGS_EXPAND_PERPENDICULAR )
         self._permissions_panel.Add( self._basic_permissions, CC.FLAGS_EXPAND_BOTH_WAYS )
+        
+        not_covered_names = sorted( ClientAPI.basic_permission_to_str_lookup[ permission ] for permission in ClientAPI.PERMISSIONS_NOT_COVERED_BY_PERMITS_EVERYTHING )
+        
+        st = ClientGUICommon.BetterStaticText( self._permissions_panel, label = '"permits everything" does not cover these, so tick them as well if this key should have them: ' + ', '.join( not_covered_names ) )
+        
+        st.setWordWrap( True )
+        
+        self._permissions_panel.Add( st, CC.FLAGS_EXPAND_PERPENDICULAR )
         self._permissions_panel.Add( self._check_all_permissions_button, CC.FLAGS_EXPAND_PERPENDICULAR )
         self._permissions_panel.Add( ClientGUICommon.WrapInText( self._search_tag_filter, self._permissions_panel, 'tag search permissions: ' ), CC.FLAGS_EXPAND_PERPENDICULAR )
         
@@ -156,9 +164,13 @@ class EditAPIPermissionsPanel( ClientGUIScrolledPanels.EditPanel ):
     
     def _CheckAllPermissions( self ):
         
+        # the ones 'permits everything' does not cover are left for the user to tick themselves
         for i in range( self._basic_permissions.count() ):
             
-            self._basic_permissions.Check( i )
+            if self._basic_permissions.GetData( i ) not in ClientAPI.PERMISSIONS_NOT_COVERED_BY_PERMITS_EVERYTHING:
+                
+                self._basic_permissions.Check( i )
+                
             
         
     
@@ -206,7 +218,8 @@ class EditAPIPermissionsPanel( ClientGUIScrolledPanels.EditPanel ):
         
         if self._permits_everything.isChecked():
             
-            self._basic_permissions.setEnabled( False )
+            # it stays on, so the permissions 'permits everything' does not cover can still be ticked
+            self._basic_permissions.setEnabled( True )
             self._check_all_permissions_button.setEnabled( False )
             self._search_tag_filter.setEnabled( False )
             
@@ -223,6 +236,11 @@ class EditAPIPermissionsPanel( ClientGUIScrolledPanels.EditPanel ):
             self._check_all_permissions_button.setEnabled( False )
             
             for i in range( self._basic_permissions.count() ):
+                
+                if self._basic_permissions.GetData( i ) in ClientAPI.PERMISSIONS_NOT_COVERED_BY_PERMITS_EVERYTHING:
+                    
+                    continue
+                    
                 
                 if not self._basic_permissions.IsChecked( i ):
                     

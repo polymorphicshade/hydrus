@@ -18,6 +18,14 @@ from hydrus.client.networking.api import ClientLocalServerResourcesManagePages
 from hydrus.client.networking.api import ClientLocalServerResourcesManagePopups
 from hydrus.client.networking.api import ClientLocalServerResourcesManageServices
 from hydrus.client.networking.api import ClientLocalServerResourcesManageFavouriteTags
+from hydrus.client.networking.api import ClientLocalServerResourcesManageCounters
+from hydrus.client.networking.api import ClientLocalServerResourcesManageExports
+from hydrus.client.networking.api import ClientLocalServerResourcesManageFileViewerData
+from hydrus.client.networking.api import ClientLocalServerResourcesManageMediaViewers
+from hydrus.client.networking.api import ClientLocalServerResourcesManagePlaylists
+from hydrus.client.networking.api import ClientLocalServerResourcesManagePresets
+from hydrus.client.networking.api import ClientLocalServerResourcesManageSnapshots
+from hydrus.client.networking.api import ClientLocalServerResourcesManageVirtualPaths
 
 class HydrusClientService( HydrusServer.HydrusService ):
     
@@ -188,6 +196,99 @@ class HydrusServiceClientAPI( HydrusClientService ):
         manage_popups.putChild( b'call_user_callable', ClientLocalServerResourcesManagePopups.HydrusResourceClientAPIRestrictedManagePopupsCallUserCallable( self._service, self._client_requests_domain ) )
         manage_popups.putChild( b'add_popup', ClientLocalServerResourcesManagePopups.HydrusResourceClientAPIRestrictedManagePopupsAddPopup( self._service, self._client_requests_domain ) )
         manage_popups.putChild( b'update_popup', ClientLocalServerResourcesManagePopups.HydrusResourceClientAPIRestrictedManagePopupsUpdatePopup( self._service, self._client_requests_domain ) )
+        
+        # this fork's own features
+        
+        manage_counters = notFound()
+        
+        root.putChild( b'manage_counters', manage_counters )
+        
+        manage_counters.putChild( b'get_counters', ClientLocalServerResourcesManageCounters.HydrusResourceClientAPIRestrictedManageCountersGetCounters( self._service, self._client_requests_domain ) )
+        manage_counters.putChild( b'add_counter', ClientLocalServerResourcesManageCounters.HydrusResourceClientAPIRestrictedManageCountersAddCounter( self._service, self._client_requests_domain ) )
+        manage_counters.putChild( b'rename_counter', ClientLocalServerResourcesManageCounters.HydrusResourceClientAPIRestrictedManageCountersRenameCounter( self._service, self._client_requests_domain ) )
+        manage_counters.putChild( b'delete_counter', ClientLocalServerResourcesManageCounters.HydrusResourceClientAPIRestrictedManageCountersDeleteCounter( self._service, self._client_requests_domain ) )
+        manage_counters.putChild( b'get_counts', ClientLocalServerResourcesManageCounters.HydrusResourceClientAPIRestrictedManageCountersGetCounts( self._service, self._client_requests_domain ) )
+        manage_counters.putChild( b'set_count', ClientLocalServerResourcesManageCounters.HydrusResourceClientAPIRestrictedManageCountersSetCount( self._service, self._client_requests_domain ) )
+        manage_counters.putChild( b'increment_count', ClientLocalServerResourcesManageCounters.HydrusResourceClientAPIRestrictedManageCountersIncrementCount( self._service, self._client_requests_domain ) )
+        manage_counters.putChild( b'convert_tags_to_counters', ClientLocalServerResourcesManageCounters.HydrusResourceClientAPIRestrictedManageCountersConvertTagsToCounters( self._service, self._client_requests_domain ) )
+        
+        manage_playlists = notFound()
+        
+        root.putChild( b'manage_playlists', manage_playlists )
+        
+        manage_playlists.putChild( b'get_playlists', ClientLocalServerResourcesManagePlaylists.HydrusResourceClientAPIRestrictedManagePlaylistsGetPlaylists( self._service, self._client_requests_domain ) )
+        manage_playlists.putChild( b'get_playlist', ClientLocalServerResourcesManagePlaylists.HydrusResourceClientAPIRestrictedManagePlaylistsGetPlaylist( self._service, self._client_requests_domain ) )
+        manage_playlists.putChild( b'new_playlist', ClientLocalServerResourcesManagePlaylists.HydrusResourceClientAPIRestrictedManagePlaylistsNewPlaylist( self._service, self._client_requests_domain ) )
+        manage_playlists.putChild( b'rename_playlist', ClientLocalServerResourcesManagePlaylists.HydrusResourceClientAPIRestrictedManagePlaylistsRenamePlaylist( self._service, self._client_requests_domain ) )
+        manage_playlists.putChild( b'delete_playlist', ClientLocalServerResourcesManagePlaylists.HydrusResourceClientAPIRestrictedManagePlaylistsDeletePlaylist( self._service, self._client_requests_domain ) )
+        manage_playlists.putChild( b'add_files', ClientLocalServerResourcesManagePlaylists.HydrusResourceClientAPIRestrictedManagePlaylistsAddFiles( self._service, self._client_requests_domain ) )
+        manage_playlists.putChild( b'add_blank', ClientLocalServerResourcesManagePlaylists.HydrusResourceClientAPIRestrictedManagePlaylistsAddBlank( self._service, self._client_requests_domain ) )
+        manage_playlists.putChild( b'remove_files', ClientLocalServerResourcesManagePlaylists.HydrusResourceClientAPIRestrictedManagePlaylistsRemoveFiles( self._service, self._client_requests_domain ) )
+        manage_playlists.putChild( b'set_items', ClientLocalServerResourcesManagePlaylists.HydrusResourceClientAPIRestrictedManagePlaylistsSetItems( self._service, self._client_requests_domain ) )
+        
+        manage_virtual_paths = notFound()
+        
+        root.putChild( b'manage_virtual_paths', manage_virtual_paths )
+        
+        manage_virtual_paths.putChild( b'get_paths', ClientLocalServerResourcesManageVirtualPaths.HydrusResourceClientAPIRestrictedManageVirtualPathsGetPaths( self._service, self._client_requests_domain ) )
+        manage_virtual_paths.putChild( b'get_all_paths', ClientLocalServerResourcesManageVirtualPaths.HydrusResourceClientAPIRestrictedManageVirtualPathsGetAllPaths( self._service, self._client_requests_domain ) )
+        manage_virtual_paths.putChild( b'set_paths', ClientLocalServerResourcesManageVirtualPaths.HydrusResourceClientAPIRestrictedManageVirtualPathsSetPaths( self._service, self._client_requests_domain ) )
+        manage_virtual_paths.putChild( b'add_paths', ClientLocalServerResourcesManageVirtualPaths.HydrusResourceClientAPIRestrictedManageVirtualPathsAddPaths( self._service, self._client_requests_domain ) )
+        manage_virtual_paths.putChild( b'remove_paths', ClientLocalServerResourcesManageVirtualPaths.HydrusResourceClientAPIRestrictedManageVirtualPathsRemovePaths( self._service, self._client_requests_domain ) )
+        
+        manage_snapshots = notFound()
+        
+        root.putChild( b'manage_snapshots', manage_snapshots )
+        
+        manage_snapshots.putChild( b'get_snapshots', ClientLocalServerResourcesManageSnapshots.HydrusResourceClientAPIRestrictedManageSnapshotsGetSnapshots( self._service, self._client_requests_domain ) )
+        manage_snapshots.putChild( b'add_snapshot', ClientLocalServerResourcesManageSnapshots.HydrusResourceClientAPIRestrictedManageSnapshotsAddSnapshot( self._service, self._client_requests_domain ) )
+        
+        manage_file_viewer_data = notFound()
+        
+        root.putChild( b'manage_file_viewer_data', manage_file_viewer_data )
+        
+        manage_file_viewer_data.putChild( b'get_data', ClientLocalServerResourcesManageFileViewerData.HydrusResourceClientAPIRestrictedManageFileViewerDataGetData( self._service, self._client_requests_domain ) )
+        manage_file_viewer_data.putChild( b'get_saved_zoom_counts', ClientLocalServerResourcesManageFileViewerData.HydrusResourceClientAPIRestrictedManageFileViewerDataGetSavedZoomCounts( self._service, self._client_requests_domain ) )
+        manage_file_viewer_data.putChild( b'set_rotation', ClientLocalServerResourcesManageFileViewerData.HydrusResourceClientAPIRestrictedManageFileViewerDataSetRotation( self._service, self._client_requests_domain ) )
+        manage_file_viewer_data.putChild( b'set_zoom', ClientLocalServerResourcesManageFileViewerData.HydrusResourceClientAPIRestrictedManageFileViewerDataSetZoom( self._service, self._client_requests_domain ) )
+        manage_file_viewer_data.putChild( b'set_position_timestamps', ClientLocalServerResourcesManageFileViewerData.HydrusResourceClientAPIRestrictedManageFileViewerDataSetPositionTimestamps( self._service, self._client_requests_domain ) )
+        manage_file_viewer_data.putChild( b'set_playback_skips', ClientLocalServerResourcesManageFileViewerData.HydrusResourceClientAPIRestrictedManageFileViewerDataSetPlaybackSkips( self._service, self._client_requests_domain ) )
+        manage_file_viewer_data.putChild( b'set_segments', ClientLocalServerResourcesManageFileViewerData.HydrusResourceClientAPIRestrictedManageFileViewerDataSetSegments( self._service, self._client_requests_domain ) )
+        manage_file_viewer_data.putChild( b'set_scripted_events', ClientLocalServerResourcesManageFileViewerData.HydrusResourceClientAPIRestrictedManageFileViewerDataSetScriptedEvents( self._service, self._client_requests_domain ) )
+        manage_file_viewer_data.putChild( b'set_image_overlay', ClientLocalServerResourcesManageFileViewerData.HydrusResourceClientAPIRestrictedManageFileViewerDataSetImageOverlay( self._service, self._client_requests_domain ) )
+        manage_file_viewer_data.putChild( b'reset_all_zooms', ClientLocalServerResourcesManageFileViewerData.HydrusResourceClientAPIRestrictedManageFileViewerDataResetAllZooms( self._service, self._client_requests_domain ) )
+        
+        manage_tag_presets = notFound()
+        
+        root.putChild( b'manage_tag_presets', manage_tag_presets )
+        
+        manage_tag_presets.putChild( b'get_tag_presets', ClientLocalServerResourcesManagePresets.HydrusResourceClientAPIRestrictedManageTagPresetsGetTagPresets( self._service, self._client_requests_domain ) )
+        manage_tag_presets.putChild( b'set_tag_presets', ClientLocalServerResourcesManagePresets.HydrusResourceClientAPIRestrictedManageTagPresetsSetTagPresets( self._service, self._client_requests_domain ) )
+        manage_tag_presets.putChild( b'add_to_tag_preset', ClientLocalServerResourcesManagePresets.HydrusResourceClientAPIRestrictedManageTagPresetsAddToTagPreset( self._service, self._client_requests_domain ) )
+        manage_tag_presets.putChild( b'delete_tag_preset', ClientLocalServerResourcesManagePresets.HydrusResourceClientAPIRestrictedManageTagPresetsDeleteTagPreset( self._service, self._client_requests_domain ) )
+        
+        manage_screen_locations = notFound()
+        
+        root.putChild( b'manage_screen_locations', manage_screen_locations )
+        
+        manage_screen_locations.putChild( b'get_screen_locations', ClientLocalServerResourcesManagePresets.HydrusResourceClientAPIRestrictedManageScreenLocationsGetScreenLocations( self._service, self._client_requests_domain ) )
+        manage_screen_locations.putChild( b'set_screen_locations', ClientLocalServerResourcesManagePresets.HydrusResourceClientAPIRestrictedManageScreenLocationsSetScreenLocations( self._service, self._client_requests_domain ) )
+        
+        manage_media_viewers = notFound()
+        
+        root.putChild( b'manage_media_viewers', manage_media_viewers )
+        
+        manage_media_viewers.putChild( b'get_layout', ClientLocalServerResourcesManageMediaViewers.HydrusResourceClientAPIRestrictedManageMediaViewersGetLayout( self._service, self._client_requests_domain ) )
+        manage_media_viewers.putChild( b'open_layout', ClientLocalServerResourcesManageMediaViewers.HydrusResourceClientAPIRestrictedManageMediaViewersOpenLayout( self._service, self._client_requests_domain ) )
+        manage_media_viewers.putChild( b'open_playlist', ClientLocalServerResourcesManageMediaViewers.HydrusResourceClientAPIRestrictedManageMediaViewersOpenPlaylist( self._service, self._client_requests_domain ) )
+        
+        manage_exports = notFound()
+        
+        root.putChild( b'manage_exports', manage_exports )
+        
+        manage_exports.putChild( b'export_video', ClientLocalServerResourcesManageExports.HydrusResourceClientAPIRestrictedManageExportsExportVideo( self._service, self._client_requests_domain ) )
+        manage_exports.putChild( b'export_audio', ClientLocalServerResourcesManageExports.HydrusResourceClientAPIRestrictedManageExportsExportAudio( self._service, self._client_requests_domain ) )
+        manage_exports.putChild( b'export_playlist', ClientLocalServerResourcesManageExports.HydrusResourceClientAPIRestrictedManageExportsExportPlaylist( self._service, self._client_requests_domain ) )
         
         return root
         

@@ -5441,42 +5441,12 @@ ATTACH "client.mappings.db" as external_mappings;'''
             return
             
         
-        playlist_name = { playlist_id : name for ( playlist_id, name, num_items ) in playlists }[ playlist_id ]
+        error = self.OpenPlaylist( playlist_id )
         
-        items = CG.client_controller.Read( 'playlist_items', playlist_id )
-        
-        if len( items ) == 0:
+        if error is not None:
             
-            ClientGUIDialogsMessage.ShowInformation( self, f'"{playlist_name}" is empty! Add files to it from the media viewer with right-click->playlist->add.' )
+            ClientGUIDialogsMessage.ShowInformation( self, error )
             
-            return
-            
-        
-        media_results = CG.client_controller.Read( 'media_results', { hash for ( hash, start_ms, end_ms, reverse ) in items if hash is not None } )
-        
-        # a file that was deleted, or that the media viewer cannot show, is skipped
-        hashes_to_media_results = { media_result.GetHash() : media_result for media_result in media_results if media_result.GetLocationsManager().IsLocal() and ClientMedia.CanDisplayMediaResult( media_result ) }
-        
-        # a blank has no file, and goes in as it is
-        playlist_items = [ ( None if hash is None else hashes_to_media_results[ hash ], start_ms, end_ms, reverse ) for ( hash, start_ms, end_ms, reverse ) in items if hash is None or hash in hashes_to_media_results ]
-        
-        if len( [ playlist_item for playlist_item in playlist_items if playlist_item[0] is not None ] ) == 0:
-            
-            ClientGUIDialogsMessage.ShowWarning( self, f'None of the files in "{playlist_name}" can be shown--they were probably deleted.' )
-            
-            return
-            
-        
-        canvas_frame = ClientGUICanvasFrame.CanvasFrame( self )
-        
-        page_key = HydrusData.GenerateKey()
-        location_context = ClientLocation.LocationContext.STATICCreateSimple( CC.COMBINED_LOCAL_FILE_DOMAINS_SERVICE_KEY )
-        
-        canvas_window = ClientGUICanvas.CanvasPlaylist( canvas_frame, page_key, location_context, playlist_id, playlist_name, playlist_items )
-        
-        canvas_window.canvasWithHoversExiting.connect( self.NotifyMediaViewerExiting )
-        
-        canvas_frame.SetCanvas( canvas_window )
         
     
     def _PausePlaySync( self, sync_type ):
@@ -8642,6 +8612,54 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
     def NotifyRefreshNetworkMenu( self ):
         
         self._menu_updater_network.update()
+        
+    
+    def OpenPlaylist( self, playlist_id: int ) -> str | None:
+        
+        # plays the playlist in a new media viewer. if it cannot, nothing opens, and we say why
+        playlists = CG.client_controller.Read( 'playlists' )
+        
+        playlist_ids_to_names = { playlist_id : name for ( playlist_id, name, num_items ) in playlists }
+        
+        if playlist_id not in playlist_ids_to_names:
+            
+            return 'That playlist does not exist any more!'
+            
+        
+        playlist_name = playlist_ids_to_names[ playlist_id ]
+        
+        items = CG.client_controller.Read( 'playlist_items', playlist_id )
+        
+        if len( items ) == 0:
+            
+            return f'"{playlist_name}" is empty! Add files to it from the media viewer with right-click->playlist->add.'
+            
+        
+        media_results = CG.client_controller.Read( 'media_results', { hash for ( hash, start_ms, end_ms, reverse ) in items if hash is not None } )
+        
+        # a file that was deleted, or that the media viewer cannot show, is skipped
+        hashes_to_media_results = { media_result.GetHash() : media_result for media_result in media_results if media_result.GetLocationsManager().IsLocal() and ClientMedia.CanDisplayMediaResult( media_result ) }
+        
+        # a blank has no file, and goes in as it is
+        playlist_items = [ ( None if hash is None else hashes_to_media_results[ hash ], start_ms, end_ms, reverse ) for ( hash, start_ms, end_ms, reverse ) in items if hash is None or hash in hashes_to_media_results ]
+        
+        if len( [ playlist_item for playlist_item in playlist_items if playlist_item[0] is not None ] ) == 0:
+            
+            return f'None of the files in "{playlist_name}" can be shown--they were probably deleted.'
+            
+        
+        canvas_frame = ClientGUICanvasFrame.CanvasFrame( self )
+        
+        page_key = HydrusData.GenerateKey()
+        location_context = ClientLocation.LocationContext.STATICCreateSimple( CC.COMBINED_LOCAL_FILE_DOMAINS_SERVICE_KEY )
+        
+        canvas_window = ClientGUICanvas.CanvasPlaylist( canvas_frame, page_key, location_context, playlist_id, playlist_name, playlist_items )
+        
+        canvas_window.canvasWithHoversExiting.connect( self.NotifyMediaViewerExiting )
+        
+        canvas_frame.SetCanvas( canvas_window )
+        
+        return None
         
     
     def PresentImportedFilesToPage( self, hashes, page_name ):

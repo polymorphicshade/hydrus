@@ -88,6 +88,18 @@ This starts the program with 'Profile Mode' turned on, which captures the perfor
 
 This starts the client with `network->pause->all new network traffic` on. Useful for debugging a downloader in your boot session that is going crazy or stopping a problem subscription from launching.
 
+##**`--client_api_port CLIENT_API_PORT`**
+
+This runs the [Client API](client_api.md) on the given port for this session, whatever its settings in _services->manage services->client api_ say. If the Client API is off there, this turns it on. It is not saved, so the next time you start the client without it, the Client API goes back to its settings. This is handy for using the client from the [command line](command_line.md):
+
+```
+python hydrus_client.py --client_api_port 45869
+```
+
+##**`--client_api_allow_non_local_connections`**
+
+This lets other computers connect to the Client API for this session, whatever its settings say. Only use it on a network you trust, and only give out access keys with the permissions they need.
+
 ##**`--win_qt_darkmode_test`**
 
 **Windows only:** This starts the client with Qt's 'darkmode' detection enabled, as [here](https://doc.qt.io/qt-6/qguiapplication.html#platform-specific-arguments), set to 1 mode. It will override any existing qt.conf, so it is only for experimentation. We are going to experiment more with the 2 mode, but that locks the style to `windows`, and can't handle switches between light and dark mode.

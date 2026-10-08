@@ -86,3 +86,28 @@ A few things to know:
 - A relative path such as `-d="..\hydrus_db"` is resolved from the hydrus install folder.
 - Don't end the path with a backslash (`"E:\hydrus\"`), because Windows then reads `\"` as a literal quote and hydrus gets the wrong path.
 - To launch with the console open for debugging, add the same flag to the commented-out line instead: `python hydrus_client.py -d="E:\hydrus"`.
+
+### Command line and REST API
+The client has a REST API, the Client API, which this fork extends to cover its own features: counters, playlists, virtual paths, snapshots, what the media viewer remembers for each file, tag presets, screen locations, media viewer layouts, and exporting video, audio, and playlists. `hydrus_cli.py` uses it to drive a running client from a terminal.
+
+1. Start the client with the Client API on, just for that session:
+
+   ```bash
+   python hydrus_client.py --client_api_port 45869
+   ```
+
+2. In the client, open _services->review services->client api->add->from api request_, then run this and click OK in the client:
+
+   ```bash
+   python hydrus_cli.py request-key "command line" --everything --save
+   ```
+
+3. Use it:
+
+   ```bash
+   python hydrus_cli.py search "system:inbox"
+   python hydrus_cli.py playlists play "morning run"
+   python hydrus_cli.py --help
+   ```
+
+`hydrus_cli.py` only needs Python 3, not the venv. See `docs/command_line.md` for the command line, and `docs/developer_api_fork.md` for the new endpoints.

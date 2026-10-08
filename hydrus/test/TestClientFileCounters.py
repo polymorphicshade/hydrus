@@ -8,6 +8,7 @@ from hydrus.core import HydrusSerialisable
 from hydrus.client import ClientConstants as CC
 from hydrus.client.gui.media import ClientGUIMediaCounters
 from hydrus.client.gui.metadata import ClientGUITagsToCounters
+from hydrus.client.metadata import ClientCounters
 
 class TestFileCounters( unittest.TestCase ):
     
@@ -78,12 +79,12 @@ class TestFileCounters( unittest.TestCase ):
                 
                 with self.assertRaises( HydrusExceptions.VetoException, msg = text ):
                     
-                    ClientGUITagsToCounters.ParseTagsToCountersFilter( text )
+                    ClientCounters.ParseTagsToCountersFilter( text )
                     
                 
             else:
                 
-                self.assertEqual( ClientGUITagsToCounters.ParseTagsToCountersFilter( text ), result, text )
+                self.assertEqual( ClientCounters.ParseTagsToCountersFilter( text ), result, text )
                 
             
         
@@ -101,5 +102,50 @@ class TestFileCounters( unittest.TestCase ):
         self.assertEqual( panel.GetValue(), ( CC.DEFAULT_LOCAL_TAG_SERVICE_KEY, 'items', '*' ) )
         
         dialog.deleteLater()
+        
+    
+    def test_counter_helpers( self ):
+        
+        from unittest import mock
+        
+        from hydrus.client import ClientGlobals as CG
+        
+        self.assertEqual( ClientCounters.GetCounterNameError( '  ', [] ), 'Please enter a name!' )
+        self.assertEqual( ClientCounters.GetCounterNameError( 'Tally ', [ 'tally' ] ), 'There is already a counter called "Tally"!' )
+        self.assertIsNone( ClientCounters.GetCounterNameError( 'tally', [ 'watched' ] ) )
+        
+        new_options = CG.client_controller.new_options
+        
+        tally = HydrusSerialisable.IdAndName( b'tally id', 'Tally' )
+        
+        new_options.SetCounters( [ tally ] )
+        
+        try:
+            
+            # an existing counter is found by name, not case-sensitive, and a new one is made and saved
+            with mock.patch.object( CG.client_controller, 'Write' ) as write:
+                
+                namespaces_to_counter_ids = ClientCounters.GetCounterIdsForNamespaces( [ 'tally', 'items' ] )
+                
+            
+            counters = new_options.GetCounters()
+            
+            self.assertEqual( [ counter.name for counter in counters ], [ 'Tally', 'items' ] )
+            self.assertEqual( namespaces_to_counter_ids, { 'tally' : b'tally id', 'items' : counters[1].object_id } )
+            
+            write.assert_called_once_with( 'serialisable', new_options )
+            
+            # nothing new, nothing saved
+            with mock.patch.object( CG.client_controller, 'Write' ) as write:
+                
+                ClientCounters.GetCounterIdsForNamespaces( [ 'ITEMS' ] )
+                
+            
+            write.assert_not_called()
+            
+        finally:
+            
+            new_options.SetCounters( [] )
+            
         
     

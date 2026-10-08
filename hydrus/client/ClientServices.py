@@ -142,6 +142,26 @@ def GenerateDefaultServiceDictionary( service_type ):
     
     return dictionary
     
+
+def GetLocalServerPortSettings( service_type: int, port: int | None, allow_non_local_connections: bool ) -> tuple[ int | None, bool ]:
+    
+    # the port a local server runs on, and whether other computers can connect to it. the command line can set these for the Client API, just for this session
+    if service_type == HC.CLIENT_API_SERVICE:
+        
+        if CG.CLIENT_API_PORT_COMMAND_LINE is not None:
+            
+            port = CG.CLIENT_API_PORT_COMMAND_LINE
+            
+        
+        if CG.CLIENT_API_ALLOW_NON_LOCAL_CONNECTIONS_COMMAND_LINE:
+            
+            allow_non_local_connections = True
+            
+        
+    
+    return ( port, allow_non_local_connections )
+    
+
 def GenerateService( service_key, service_type, name, dictionary = None ):
     
     if dictionary is None:

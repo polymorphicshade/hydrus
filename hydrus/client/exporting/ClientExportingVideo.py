@@ -646,7 +646,7 @@ def ExportVideo( job_status: ClientThreading.JobStatus, media_result: ClientMedi
         
     
 
-def StartVideoExport( media_result: ClientMediaResult.MediaResult, settings: VideoExportSettings, output_path: str, span_ms: tuple[ int, int ] | None = None ):
+def StartVideoExport( media_result: ClientMediaResult.MediaResult, settings: VideoExportSettings, output_path: str, span_ms: tuple[ int, int ] | None = None ) -> ClientThreading.JobStatus:
     
     job_status = ClientThreading.JobStatus( cancellable = True )
     
@@ -655,4 +655,6 @@ def StartVideoExport( media_result: ClientMediaResult.MediaResult, settings: Vid
     CG.client_controller.pub( 'message', job_status )
     
     CG.client_controller.CallToThread( ExportVideo, job_status, media_result, settings, output_path, span_ms )
+    
+    return job_status
     

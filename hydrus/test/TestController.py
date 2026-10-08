@@ -57,6 +57,7 @@ from hydrus.client.networking import ClientNetworkingURLClass
 from hydrus.server import ServerGlobals as SG
 
 from hydrus.test import TestClientAPI
+from hydrus.test import TestClientAPIFork
 from hydrus.test import TestClientAudioExport
 from hydrus.test import TestClientCanvasOverlays
 from hydrus.test import TestClientConstants
@@ -979,7 +980,8 @@ class Controller( object ):
         ]
         
         module_lookup[ 'client_api' ] = [
-            TestClientAPI
+            TestClientAPI,
+            TestClientAPIFork
         ]
         
         module_lookup[ 'daemons' ] = [

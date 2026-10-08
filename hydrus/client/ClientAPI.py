@@ -26,6 +26,17 @@ CLIENT_API_PERMISSION_EDIT_TIMES = 11
 CLIENT_API_PERMISSION_COMMIT_PENDING = 12
 CLIENT_API_PERMISSION_SEE_LOCAL_PATHS = 13
 
+# these are for this fork's own features. they start at 100 so they never clash with ones hydrus adds later
+CLIENT_API_PERMISSION_EDIT_COUNTERS = 100
+CLIENT_API_PERMISSION_MANAGE_PLAYLISTS = 101
+CLIENT_API_PERMISSION_EDIT_VIRTUAL_PATHS = 102
+CLIENT_API_PERMISSION_MANAGE_SNAPSHOTS = 103
+CLIENT_API_PERMISSION_EDIT_MEDIA_VIEWER_DATA = 104
+CLIENT_API_PERMISSION_MANAGE_TAG_PRESETS = 105
+CLIENT_API_PERMISSION_MANAGE_SCREEN_LOCATIONS = 106
+CLIENT_API_PERMISSION_EDIT_SCRIPTED_EVENTS = 107
+CLIENT_API_PERMISSION_EXPORT_MEDIA = 108
+
 ALLOWED_PERMISSIONS = (
     CLIENT_API_PERMISSION_ADD_FILES,
     CLIENT_API_PERMISSION_ADD_TAGS,
@@ -40,8 +51,25 @@ ALLOWED_PERMISSIONS = (
     CLIENT_API_PERMISSION_MANAGE_POPUPS,
     CLIENT_API_PERMISSION_EDIT_TIMES,
     CLIENT_API_PERMISSION_COMMIT_PENDING,
-    CLIENT_API_PERMISSION_SEE_LOCAL_PATHS
+    CLIENT_API_PERMISSION_SEE_LOCAL_PATHS,
+    CLIENT_API_PERMISSION_EDIT_COUNTERS,
+    CLIENT_API_PERMISSION_MANAGE_PLAYLISTS,
+    CLIENT_API_PERMISSION_EDIT_VIRTUAL_PATHS,
+    CLIENT_API_PERMISSION_MANAGE_SNAPSHOTS,
+    CLIENT_API_PERMISSION_EDIT_MEDIA_VIEWER_DATA,
+    CLIENT_API_PERMISSION_MANAGE_TAG_PRESETS,
+    CLIENT_API_PERMISSION_MANAGE_SCREEN_LOCATIONS,
+    CLIENT_API_PERMISSION_EDIT_SCRIPTED_EVENTS,
+    CLIENT_API_PERMISSION_EXPORT_MEDIA
 )
+
+# scripted events are shell commands that run when playback gets to them, so being able to set them is being able to run anything on this computer
+# 'permits everything' does not cover these. a key only gets them if they are ticked for it
+PERMISSIONS_NOT_COVERED_BY_PERMITS_EVERYTHING = {
+    CLIENT_API_PERMISSION_EDIT_SCRIPTED_EVENTS
+}
+
+PERMITS_EVERYTHING_PERMISSIONS = tuple( permission for permission in ALLOWED_PERMISSIONS if permission not in PERMISSIONS_NOT_COVERED_BY_PERMITS_EVERYTHING )
 
 basic_permission_to_str_lookup = {
     CLIENT_API_PERMISSION_ADD_URLS : 'import and edit urls',
@@ -57,7 +85,16 @@ basic_permission_to_str_lookup = {
     CLIENT_API_PERMISSION_MANAGE_POPUPS : 'manage popups',
     CLIENT_API_PERMISSION_EDIT_TIMES : 'edit file times',
     CLIENT_API_PERMISSION_COMMIT_PENDING : 'commit pending',
-    CLIENT_API_PERMISSION_SEE_LOCAL_PATHS : 'see local file paths'
+    CLIENT_API_PERMISSION_SEE_LOCAL_PATHS : 'see local file paths',
+    CLIENT_API_PERMISSION_EDIT_COUNTERS : 'edit file counters',
+    CLIENT_API_PERMISSION_MANAGE_PLAYLISTS : 'manage playlists',
+    CLIENT_API_PERMISSION_EDIT_VIRTUAL_PATHS : 'edit file virtual paths',
+    CLIENT_API_PERMISSION_MANAGE_SNAPSHOTS : 'manage snapshots',
+    CLIENT_API_PERMISSION_EDIT_MEDIA_VIEWER_DATA : 'edit media viewer file data',
+    CLIENT_API_PERMISSION_MANAGE_TAG_PRESETS : 'manage tag presets',
+    CLIENT_API_PERMISSION_MANAGE_SCREEN_LOCATIONS : 'manage screen locations',
+    CLIENT_API_PERMISSION_EDIT_SCRIPTED_EVENTS : 'edit scripted events (they run shell commands on this computer!)',
+    CLIENT_API_PERMISSION_EXPORT_MEDIA : 'export videos, audio, and playlists'
 }
 
 SEARCH_RESULTS_CACHE_TIMEOUT = 4 * 3600
@@ -301,6 +338,11 @@ class APIPermissions( HydrusSerialisable.SerialisableBaseNamed ):
     
     def _HasPermission( self, permission ):
         
+        if permission in PERMISSIONS_NOT_COVERED_BY_PERMITS_EVERYTHING:
+            
+            return permission in self._basic_permissions
+            
+        
         return self._permits_everything or permission in self._basic_permissions
         
     
@@ -346,11 +388,7 @@ class APIPermissions( HydrusSerialisable.SerialisableBaseNamed ):
         
         with self._lock:
             
-            if self._permits_everything:
-                
-                return
-                
-            
+            # _HasPermission knows 'permits everything', and what it does not cover
             if True not in ( self._HasPermission( permission ) for permission in permissions ):
                 
                 raise HydrusExceptions.InsufficientCredentialsException( 'You need at least one these permissions: {}'.format( ', '.join( basic_permission_to_str_lookup[ permission ] for permission in permissions ) ) )
@@ -495,6 +533,13 @@ class APIPermissions( HydrusSerialisable.SerialisableBaseNamed ):
         with self._lock:
             
             if self._permits_everything:
+                
+                extra_permissions = sorted( ( basic_permission_to_str_lookup[ p ] for p in self._basic_permissions if p in PERMISSIONS_NOT_COVERED_BY_PERMITS_EVERYTHING ) )
+                
+                if len( extra_permissions ) > 0:
+                    
+                    return 'can do anything, and ' + ', '.join( extra_permissions )
+                    
                 
                 return 'can do anything'
                 

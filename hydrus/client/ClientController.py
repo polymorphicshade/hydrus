@@ -1955,7 +1955,7 @@ class Controller( HydrusController.HydrusController ):
         
         services = [ self.services_manager.GetService( service_key ) for service_key in ( CC.CLIENT_API_SERVICE_KEY, ) ]
         
-        services = [ service for service in services if service.GetPort() is not None ]
+        services = [ service for service in services if ClientServices.GetLocalServerPortSettings( service.GetServiceType(), service.GetPort(), service.AllowsNonLocalConnections() )[0] is not None ]
         
         self.CallToThreadLongRunning( self.SetRunningTwistedServices, services )
         
@@ -2200,8 +2200,7 @@ class Controller( HydrusController.HydrusController ):
                     
                     name = service.GetName()
                     
-                    port = service.GetPort()
-                    allow_non_local_connections = service.AllowsNonLocalConnections()
+                    ( port, allow_non_local_connections ) = ClientServices.GetLocalServerPortSettings( service_type, service.GetPort(), service.AllowsNonLocalConnections() )
                     use_https = service.UseHTTPS()
                     
                     if port is None:

@@ -68,6 +68,8 @@ try:
     argparser.add_argument( '--no_user_static_dir', action='store_true', help = 'do not allow a static dir in the db dir to override the install static dir contents' )
     argparser.add_argument( '--profile_mode', action='store_true', help = 'start the program with profile mode (db) on, capturing boot performance' )
     argparser.add_argument( '--pause_network_traffic', action='store_true', help = 'start the program with all new network traffic paused' )
+    argparser.add_argument( '--client_api_port', type = int, help = 'run the Client API on this port, whatever its settings say, just for this session' )
+    argparser.add_argument( '--client_api_allow_non_local_connections', action='store_true', help = 'let other computers connect to the Client API, just for this session' )
     argparser.add_argument( '--win_qt_darkmode_test', action='store_true', help = 'Windows only: Try Qt\'s automatic darkmode recognition.' )
     argparser.add_argument( '--no_qt_multimedia', action='store_true', help = 'Do not attempt to load QtMedia.' )
     argparser.add_argument( '--no_wal', action='store_true', help = 'OBSOLETE: run using TRUNCATE db journaling' )
@@ -148,6 +150,25 @@ try:
         
     
     HG.boot_with_network_traffic_paused_command_line = result.pause_network_traffic
+    
+    if result.client_api_port is not None:
+        
+        if not 1 <= result.client_api_port <= 65535:
+            
+            argparser.error( f'--client_api_port has to be from 1 to 65535, not {result.client_api_port}' )
+            
+        
+        from hydrus.client import ClientGlobals as CG
+        
+        CG.CLIENT_API_PORT_COMMAND_LINE = result.client_api_port
+        
+    
+    if result.client_api_allow_non_local_connections:
+        
+        from hydrus.client import ClientGlobals as CG
+        
+        CG.CLIENT_API_ALLOW_NON_LOCAL_CONNECTIONS_COMMAND_LINE = True
+        
     
     if HC.PLATFORM_WINDOWS and result.win_qt_darkmode_test:
         

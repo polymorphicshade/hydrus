@@ -695,7 +695,8 @@ class TestClientAPI( unittest.TestCase ):
                 
                 if api_permissions.PermitsEverything():
                     
-                    self.assertEqual( set( body_dict[ 'basic_permissions' ] ), set( ClientAPI.ALLOWED_PERMISSIONS ) )
+                    # 'permits everything' does not cover editing scripted events
+                    self.assertEqual( set( body_dict[ 'basic_permissions' ] ), set( ClientAPI.PERMITS_EVERYTHING_PERMISSIONS ) )
                     
                 else:
                     

@@ -53,6 +53,7 @@ class HydrusResourceClientAPIVersion( ClientLocalServerResources.HydrusResourceC
         
         body_dict[ 'version' ] = HC.CLIENT_API_VERSION
         body_dict[ 'hydrus_version' ] = HC.SOFTWARE_VERSION
+        body_dict[ 'fork_api_version' ] = HC.CLIENT_API_FORK_VERSION
         
         body = ClientLocalServerCore.Dumps( body_dict, request.preferred_mime )
         
@@ -116,7 +117,8 @@ class HydrusResourceClientAPIRestrictedAccountVerify( HydrusResourceClientAPIRes
         
         if permits_everything:
             
-            basic_permissions = ClientAPI.ALLOWED_PERMISSIONS
+            # 'permits everything' does not cover some permissions. the key has those only if they were ticked as well
+            basic_permissions = set( ClientAPI.PERMITS_EVERYTHING_PERMISSIONS ).union( api_permissions.GetBasicPermissions() )
             
         else:
             

@@ -66,6 +66,8 @@ nav:
   - API: 
     - client_api.md
     - developer_api.md
+    - developer_api_fork.md
+    - command_line.md
   - Recovery:
     - help_my_client_will_not_boot.md
     - help_my_db_is_broke.md

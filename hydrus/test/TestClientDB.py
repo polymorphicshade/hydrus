@@ -1111,6 +1111,42 @@ class TestClientDB( unittest.TestCase ):
         self._write( 'playlists', [] )
         
     
+    def test_playlist_api_writes( self ):
+        
+        # the Client API makes, renames, and deletes one playlist at a time, so it cannot lose one the user made in the meantime
+        
+        hash_a = os.urandom( 32 )
+        
+        self._write( 'playlists', [ ( None, 'kept' ) ] )
+        
+        ( ( kept_id, kept_name, kept_count ), ) = self._read( 'playlists' )
+        
+        new_id = self._write( 'playlist_new', '  morning   run ' )
+        
+        self.assertEqual( sorted( self._read( 'playlists' ) ), sorted( [ ( kept_id, 'kept', 0 ), ( new_id, 'morning run', 0 ) ] ) )
+        
+        # making one that is there already gives that one
+        self.assertEqual( self._write( 'playlist_new', 'morning run' ), new_id )
+        
+        self._write( 'playlist_rename', new_id, ' evening  run' )
+        
+        self._write( 'playlist_add_item', new_id, hash_a, None, None )
+        self._write( 'playlist_add_blank', new_id, 1500 )
+        self._write( 'playlist_add_item', new_id, hash_a, 0, 100 )
+        
+        # blanks go on the end, in turn with files
+        self.assertEqual( self._read( 'playlist_items', new_id ), [ ( hash_a, None, None, False ), ( None, None, 1500, False ), ( hash_a, 0, 100, False ) ] )
+        self.assertEqual( sorted( self._read( 'playlists' ) ), sorted( [ ( kept_id, 'kept', 0 ), ( new_id, 'evening run', 3 ) ] ) )
+        
+        self._write( 'playlist_delete', new_id )
+        
+        self.assertEqual( self._read( 'playlists' ), [ ( kept_id, 'kept', 0 ) ] )
+        self.assertEqual( self._read( 'playlist_items', new_id ), [] )
+        self.assertEqual( self._read( 'playlists_containing_file', hash_a ), [] )
+        
+        self._write( 'playlists', [] )
+        
+    
     def test_playlist_helpers( self ):
         
         playlists = [ ( 1, 'Road Trip', 3 ), ( 2, 'chill', 0 ), ( 3, 'TRIPPY', 1 ) ]

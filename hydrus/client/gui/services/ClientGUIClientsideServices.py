@@ -2253,7 +2253,7 @@ class ReviewServiceClientAPISubPanel( ClientGUICommon.StaticBox ):
     
     def _OpenBaseURL( self ):
         
-        port = self._service.GetPort()
+        ( port, allow_non_local_connections ) = ClientServices.GetLocalServerPortSettings( self._service.GetServiceType(), self._service.GetPort(), self._service.AllowsNonLocalConnections() )
         
         if port is None:
             
@@ -2270,7 +2270,7 @@ class ReviewServiceClientAPISubPanel( ClientGUICommon.StaticBox ):
                 scheme = 'http'
                 
             
-            url = '{}://127.0.0.1:{}/'.format( scheme, self._service.GetPort() )
+            url = '{}://127.0.0.1:{}/'.format( scheme, port )
             
             ClientGUIExecutableActions.OpenExternallyURLDefault( self, url )
             
@@ -2278,7 +2278,7 @@ class ReviewServiceClientAPISubPanel( ClientGUICommon.StaticBox ):
     
     def _Refresh( self ):
         
-        port = self._service.GetPort()
+        ( port, allow_non_local_connections ) = ClientServices.GetLocalServerPortSettings( self._service.GetServiceType(), self._service.GetPort(), self._service.AllowsNonLocalConnections() )
         
         if port is None:
             
@@ -2287,6 +2287,11 @@ class ReviewServiceClientAPISubPanel( ClientGUICommon.StaticBox ):
         else:
             
             status = 'The client api should be running on port {}.'.format( port )
+            
+            if CG.CLIENT_API_PORT_COMMAND_LINE is not None:
+                
+                status += ' That port is from the command line, just for this session.'
+                
             
         
         self._service_status.setText( status )

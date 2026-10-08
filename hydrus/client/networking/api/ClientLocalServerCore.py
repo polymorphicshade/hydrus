@@ -23,6 +23,7 @@ from hydrus.core import HydrusTags
 from hydrus.core import HydrusTemp
 from hydrus.core.networking import HydrusNetworkVariableHandling
 from hydrus.core.networking import HydrusServerRequest
+from hydrus.core.networking import HydrusServerResources
 
 from hydrus.client import ClientConstants as CC
 from hydrus.client import ClientGlobals as CG
@@ -48,7 +49,8 @@ CLIENT_API_INT_PARAMS = {
     'width',
     'height',
     'render_format',
-    'render_quality'
+    'render_quality',
+    'playlist_id'
 }
 
 CLIENT_API_BYTE_PARAMS = {
@@ -65,7 +67,8 @@ CLIENT_API_BYTE_PARAMS = {
     'tag_service_key_1',
     'tag_service_key_2',
     'rating_service_key',
-    'job_status_key'
+    'job_status_key',
+    'counter_id'
 }
 
 CLIENT_API_STRING_PARAMS = {
@@ -77,7 +80,9 @@ CLIENT_API_STRING_PARAMS = {
     'reason',
     'tag_display_type',
     'source_hash_type',
-    'desired_hash_type'
+    'desired_hash_type',
+    'playlist_name',
+    'counter_name'
 }
 
 CLIENT_API_JSON_PARAMS = {
@@ -1254,4 +1259,46 @@ def ConvertTagListToPredicates( request, tag_list, do_permission_check = True, e
         
     
     return predicates
+    
+
+# helpers for this fork's own endpoints
+
+def CheckNonNegativeInt( name: str, value: typing.Any ) -> int:
+    
+    # json has no separate bool, so True would pass as 1 if we let it
+    if isinstance( value, bool ) or not isinstance( value, int ) or value < 0:
+        
+        raise HydrusExceptions.BadRequestException( f'"{name}" has to be a whole number, 0 or more! "{value}" is not.' )
+        
+    
+    return value
+    
+
+def CheckNumber( name: str, value: typing.Any ) -> float:
+    
+    if isinstance( value, bool ) or not isinstance( value, ( int, float ) ):
+        
+        raise HydrusExceptions.BadRequestException( f'"{name}" has to be a number! "{value}" is not.' )
+        
+    
+    return float( value )
+    
+
+def GenerateJSONResponse( request: HydrusServerRequest.HydrusRequest, body_dict: dict ) -> HydrusServerResources.ResponseContext:
+    
+    body = Dumps( body_dict, request.preferred_mime )
+    
+    return HydrusServerResources.ResponseContext( 200, mime = request.preferred_mime, body = body )
+    
+
+def ParseSingleHash( request: HydrusServerRequest.HydrusRequest ) -> bytes:
+    
+    hashes = ParseHashes( request )
+    
+    if len( hashes ) != 1:
+        
+        raise HydrusExceptions.BadRequestException( 'Please give exactly one file for this, by hash or file_id!' )
+        
+    
+    return hashes[0]
     

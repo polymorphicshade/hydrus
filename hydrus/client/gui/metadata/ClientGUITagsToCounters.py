@@ -1,12 +1,8 @@
-import re
-
 from qtpy import QtWidgets as QW
 
 from hydrus.core import HydrusConstants as HC
 from hydrus.core import HydrusData
-from hydrus.core import HydrusExceptions
 from hydrus.core import HydrusNumbers
-from hydrus.core import HydrusSerialisable
 
 from hydrus.client import ClientConstants as CC
 from hydrus.client import ClientGlobals as CG
@@ -16,44 +12,10 @@ from hydrus.client.gui import ClientGUITopLevelWindowsPanels
 from hydrus.client.gui import QtPorting as QP
 from hydrus.client.gui.panels import ClientGUIScrolledPanels
 from hydrus.client.gui.widgets import ClientGUICommon
+from hydrus.client.metadata import ClientCounters
 
 # how many counters the 'are you sure?' message lists before it sums up the rest
 MAX_PREVIEW_LINES = 20
-
-def ParseTagsToCountersFilter( text: str ) -> tuple[ str, str ]:
-    
-    # 'items:72' -> ( 'items', '72' ), 'items:*' or 'items' -> ( 'items', '*' ). raises VetoException if it could never match anything
-    text = text.strip().lower()
-    
-    if ':' in text:
-        
-        ( namespace_wildcard, subtag_wildcard ) = text.split( ':', 1 )
-        
-    else:
-        
-        ( namespace_wildcard, subtag_wildcard ) = ( text, '' )
-        
-    
-    namespace_wildcard = namespace_wildcard.strip()
-    subtag_wildcard = subtag_wildcard.strip()
-    
-    if namespace_wildcard == '':
-        
-        raise HydrusExceptions.VetoException( 'Please enter a namespace, like "items:*". The namespace is the name of the counter, so a tag without one cannot be converted.' )
-        
-    
-    if subtag_wildcard == '':
-        
-        subtag_wildcard = '*'
-        
-    
-    if re.fullmatch( r'[0-9*]+', subtag_wildcard ) is None:
-        
-        raise HydrusExceptions.VetoException( f'The part after the colon, "{subtag_wildcard}", can never match a number! Use digits and * only, like "items:72" or "items:*".' )
-        
-    
-    return ( namespace_wildcard, subtag_wildcard )
-    
 
 def ConvertTagsToCounters( win: QW.QWidget, default_tag_service_key: bytes ):
     
@@ -129,33 +91,7 @@ def ConvertTagsToCounters( win: QW.QWidget, default_tag_service_key: bytes ):
         return
         
     
-    namespaces_to_counter_ids = {}
-    
-    new_counters_added = False
-    
-    for namespace in namespaces:
-        
-        if namespace.lower() not in names_to_counter_ids:
-            
-            counter = HydrusSerialisable.IdAndName( HydrusData.GenerateKey(), namespace )
-            
-            counters.append( counter )
-            
-            names_to_counter_ids[ namespace.lower() ] = counter.object_id
-            
-            new_counters_added = True
-            
-        
-        namespaces_to_counter_ids[ namespace ] = names_to_counter_ids[ namespace.lower() ]
-        
-    
-    if new_counters_added:
-        
-        new_options.SetCounters( counters )
-        
-        # the db does jobs in order, so the new counters are saved before their counts go in
-        CG.client_controller.Write( 'serialisable', new_options )
-        
+    namespaces_to_counter_ids = ClientCounters.GetCounterIdsForNamespaces( namespaces )
     
     def do_it():
         
@@ -216,7 +152,7 @@ class EditTagsToCountersPanel( ClientGUIScrolledPanels.EditPanel ):
     
     def GetValue( self ) -> tuple[ bytes, str, str ]:
         
-        ( namespace_wildcard, subtag_wildcard ) = ParseTagsToCountersFilter( self._tag_filter.text() )
+        ( namespace_wildcard, subtag_wildcard ) = ClientCounters.ParseTagsToCountersFilter( self._tag_filter.text() )
         
         return ( self._tag_service.GetValue(), namespace_wildcard, subtag_wildcard )
         

@@ -624,7 +624,7 @@ def ExportPlaylistToMP4( job_status: ClientThreading.JobStatus, playlist_name: s
         
     
 
-def StartPlaylistExport( playlist_name: str, playlist_items: list[ tuple[ ClientMediaResult.MediaResult | None, int | None, int | None ] ], output_path: str ):
+def StartPlaylistExport( playlist_name: str, playlist_items: list[ tuple[ ClientMediaResult.MediaResult | None, int | None, int | None ] ], output_path: str ) -> ClientThreading.JobStatus:
     
     job_status = ClientThreading.JobStatus( cancellable = True )
     
@@ -633,4 +633,6 @@ def StartPlaylistExport( playlist_name: str, playlist_items: list[ tuple[ Client
     CG.client_controller.pub( 'message', job_status )
     
     CG.client_controller.CallToThread( ExportPlaylistToMP4, job_status, playlist_name, playlist_items, output_path )
+    
+    return job_status
     

@@ -253,7 +253,7 @@ def ExportAudio( job_status: ClientThreading.JobStatus, media_result: ClientMedi
         
     
 
-def StartAudioExport( media_result: ClientMediaResult.MediaResult, settings: AudioExportSettings, output_path: str, span_ms: tuple[ int, int ] | None = None ):
+def StartAudioExport( media_result: ClientMediaResult.MediaResult, settings: AudioExportSettings, output_path: str, span_ms: tuple[ int, int ] | None = None ) -> ClientThreading.JobStatus:
     
     job_status = ClientThreading.JobStatus( cancellable = True )
     
@@ -262,4 +262,6 @@ def StartAudioExport( media_result: ClientMediaResult.MediaResult, settings: Aud
     CG.client_controller.pub( 'message', job_status )
     
     CG.client_controller.CallToThread( ExportAudio, job_status, media_result, settings, output_path, span_ms )
+    
+    return job_status
     

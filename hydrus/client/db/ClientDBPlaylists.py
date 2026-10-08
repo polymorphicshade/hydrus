@@ -44,6 +44,14 @@ class ClientDBPlaylists( ClientDBModule.ClientDBModule ):
         }
         
     
+    def AddPlaylistBlank( self, playlist_id: int, duration_ms: int ):
+        
+        # a blank on the end
+        position = self._GetNextPosition( playlist_id )
+        
+        self._Execute( 'INSERT INTO playlist_blank_items ( playlist_id, position, duration_ms ) VALUES ( ?, ?, ? );', ( playlist_id, position, duration_ms ) )
+        
+    
     def AddPlaylistItem( self, playlist_id: int, hash: bytes, start_ms: int | None, end_ms: int | None ):
         
         hash_id = self.modules_hashes_local_cache.GetHashId( hash )
@@ -65,6 +73,25 @@ class ClientDBPlaylists( ClientDBModule.ClientDBModule ):
         self.AddPlaylistItem( playlist_id, hash, start_ms, end_ms )
         
         return playlist_id
+        
+    
+    def CreatePlaylist( self, name: str ) -> int:
+        
+        # an empty playlist. if there is one with this name already, that is the one we get
+        name = ClientMediaPlaylists.NormalisePlaylistName( name )
+        
+        self._Execute( 'INSERT OR IGNORE INTO playlists ( name ) VALUES ( ? );', ( name, ) )
+        
+        ( playlist_id, ) = self._Execute( 'SELECT playlist_id FROM playlists WHERE name = ?;', ( name, ) ).fetchone()
+        
+        return playlist_id
+        
+    
+    def DeletePlaylist( self, playlist_id: int ):
+        
+        self._Execute( 'DELETE FROM playlist_items WHERE playlist_id = ?;', ( playlist_id, ) )
+        self._Execute( 'DELETE FROM playlist_blank_items WHERE playlist_id = ?;', ( playlist_id, ) )
+        self._Execute( 'DELETE FROM playlists WHERE playlist_id = ?;', ( playlist_id, ) )
         
     
     def _GetNextPosition( self, playlist_id: int ) -> int:
@@ -140,6 +167,13 @@ class ClientDBPlaylists( ClientDBModule.ClientDBModule ):
         hash_id = self.modules_hashes_local_cache.GetHashId( hash )
         
         self._Execute( 'DELETE FROM playlist_items WHERE playlist_id = ? AND hash_id = ?;', ( playlist_id, hash_id ) )
+        
+    
+    def RenamePlaylist( self, playlist_id: int, name: str ):
+        
+        name = ClientMediaPlaylists.NormalisePlaylistName( name )
+        
+        self._Execute( 'UPDATE playlists SET name = ? WHERE playlist_id = ?;', ( name, playlist_id ) )
         
     
     def Repair( self, current_db_version, cursor_transaction_wrapper: HydrusDBBase.DBCursorTransactionWrapper ):
