@@ -1,3 +1,5 @@
+import collections
+import collections.abc
 import sqlite3
 
 from hydrus.core import HydrusConstants as HC
@@ -58,22 +60,61 @@ class ClientDBFilesSnapshots( ClientDBModule.ClientDBModule ):
     def GetSnapshotHashes( self, hash: bytes, location_context: ClientLocation.LocationContext ) -> list[ bytes ]:
         
         # in the order they come in the file. ones that are no longer in the location, e.g. deleted, are left out
-        hash_id = self.modules_hashes_local_cache.GetHashId( hash )
+        return self.GetSnapshotHashesForFiles( [ hash ], location_context )
         
-        rows = self._Execute( 'SELECT snapshot_hash_id, timestamp_ms FROM file_snapshots WHERE hash_id = ?;', ( hash_id, ) ).fetchall()
+    
+    def GetSnapshotHashesForFiles( self, hashes: collections.abc.Sequence[ bytes ], location_context: ClientLocation.LocationContext ) -> list[ bytes ]:
+        
+        # file by file in the order given, and each file's in the order they come in it. a snapshot taken from more than one of the files is listed once, under the first
+        if len( hashes ) == 0:
+            
+            return []
+            
+        
+        hashes_to_hash_ids = { hash : hash_id for ( hash_id, hash ) in self.modules_hashes_local_cache.GetHashIdsToHashes( hashes = hashes ).items() }
+        
+        with self._MakeTemporaryIntegerTable( set( hashes_to_hash_ids.values() ), 'hash_id' ) as temp_hash_ids_table_name:
+            
+            rows = self._Execute( f'SELECT hash_id, snapshot_hash_id, timestamp_ms FROM {temp_hash_ids_table_name} CROSS JOIN file_snapshots USING ( hash_id );' ).fetchall()
+            
         
         if len( rows ) == 0:
             
             return []
             
         
-        snapshot_hash_ids_in_location = self.modules_files_storage.FilterHashIds( location_context, { snapshot_hash_id for ( snapshot_hash_id, timestamp_ms ) in rows } )
+        snapshot_hash_ids_in_location = self.modules_files_storage.FilterHashIds( location_context, { snapshot_hash_id for ( hash_id, snapshot_hash_id, timestamp_ms ) in rows } )
         
-        rows = sorted( ( ( -1 if timestamp_ms is None else timestamp_ms, snapshot_hash_id ) for ( snapshot_hash_id, timestamp_ms ) in rows if snapshot_hash_id in snapshot_hash_ids_in_location ) )
+        hash_ids_to_rows = collections.defaultdict( list )
         
-        hash_ids_to_hashes = self.modules_hashes_local_cache.GetHashIdsToHashes( hash_ids = [ snapshot_hash_id for ( timestamp_ms, snapshot_hash_id ) in rows ] )
+        for ( hash_id, snapshot_hash_id, timestamp_ms ) in rows:
+            
+            if snapshot_hash_id in snapshot_hash_ids_in_location:
+                
+                hash_ids_to_rows[ hash_id ].append( ( -1 if timestamp_ms is None else timestamp_ms, snapshot_hash_id ) )
+                
+            
         
-        return [ hash_ids_to_hashes[ snapshot_hash_id ] for ( timestamp_ms, snapshot_hash_id ) in rows ]
+        snapshot_hash_ids = []
+        seen_snapshot_hash_ids = set()
+        
+        for hash in hashes:
+            
+            hash_id = hashes_to_hash_ids[ hash ]
+            
+            for ( timestamp_ms, snapshot_hash_id ) in sorted( hash_ids_to_rows[ hash_id ] ):
+                
+                if snapshot_hash_id not in seen_snapshot_hash_ids:
+                    
+                    snapshot_hash_ids.append( snapshot_hash_id )
+                    seen_snapshot_hash_ids.add( snapshot_hash_id )
+                    
+                
+            
+        
+        hash_ids_to_hashes = self.modules_hashes_local_cache.GetHashIdsToHashes( hash_ids = snapshot_hash_ids )
+        
+        return [ hash_ids_to_hashes[ snapshot_hash_id ] for snapshot_hash_id in snapshot_hash_ids ]
         
     
     def GetHashIdsWithSnapshots( self, hash_ids_table_name: str ) -> set[ int ]:

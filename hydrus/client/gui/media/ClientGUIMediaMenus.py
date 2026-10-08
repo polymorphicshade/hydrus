@@ -1243,29 +1243,45 @@ def AddShareMenu( win: QW.QWidget, command_processor: CAC.ApplicationCommandProc
     ClientGUIMenus.AppendMenu( menu, share_menu, 'share' )
     
 
-def AddSnapshotsMenuItem( menu: QW.QMenu, focused_media: ClientMedia.Media | None ):
+def AddSnapshotsMenuItem( menu: QW.QMenu, focused_media: ClientMedia.Media | None, ordered_selected_media: collections.abc.Sequence[ ClientMedia.Media ] = () ):
     
-    # the frames taken from the focused file in the media viewer. files with none get no item, so the menu does not fill up with them
-    if focused_media is None:
+    # the frames taken in the media viewer, from the focused file, or all of them together when more than one file is selected
+    # files with none get no item, so the menu does not fill up with them
+    flat_selected_media = ClientMediaList.FlattenMedia( ordered_selected_media )
+    
+    if len( flat_selected_media ) > 1:
         
-        return
+        hashes = [ media.GetHash() for media in flat_selected_media ]
+        
+        label = 'snapshots of selected'
+        description = 'Open a new page with the snapshots taken from all the selected files, file by file.'
+        
+    else:
+        
+        if focused_media is None:
+            
+            return
+            
+        
+        focused_singleton = focused_media.GetDisplayMedia()
+        
+        if focused_singleton is None:
+            
+            return
+            
+        
+        hashes = [ focused_singleton.GetHash() ]
+        
+        label = 'snapshots'
+        description = 'Open a new page with the snapshots taken from this file.'
         
     
-    focused_singleton = focused_media.GetDisplayMedia()
-    
-    if focused_singleton is None:
-        
-        return
-        
-    
-    hash = focused_singleton.GetHash()
-    
-    num_snapshots = len( ClientSnapshots.GetSnapshotHashes( hash ) )
+    num_snapshots = len( ClientSnapshots.GetSnapshotHashesForFiles( hashes ) )
     
     if num_snapshots == 0:
         
         return
         
     
-    ClientGUIMenus.AppendMenuItem( menu, f'snapshots ({HydrusNumbers.ToHumanInt( num_snapshots )})', 'Open a new page with the snapshots taken from this file.', ClientGUIMediaSimpleActions.ShowSnapshotsInNewPage, hash )
+    ClientGUIMenus.AppendMenuItem( menu, f'{label} ({HydrusNumbers.ToHumanInt( num_snapshots )})', description, ClientGUIMediaSimpleActions.ShowSnapshotsInNewPage, hashes )
     

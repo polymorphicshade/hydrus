@@ -4080,6 +4080,7 @@ class DB( HydrusDB.HydrusDB ):
                 'file_duplicate_hashes' : self.modules_files_duplicates_storage.GetFileHashesByDuplicateType,
                 'file_counters' : self.modules_files_counters.GetCounts,
                 'file_snapshots' : self.modules_files_snapshots.GetSnapshotHashes,
+                'file_snapshots_for_files' : self.modules_files_snapshots.GetSnapshotHashesForFiles,
                 'file_virtual_paths' : self.modules_files_virtual_paths.GetPaths,
                 'all_file_virtual_paths' : self.modules_files_virtual_paths.GetAllPaths,
                 'playlist_items' : self.modules_playlists.GetPlaylistItems,

@@ -1,3 +1,4 @@
+import collections.abc
 import threading
 
 from hydrus.core import HydrusConstants as HC
@@ -99,14 +100,20 @@ def GetSnapshotsLocationContext() -> ClientLocation.LocationContext | None:
 def GetSnapshotHashes( hash: bytes ) -> list[ bytes ]:
     
     # the snapshots taken from this file that are still in the snapshots domain, in the order they come in the file
+    return GetSnapshotHashesForFiles( [ hash ] )
+    
+
+def GetSnapshotHashesForFiles( hashes: collections.abc.Sequence[ bytes ] ) -> list[ bytes ]:
+    
+    # all of these files' snapshots, file by file in the order given
     location_context = GetSnapshotsLocationContext()
     
-    if location_context is None:
+    if location_context is None or len( hashes ) == 0:
         
         return []
         
     
-    return CG.client_controller.Read( 'file_snapshots', hash, location_context )
+    return CG.client_controller.Read( 'file_snapshots_for_files', list( hashes ), location_context )
     
 
 def ImportSnapshot( path: str, hash: bytes, timestamp_ms: int | None ) -> bytes:

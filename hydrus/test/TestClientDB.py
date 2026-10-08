@@ -565,6 +565,23 @@ class TestClientDB( unittest.TestCase ):
         # ones that are not in the snapshots domain any more are left out
         self.assertEqual( self._read( 'file_snapshots', source_hash, snapshots_location_context ), [ snapshot_hash ] )
         
+        # many files at once come file by file, in the order given, and a snapshot from more than one of them is listed once, under the first
+        
+        other_early_hash = os.urandom( 32 )
+        
+        self._write( 'file_snapshot_add', other_source_hash, other_early_hash, 2000 )
+        self._write( 'file_snapshot_add', other_source_hash, early_hash, 500 )
+        
+        self.assertEqual( self._read( 'file_snapshots_for_files', [ source_hash, other_source_hash ], all_known_files_location_context ), [ no_timestamp_hash, early_hash, late_hash, snapshot_hash, other_early_hash ] )
+        self.assertEqual( self._read( 'file_snapshots_for_files', [ other_source_hash, source_hash ], all_known_files_location_context ), [ early_hash, other_early_hash, no_timestamp_hash, late_hash, snapshot_hash ] )
+        
+        # files with none, and ones the db has never seen, are fine
+        self.assertEqual( self._read( 'file_snapshots_for_files', [ os.urandom( 32 ), other_source_hash ], all_known_files_location_context ), [ early_hash, other_early_hash ] )
+        self.assertEqual( self._read( 'file_snapshots_for_files', [], all_known_files_location_context ), [] )
+        
+        # the location filter holds for them too
+        self.assertEqual( self._read( 'file_snapshots_for_files', [ other_source_hash, source_hash ], snapshots_location_context ), [ snapshot_hash ] )
+        
         self._write( 'update_services', services )
         
     

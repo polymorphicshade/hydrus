@@ -464,8 +464,9 @@ def ShowSimilarFilesInNewPage( media: collections.abc.Collection[ ClientMediaSin
         
     
 
-def ShowSnapshotsInNewPage( hash: bytes ):
+def ShowSnapshotsInNewPage( hashes: collections.abc.Sequence[ bytes ] ):
     
+    # one page with all of these files' snapshots, file by file
     location_context = ClientSnapshots.GetSnapshotsLocationContext()
     
     if location_context is None:
@@ -473,7 +474,7 @@ def ShowSnapshotsInNewPage( hash: bytes ):
         return
         
     
-    snapshot_hashes = ClientSnapshots.GetSnapshotHashes( hash )
+    snapshot_hashes = ClientSnapshots.GetSnapshotHashesForFiles( hashes )
     
     CG.client_controller.pub( 'new_page_query', location_context, initial_hashes = snapshot_hashes, page_name = 'snapshots' )
     

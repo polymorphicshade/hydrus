@@ -3483,7 +3483,7 @@ class CanvasWithHovers( Canvas ):
             return
             
         
-        ClientGUIMediaSimpleActions.ShowSnapshotsInNewPage( self._current_media.GetHash() )
+        ClientGUIMediaSimpleActions.ShowSnapshotsInNewPage( [ self._current_media.GetHash() ] )
         
     
     def _TakeSnapshot( self ):
