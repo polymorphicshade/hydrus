@@ -39,6 +39,25 @@ def EnterNumber( win: QW.QWidget, message: str, default = 0, min_value = None, m
         
     
 
+def EnterNumberRange( win: QW.QWidget, message: str, default_min = 0, default_max = 0, min_value = None, max_value = None, title = 'Enter Range' ) -> tuple[ int, int ]:
+    
+    with ClientGUITopLevelWindowsPanels.DialogEdit( win, title, frame_key = 'quick_entry_dialog' ) as dlg:
+        
+        panel = ClientGUIScrolledPanelsNumberEntry.EditNumberRangePanel( dlg, message, default_min, default_max, min_value, max_value )
+        
+        dlg.SetPanel( panel )
+        
+        if dlg.exec() == QW.QDialog.DialogCode.Accepted:
+            
+            return panel.GetValue()
+            
+        else:
+            
+            raise HydrusExceptions.CancelledException( 'Dialog cancelled.' )
+            
+        
+    
+
 def EnterText( win: QW.QWidget, message: str, default = '', placeholder = None, allow_blank = False, allow_whitespace = True, suggestions = None, max_chars = None, password_entry = False, min_char_width = 72, title = 'Enter Text' ) -> str:
     
     with ClientGUITopLevelWindowsPanels.DialogEdit( win, title, frame_key = 'quick_entry_dialog' ) as dlg:

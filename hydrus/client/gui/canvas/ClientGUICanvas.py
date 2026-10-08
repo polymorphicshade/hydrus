@@ -4705,6 +4705,26 @@ def ConvertPlaybackGapToString( gap_ms: int ) -> str:
     return f'{HydrusNumbers.ToHumanInt( gap_ms )}ms'
     
 
+def ConvertPlaybackGapRangeToString( gap_range: tuple[ int, int ] ) -> str:
+    
+    ( min_ms, max_ms ) = gap_range
+    
+    return f'random {HydrusNumbers.ToHumanInt( min_ms )}ms to {HydrusNumbers.ToHumanInt( max_ms )}ms'
+    
+
+def PickPlaybackGapMs( gap_ms: int, gap_range: tuple[ int, int ] | None ) -> int:
+    
+    # a random gap is rolled fresh for each gap, anywhere from min to max, both included
+    if gap_range is None:
+        
+        return gap_ms
+        
+    
+    ( min_ms, max_ms ) = gap_range
+    
+    return random.randint( min_ms, max_ms )
+    
+
 def PlaybackGapIsDone( gap_ms: int, gap_time_s: float ) -> bool:
     
     return gap_time_s * 1000 >= gap_ms
@@ -4734,8 +4754,14 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
         # a moment of nothing--no picture, no sound--between items, when a slideshow or playlist moves itself on. it is just for this media viewer, while it is open
         self._playback_gap_ms = 0
         
+        # or, a random gap from min to max ms. when this is set, _playback_gap_ms is 0
+        self._playback_gap_random_range: tuple[ int, int ] | None = None
+        
         # while a gap is up, what moves us on when it is done. None when there is no gap up
         self._playback_gap_move_on_callable = None
+        
+        # how long the gap that is up is. for a random gap, it is picked when the gap starts
+        self._playback_gap_current_ms = 0
         self._playback_gap_time_s = 0.0
         self._playback_gap_last_tick_time = 0.0
         self._playback_gap_was_playing = False
@@ -4961,7 +4987,7 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
         
         when = 'when a slideshow or playlist moves on to the next item by itself. Going to another item yourself has no gap. This is just for this media viewer, while it is open.'
         
-        ClientGUIMenus.AppendMenuCheckItem( gap_menu, 'no gap', 'Go straight on to the next item.', self._playback_gap_ms == 0, self._SetPlaybackGap, 0 )
+        ClientGUIMenus.AppendMenuCheckItem( gap_menu, 'no gap', 'Go straight on to the next item.', not self._PlaybackGapIsSet(), self._SetPlaybackGap, 0 )
         
         ClientGUIMenus.AppendSeparator( gap_menu )
         
@@ -4981,7 +5007,20 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
         
         ClientGUIMenus.AppendMenuItem( gap_menu, 'custom' + HC.UNICODE_ELLIPSIS, f'Enter how many milliseconds of nothing to put in {when}', self._SetPlaybackGapCustom )
         
-        ClientGUIMenus.AppendMenu( menu, gap_menu, f'gap between items: {ConvertPlaybackGapToString( self._playback_gap_ms )}' )
+        ClientGUIMenus.AppendSeparator( gap_menu )
+        
+        if self._playback_gap_random_range is None:
+            
+            random_label = 'random'
+            
+        else:
+            
+            random_label = ConvertPlaybackGapRangeToString( self._playback_gap_random_range )
+            
+        
+        ClientGUIMenus.AppendMenuCheckItem( gap_menu, random_label + HC.UNICODE_ELLIPSIS, f'Enter a min and max in milliseconds, and each gap is a random length between them, {when}', self._playback_gap_random_range is not None, self._SetPlaybackGapRandomCustom )
+        
+        ClientGUIMenus.AppendMenu( menu, gap_menu, f'gap between items: {self._GetPlaybackGapString()}' )
         
     
     def _DoPlaybackGapWork( self ):
@@ -5007,7 +5046,7 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
         
         self._playback_gap_time_s += tick_s
         
-        if not PlaybackGapIsDone( self._playback_gap_ms, self._playback_gap_time_s ):
+        if not PlaybackGapIsDone( self._playback_gap_current_ms, self._playback_gap_time_s ):
             
             return
             
@@ -5105,6 +5144,16 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
             
         
     
+    def _GetPlaybackGapString( self ) -> str:
+        
+        if self._playback_gap_random_range is not None:
+            
+            return ConvertPlaybackGapRangeToString( self._playback_gap_random_range )
+            
+        
+        return ConvertPlaybackGapToString( self._playback_gap_ms )
+        
+    
     def _GetPlaylistItemSpan( self ) -> tuple[ int | None, int | None ]:
         
         # when A-B repeat is on, the playlist gets just that part of the file
@@ -5155,7 +5204,7 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
     def _MoveOnWithPlaybackGap( self, move_on_callable ):
         
         # what a slideshow or playlist calls when it moves itself on. if there is a gap, there is nothing for a moment first
-        if self._playback_gap_ms > 0 and self._current_media is not None:
+        if self._PlaybackGapIsSet() and self._current_media is not None:
             
             self._StartPlaybackGap( move_on_callable )
             
@@ -5224,6 +5273,11 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
             
             self._StartSlideshow( self._normal_slideshow_period )
             
+        
+    
+    def _PlaybackGapIsSet( self ) -> bool:
+        
+        return self._playback_gap_ms > 0 or self._playback_gap_random_range is not None
         
     
     def _PlaybackGapIsUp( self ) -> bool:
@@ -5370,8 +5424,11 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
     
     def _SetPlaybackGap( self, gap_ms: int ):
         
-        # a gap that is up now takes the new length, so 'no gap' ends it as soon as the menu closes
         self._playback_gap_ms = gap_ms
+        self._playback_gap_random_range = None
+        
+        # a gap that is up now takes the new length, so 'no gap' ends it as soon as the menu closes
+        self._playback_gap_current_ms = gap_ms
         
     
     def _SetPlaybackGapCustom( self ):
@@ -5388,10 +5445,43 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
         self._SetPlaybackGap( gap_ms )
         
     
+    def _SetPlaybackGapRandom( self, min_ms: int, max_ms: int ):
+        
+        self._playback_gap_ms = 0
+        self._playback_gap_random_range = ( min_ms, max_ms )
+        
+        # a gap that is up now gets a new random length, from when it started
+        self._playback_gap_current_ms = PickPlaybackGapMs( self._playback_gap_ms, self._playback_gap_random_range )
+        
+    
+    def _SetPlaybackGapRandomCustom( self ):
+        
+        if self._playback_gap_random_range is None:
+            
+            ( default_min, default_max ) = ( 500, 2000 )
+            
+        else:
+            
+            ( default_min, default_max ) = self._playback_gap_random_range
+            
+        
+        try:
+            
+            ( min_ms, max_ms ) = ClientGUIDialogsQuick.EnterNumberRange( self, 'Each gap between items will be a random length from the min to the max, in milliseconds. A new length is picked for every gap. 1000ms is a second.', default_min = default_min, default_max = default_max, min_value = 1, max_value = PLAYBACK_GAP_MAX_MS, title = 'random gap between items' )
+            
+        except HydrusExceptions.CancelledException:
+            
+            return
+            
+        
+        self._SetPlaybackGapRandom( min_ms, max_ms )
+        
+    
     def _StartPlaybackGap( self, move_on_callable ):
         
         # the item we are on goes out of sight and quiet, and when the gap is done, move_on_callable moves us on
         self._playback_gap_move_on_callable = move_on_callable
+        self._playback_gap_current_ms = PickPlaybackGapMs( self._playback_gap_ms, self._playback_gap_random_range )
         self._playback_gap_time_s = 0.0
         self._playback_gap_last_tick_time = HydrusTime.GetNowPrecise()
         self._playback_gap_was_playing = not self._media_container.IsPaused()
