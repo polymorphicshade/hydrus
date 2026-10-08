@@ -1,9 +1,14 @@
+# Instructions
+For each item, create a side branch and implement it. Do not merge anything.
+Name each branch in the form `#-branch-title` where `#` is a number from 1-N where N is the number of TODO items to do.
+
 # TODO
-- Add ability to convert "x:y" tags to counters
-  - in the "tags" menu, add a "to counter" menu item
-    - shows a dialog where user can input a tag filter (like "items:72")
-    - after user clicks ok, hydrus goes through all tags that match that format and converts the tag to a counter
-      - i.e. items:72 converts to a counter "items" with value "72
-      - original tag is deleted (i.e. "items:72" is removed while keeping the counter)
+- In the adding a gap menu, add an option for a random -> min/max dialog to do a random interval between those values
+- Have the snapshots menu item also live in the context menu for media items in a tab
+- Add ability to right-click many media items in a tab and view all their snapshots combined in one tab
+- Add a full REST API to the app
+  - unsure if already exists or not
+  - want to be able to use this app on the command line and expose an API through a port
+
 
 
