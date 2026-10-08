@@ -16,6 +16,7 @@ from hydrus.client import ClientConstants as CC
 from hydrus.client import ClientGlobals as CG
 from hydrus.client import ClientLocation
 from hydrus.client import ClientPaths
+from hydrus.client import ClientSnapshots
 from hydrus.client.exporting import ClientExportingSpans
 from hydrus.client.gui import ClientGUIAsync
 from hydrus.client.gui import ClientGUIMenus
@@ -1240,4 +1241,31 @@ def AddShareMenu( win: QW.QWidget, command_processor: CAC.ApplicationCommandProc
     #
     
     ClientGUIMenus.AppendMenu( menu, share_menu, 'share' )
+    
+
+def AddSnapshotsMenuItem( menu: QW.QMenu, focused_media: ClientMedia.Media | None ):
+    
+    # the frames taken from the focused file in the media viewer. files with none get no item, so the menu does not fill up with them
+    if focused_media is None:
+        
+        return
+        
+    
+    focused_singleton = focused_media.GetDisplayMedia()
+    
+    if focused_singleton is None:
+        
+        return
+        
+    
+    hash = focused_singleton.GetHash()
+    
+    num_snapshots = len( ClientSnapshots.GetSnapshotHashes( hash ) )
+    
+    if num_snapshots == 0:
+        
+        return
+        
+    
+    ClientGUIMenus.AppendMenuItem( menu, f'snapshots ({HydrusNumbers.ToHumanInt( num_snapshots )})', 'Open a new page with the snapshots taken from this file.', ClientGUIMediaSimpleActions.ShowSnapshotsInNewPage, hash )
     

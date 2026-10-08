@@ -1669,6 +1669,8 @@ class MediaResultsPanelThumbnails( ClientGUIMediaResultsPanel.MediaResultsPanel 
             
             ClientGUIMediaMenus.AddOpenMenu( self, self, menu, self._focused_media, self._selected_media )
             
+            ClientGUIMediaMenus.AddSnapshotsMenuItem( menu, self._focused_media )
+            
             ClientGUIMediaMenus.AddShareMenu( self, self, menu, self._focused_media, self._selected_media )
             
         
@@ -3996,6 +3998,8 @@ class MediaResultsPanelThumbnailsGraphicsViewTest( ClientGUIMediaResultsPanel.Me
             ClientGUIMediaMenus.AddKnownURLsViewCopyMenu( self, self, menu, self._focused_media, num_selected, selected_media = self._selected_media )
             
             ClientGUIMediaMenus.AddOpenMenu( self, self, menu, self._focused_media, self._selected_media )
+            
+            ClientGUIMediaMenus.AddSnapshotsMenuItem( menu, self._focused_media )
             
             ClientGUIMediaMenus.AddShareMenu( self, self, menu, self._focused_media, self._selected_media )
             

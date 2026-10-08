@@ -97,6 +97,7 @@ from hydrus.test import TestClientSearch
 from hydrus.test import TestClientSearchQuickView
 from hydrus.test import TestClientSearchTagPresets
 from hydrus.test import TestClientSegments
+from hydrus.test import TestClientSnapshotsMenu
 from hydrus.test import TestClientTags
 from hydrus.test import TestClientThreading
 from hydrus.test import TestClientVideoExport
@@ -972,6 +973,7 @@ class Controller( object ):
             TestClientRotation,
             TestClientScriptedEvents,
             TestClientSegments,
+            TestClientSnapshotsMenu,
             TestClientVideoExport,
             TestClientZoomTimestamps
         ]

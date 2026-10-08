@@ -14,6 +14,7 @@ from hydrus.client import ClientConstants as CC
 from hydrus.client import ClientGlobals as CG
 from hydrus.client import ClientLocation
 from hydrus.client import ClientPaths
+from hydrus.client import ClientSnapshots
 from hydrus.client import ClientThreading
 from hydrus.client.media import ClientMedia
 from hydrus.client.media import ClientMediaList
@@ -461,6 +462,20 @@ def ShowSimilarFilesInNewPage( media: collections.abc.Collection[ ClientMediaSin
         
         CG.client_controller.pub( 'new_page_query', location_context, initial_predicates = initial_predicates )
         
+    
+
+def ShowSnapshotsInNewPage( hash: bytes ):
+    
+    location_context = ClientSnapshots.GetSnapshotsLocationContext()
+    
+    if location_context is None:
+        
+        return
+        
+    
+    snapshot_hashes = ClientSnapshots.GetSnapshotHashes( hash )
+    
+    CG.client_controller.pub( 'new_page_query', location_context, initial_hashes = snapshot_hashes, page_name = 'snapshots' )
     
 
 def UndeleteFiles( hashes ):

@@ -3483,16 +3483,7 @@ class CanvasWithHovers( Canvas ):
             return
             
         
-        location_context = ClientSnapshots.GetSnapshotsLocationContext()
-        
-        if location_context is None:
-            
-            return
-            
-        
-        hashes = CG.client_controller.Read( 'file_snapshots', self._current_media.GetHash(), location_context )
-        
-        CG.client_controller.pub( 'new_page_query', location_context, initial_hashes = hashes, page_name = 'snapshots' )
+        ClientGUIMediaSimpleActions.ShowSnapshotsInNewPage( self._current_media.GetHash() )
         
     
     def _TakeSnapshot( self ):
@@ -5806,16 +5797,7 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
                 ClientGUIMenus.AppendMenu( menu, scripting_menu, f'scripting ({num_scripted_events})' if num_scripted_events > 0 else 'scripting' )
                 
             
-            snapshots_location_context = ClientSnapshots.GetSnapshotsLocationContext()
-            
-            if snapshots_location_context is None:
-                
-                num_snapshots = 0
-                
-            else:
-                
-                num_snapshots = len( CG.client_controller.Read( 'file_snapshots', self._current_media.GetHash(), snapshots_location_context ) )
-                
+            num_snapshots = len( ClientSnapshots.GetSnapshotHashes( self._current_media.GetHash() ) )
             
             if self._media_container.CanTakeSnapshot() or num_snapshots > 0:
                 

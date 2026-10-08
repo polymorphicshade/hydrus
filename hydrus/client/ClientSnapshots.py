@@ -96,6 +96,19 @@ def GetSnapshotsLocationContext() -> ClientLocation.LocationContext | None:
     return ClientLocation.LocationContext.STATICCreateSimple( service_key )
     
 
+def GetSnapshotHashes( hash: bytes ) -> list[ bytes ]:
+    
+    # the snapshots taken from this file that are still in the snapshots domain, in the order they come in the file
+    location_context = GetSnapshotsLocationContext()
+    
+    if location_context is None:
+        
+        return []
+        
+    
+    return CG.client_controller.Read( 'file_snapshots', hash, location_context )
+    
+
 def ImportSnapshot( path: str, hash: bytes, timestamp_ms: int | None ) -> bytes:
     
     # quietly, with no popups. this does db work, so it wants to be in a worker thread
