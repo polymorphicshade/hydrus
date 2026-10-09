@@ -681,6 +681,7 @@ class TestClientAPIFork( unittest.TestCase ):
         TG.test_controller.SetRead( 'file_viewer_zoom', ( 2.0, ( 0.25, 0.75 ) ) )
         TG.test_controller.SetRead( 'file_zoom_timestamps', [ ( 1000, 1.5, True, None, None, 90 ), ( 2000, 3.0, False, 0.5, 0.5, None ) ] )
         TG.test_controller.SetRead( 'file_playback_skips', [ ( 0, 500 ) ] )
+        TG.test_controller.SetRead( 'file_playback_freezes', [ ( 3000, 2000 ), ( 100, 500 ) ] )
         TG.test_controller.SetRead( 'file_segments', [ ( 9000, 'chorus' ), ( 100, 'intro' ) ] )
         TG.test_controller.SetRead( 'file_scripted_events', [ ( 50, 'echo hi' ) ] )
         TG.test_controller.SetRead( 'file_image_overlay', ( image_path, 0.5, ( 0.1, 0.2, 0.3, 0.4 ), True, False ) )
@@ -697,6 +698,7 @@ class TestClientAPIFork( unittest.TestCase ):
                 { 'timestamp_ms' : 2000, 'zoom' : 3.0, 'zoom_is_relative' : False, 'center' : [ 0.5, 0.5 ], 'rotation' : None }
             ],
             'playback_skips' : [ { 'start_ms' : 0, 'end_ms' : 500 } ],
+            'playback_freezes' : [ { 'timestamp_ms' : 100, 'duration_ms' : 500 }, { 'timestamp_ms' : 3000, 'duration_ms' : 2000 } ],
             'segments' : [ { 'timestamp_ms' : 100, 'name' : 'intro' }, { 'timestamp_ms' : 9000, 'name' : 'chorus' } ],
             'scripted_events' : [ { 'timestamp_ms' : 50, 'command' : 'echo hi' } ],
             'image_overlay' : { 'path' : image_path, 'opacity' : 0.5, 'x' : 0.1, 'y' : 0.2, 'width' : 0.3, 'height' : 0.4, 'locked' : True, 'stretch' : False }
@@ -764,6 +766,29 @@ class TestClientAPIFork( unittest.TestCase ):
             ( status, body ) = api_call( 'POST', '/manage_file_viewer_data/set_playback_skips', self.everything, { 'hash' : hash_1.hex(), 'playback_skips' : [ { 'start_ms' : 500, 'end_ms' : 500 } ] } )
             
             self.assertEqual( status, 400 )
+            
+            TG.test_controller.ClearWrites( 'file_playback_freezes' )
+            
+            # one per point, and the later one wins
+            ( status, body ) = api_call( 'POST', '/manage_file_viewer_data/set_playback_freezes', self.everything, { 'hash' : hash_1.hex(), 'playback_freezes' : [ { 'timestamp_ms' : 5000, 'duration_ms' : 1000 }, { 'timestamp_ms' : 0, 'duration_ms' : 2500 }, { 'timestamp_ms' : 5000, 'duration_ms' : 3000 } ] } )
+            
+            self.assertEqual( status, 200 )
+            self.assertEqual( body, { 'playback_freezes' : [ { 'timestamp_ms' : 0, 'duration_ms' : 2500 }, { 'timestamp_ms' : 5000, 'duration_ms' : 3000 } ] } )
+            self.assertEqual( TG.test_controller.GetWrite( 'file_playback_freezes' ), [ ( ( hash_1, [ ( 0, 2500 ), ( 5000, 3000 ) ] ), {} ) ] )
+            pub.assert_called_with( 'new_file_playback_freezes', hash_1, [ ( 0, 2500 ), ( 5000, 3000 ) ] )
+            
+            for bad_freeze in ( { 'timestamp_ms' : 0, 'duration_ms' : 50 }, { 'timestamp_ms' : 0, 'duration_ms' : 3600001 }, { 'timestamp_ms' : -1, 'duration_ms' : 1000 }, { 'timestamp_ms' : 0 } ):
+                
+                ( status, body ) = api_call( 'POST', '/manage_file_viewer_data/set_playback_freezes', self.everything, { 'hash' : hash_1.hex(), 'playback_freezes' : [ bad_freeze ] } )
+                
+                self.assertEqual( status, 400, bad_freeze )
+                
+            
+            # clearing them
+            ( status, body ) = api_call( 'POST', '/manage_file_viewer_data/set_playback_freezes', self.everything, { 'hash' : hash_1.hex(), 'playback_freezes' : [] } )
+            
+            self.assertEqual( body, { 'playback_freezes' : [] } )
+            pub.assert_called_with( 'new_file_playback_freezes', hash_1, [] )
             
             TG.test_controller.ClearWrites( 'file_image_overlay' )
             

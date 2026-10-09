@@ -6,10 +6,11 @@ from hydrus.core.networking import HydrusServerRequest
 
 from hydrus.client import ClientAPI
 from hydrus.client import ClientGlobals as CG
+from hydrus.client.media import ClientMediaPlaybackFreezes
 from hydrus.client.networking.api import ClientLocalServerCore
 from hydrus.client.networking.api import ClientLocalServerResources
 
-# what the media viewer remembers for each file: how it is turned, zoomed, and panned, its position timestamps, playback skips, segments, scripted events, and the image drawn over it
+# what the media viewer remembers for each file: how it is turned, zoomed, and panned, its position timestamps, playback skips, freezes, segments, scripted events, and the image drawn over it
 # times are ms into the file. a center is [ x, y ], the point of the file in the middle of the window as a fraction of its width and height, and null means centered
 
 def CheckCenter( name: str, center: typing.Any ) -> tuple[ float, float ] | None:
@@ -87,6 +88,8 @@ class HydrusResourceClientAPIRestrictedManageFileViewerDataGetData( HydrusResour
         
         playback_skips = CG.client_controller.Read( 'file_playback_skips', hash )
         
+        playback_freezes = CG.client_controller.Read( 'file_playback_freezes', hash )
+
         segments = CG.client_controller.Read( 'file_segments', hash )
         
         scripted_events = CG.client_controller.Read( 'file_scripted_events', hash )
@@ -114,6 +117,7 @@ class HydrusResourceClientAPIRestrictedManageFileViewerDataGetData( HydrusResour
             # an old one, from before they were relative to the zoom that fits the file in the window, has zoom_is_relative false
             'position_timestamps' : [ { 'timestamp_ms' : timestamp_ms, 'zoom' : zoom, 'zoom_is_relative' : zoom_is_relative, 'center' : ConvertCenterToJSON( center_x, center_y ), 'rotation' : rotation } for ( timestamp_ms, zoom, zoom_is_relative, center_x, center_y, rotation ) in zoom_timestamp_rows ],
             'playback_skips' : [ { 'start_ms' : start_ms, 'end_ms' : end_ms } for ( start_ms, end_ms ) in playback_skips ],
+            'playback_freezes' : [ { 'timestamp_ms' : timestamp_ms, 'duration_ms' : duration_ms } for ( timestamp_ms, duration_ms ) in sorted( playback_freezes ) ],
             'segments' : [ { 'timestamp_ms' : timestamp_ms, 'name' : name } for ( timestamp_ms, name ) in sorted( segments ) ],
             'scripted_events' : [ { 'timestamp_ms' : timestamp_ms, 'command' : command } for ( timestamp_ms, command ) in sorted( scripted_events ) ],
             'image_overlay' : image_overlay_dict
@@ -225,6 +229,40 @@ class HydrusResourceClientAPIRestrictedManageFileViewerDataSetImageOverlay( Hydr
         return ClientLocalServerCore.GenerateJSONResponse( request, {} )
         
     
+
+class HydrusResourceClientAPIRestrictedManageFileViewerDataSetPlaybackFreezes( HydrusResourceClientAPIRestrictedManageFileViewerData ):
+    
+    def _threadDoPOSTJob( self, request: HydrusServerRequest.HydrusRequest ):
+        
+        hash = ClientLocalServerCore.ParseSingleHash( request )
+        
+        freeze_dicts = CheckListOfObjects( 'playback_freezes', request.parsed_request_args.GetValue( 'playback_freezes', list ) )
+        
+        freezes = []
+        
+        for freeze_dict in freeze_dicts:
+            
+            timestamp_ms = ClientLocalServerCore.CheckNonNegativeInt( 'timestamp_ms', freeze_dict.get( 'timestamp_ms', None ) )
+            duration_ms = ClientLocalServerCore.CheckNonNegativeInt( 'duration_ms', freeze_dict.get( 'duration_ms', None ) )
+            
+            if not ClientMediaPlaybackFreezes.MIN_PLAYBACK_FREEZE_DURATION_MS <= duration_ms <= ClientMediaPlaybackFreezes.MAX_PLAYBACK_FREEZE_DURATION_MS:
+                
+                raise HydrusExceptions.BadRequestException( f'A freeze has to hold for {ClientMediaPlaybackFreezes.MIN_PLAYBACK_FREEZE_DURATION_MS}ms to {ClientMediaPlaybackFreezes.MAX_PLAYBACK_FREEZE_DURATION_MS}ms, not {duration_ms}ms!' )
+                
+            
+            freezes.append( ( timestamp_ms, duration_ms ) )
+            
+        
+        # one per point, and a later one for the same point wins, like the media viewer does it
+        freezes = ClientMediaPlaybackFreezes.NormalisePlaybackFreezes( freezes )
+        
+        CG.client_controller.WriteSynchronous( 'file_playback_freezes', hash, freezes )
+        
+        CG.client_controller.pub( 'new_file_playback_freezes', hash, freezes )
+        
+        return ClientLocalServerCore.GenerateJSONResponse( request, { 'playback_freezes' : [ { 'timestamp_ms' : timestamp_ms, 'duration_ms' : duration_ms } for ( timestamp_ms, duration_ms ) in freezes ] } )
+        
+
 
 class HydrusResourceClientAPIRestrictedManageFileViewerDataSetPlaybackSkips( HydrusResourceClientAPIRestrictedManageFileViewerData ):
     

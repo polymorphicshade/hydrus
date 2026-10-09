@@ -89,6 +89,7 @@ python hydrus_cli.py viewer get 1234
 python hydrus_cli.py viewer rotate 90 1234
 python hydrus_cli.py viewer segments 1234 "[ { \"timestamp_ms\" : 0, \"name\" : \"intro\" } ]"
 python hydrus_cli.py viewer skips 1234 @skips.json
+python hydrus_cli.py viewer freezes 1234 "[ { \"timestamp_ms\" : 3000, \"duration_ms\" : 2000 } ]"
 
 # exports, which the client makes in the background
 python hydrus_cli.py export video 1234 "C:\exports\clip" --start-ms 30000 --end-ms 45000 --resolution 1280 720

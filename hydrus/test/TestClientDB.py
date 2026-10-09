@@ -1315,6 +1315,30 @@ class TestClientDB( unittest.TestCase ):
         self.assertEqual( self._read( 'file_viewer_zoom', hash_a ), ( None, None ) )
         
     
+    def test_file_playback_freezes( self ):
+        
+        hash_a = os.urandom( 32 )
+        hash_b = os.urandom( 32 )
+        
+        self.assertEqual( self._read( 'file_playback_freezes', hash_a ), [] )
+        
+        self._write( 'file_playback_freezes', hash_a, [ ( 60000, 2000 ), ( 0, 500 ) ] )
+        self._write( 'file_playback_freezes', hash_b, [ ( 250, 1000 ) ] )
+        
+        self.assertEqual( self._read( 'file_playback_freezes', hash_a ), [ ( 0, 500 ), ( 60000, 2000 ) ] )
+        self.assertEqual( self._read( 'file_playback_freezes', hash_b ), [ ( 250, 1000 ) ] )
+        
+        # setting them replaces them
+        self._write( 'file_playback_freezes', hash_a, [ ( 5000, 3000 ) ] )
+        
+        self.assertEqual( self._read( 'file_playback_freezes', hash_a ), [ ( 5000, 3000 ) ] )
+        
+        self._write( 'file_playback_freezes', hash_a, [] )
+        
+        self.assertEqual( self._read( 'file_playback_freezes', hash_a ), [] )
+        self.assertEqual( self._read( 'file_playback_freezes', hash_b ), [ ( 250, 1000 ) ] )
+        
+    
     def test_file_scripted_events( self ):
         
         hash_a = os.urandom( 32 )

@@ -50,6 +50,7 @@ from hydrus.client.gui.media import ClientGUIMediaAudioEffects
 from hydrus.client.gui.media import ClientGUIMediaControls
 from hydrus.client.gui.media import ClientGUIMediaCounters
 from hydrus.client.gui.media import ClientGUIMediaMenus
+from hydrus.client.gui.media import ClientGUIMediaPlaybackFreezes
 from hydrus.client.gui.media import ClientGUIMediaScriptedEvents
 from hydrus.client.gui.media import ClientGUIMediaSegments
 from hydrus.client.gui.metadata import ClientGUIManageTags
@@ -58,6 +59,7 @@ from hydrus.client.gui.panels import ClientGUIScrolledPanelsEdit
 from hydrus.client.gui.widgets import ClientGUIPainterShapes
 from hydrus.client.media import ClientMedia
 from hydrus.client.media import ClientMediaList
+from hydrus.client.media import ClientMediaPlaybackFreezes
 from hydrus.client.media import ClientMediaPlaylists
 from hydrus.client.media import ClientMediaResult
 from hydrus.client.media import ClientMediaResultPrettyInfo
@@ -2511,6 +2513,42 @@ class CanvasWithHovers( Canvas ):
         self._media_container.AddPlaybackSkip( a_ms, b_ms )
         
     
+    def _AddPlaybackFreeze( self ):
+        
+        if self._current_media is None or not self._media_container.SupportsPlaybackFreezes():
+            
+            return
+            
+        
+        timestamp_ms = self._media_container.GetCurrentPlaybackPointMS()
+        
+        if timestamp_ms is None:
+            
+            ClientGUIDialogsMessage.ShowWarning( self, 'Sorry, could not work out where playback is right now! If the file is still loading, give it a moment and try again.' )
+            
+            return
+            
+        
+        # the dialog is modal, but a slideshow can move us on to another file while it is open
+        media = self._current_media
+        
+        try:
+            
+            freeze = ClientGUIMediaPlaybackFreezes.EditPlaybackFreeze( self, 'add freeze', ( timestamp_ms, ClientGUIMediaPlaybackFreezes.DEFAULT_PLAYBACK_FREEZE_DURATION_MS ), media.GetDurationMS() )
+            
+        except HydrusExceptions.CancelledException:
+            
+            return
+            
+        
+        hash = media.GetHash()
+        
+        freezes = CG.client_controller.Read( 'file_playback_freezes', hash )
+        
+        # a freeze at the same point is replaced
+        self._SavePlaybackFreezes( hash, ClientMediaPlaybackFreezes.NormalisePlaybackFreezes( freezes + [ freeze ] ) )
+        
+    
     def _AddScriptedEvent( self ):
         
         if self._current_media is None or not self._media_container.SupportsScriptedEvents():
@@ -3373,6 +3411,32 @@ class CanvasWithHovers( Canvas ):
         self._media_container.SeekTo( timestamp_ms )
         
     
+    def _ManagePlaybackFreezes( self ):
+        
+        if self._current_media is None or not self._media_container.SupportsPlaybackFreezes():
+            
+            return
+            
+        
+        # the dialog is modal, but a slideshow can move us on to another file while it is open
+        media = self._current_media
+        
+        hash = media.GetHash()
+        
+        freezes = CG.client_controller.Read( 'file_playback_freezes', hash )
+        
+        try:
+            
+            freezes = ClientGUIMediaPlaybackFreezes.ManagePlaybackFreezes( self, freezes, media.GetDurationMS() )
+            
+        except HydrusExceptions.CancelledException:
+            
+            return
+            
+        
+        self._SavePlaybackFreezes( hash, freezes )
+        
+    
     def _ManageScriptedEvents( self ):
         
         if self._current_media is None or not self._media_container.SupportsScriptedEvents():
@@ -3423,6 +3487,14 @@ class CanvasWithHovers( Canvas ):
             
         
         CG.client_controller.Write( 'file_segments', hash, segments )
+        
+    
+    def _SavePlaybackFreezes( self, hash: bytes, freezes: list[ tuple[ int, int ] ] ):
+        
+        CG.client_controller.Write( 'file_playback_freezes', hash, freezes )
+        
+        # this media viewer, and any others showing this file, pick them up
+        CG.client_controller.pub( 'new_file_playback_freezes', hash, freezes )
         
     
     def _SaveScriptedEvents( self, hash: bytes, scripted_events: list[ tuple[ int, str ] ] ):
@@ -5783,6 +5855,28 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
                     
                 
                 ClientGUIMenus.AppendMenu( menu, skips_menu, f'skips ({len( playback_skips )})' if len( playback_skips ) > 0 else 'skips' )
+                
+            
+            if self._media_container.SupportsPlaybackFreezes():
+                
+                freezes_menu = ClientGUIMenus.GenerateMenu( menu )
+                
+                ClientGUIMenus.AppendMenuItem( freezes_menu, 'add' + HC.UNICODE_ELLIPSIS, 'Hold the frame at this point in playback for a number of seconds, every time playback gets here, and then play on.', self._AddPlaybackFreeze )
+                ClientGUIMenus.AppendMenuItem( freezes_menu, 'manage' + HC.UNICODE_ELLIPSIS, 'See this file\'s freezes, and edit, remove, or clear them.', self._ManagePlaybackFreezes )
+                
+                playback_freezes = self._media_container.GetPlaybackFreezes()
+                
+                if len( playback_freezes ) > 0:
+                    
+                    ClientGUIMenus.AppendSeparator( freezes_menu )
+                    
+                    for freeze in playback_freezes:
+                        
+                        ClientGUIMenus.AppendMenuLabel( freezes_menu, ClientGUIMediaPlaybackFreezes.ConvertPlaybackFreezeToPretty( freeze ) )
+                        
+                
+                
+                ClientGUIMenus.AppendMenu( menu, freezes_menu, f'freezes ({len( playback_freezes )})' if len( playback_freezes ) > 0 else 'freezes' )
                 
             
             if self._media_container.SupportsScriptedEvents():

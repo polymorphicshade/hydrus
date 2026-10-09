@@ -182,7 +182,7 @@ Arguments: one file (the one it was taken from), `path` (the image, on the clien
 
 ## media viewer data
 
-What the media viewer remembers for each file. Rotation and saved zoom are picked up the next time a media viewer shows the file. Position timestamps, playback skips, scripted events, and the image overlay are picked up straight away by media viewers that are showing it.
+What the media viewer remembers for each file. Rotation and saved zoom are picked up the next time a media viewer shows the file. Position timestamps, playback skips, freezes, scripted events, and the image overlay are picked up straight away by media viewers that are showing it.
 
 ### **GET `/manage_file_viewer_data/get_data`**
 
@@ -195,6 +195,7 @@ Arguments: one file.
   "zoom" : { "zoom" : 2.0, "center" : [ 0.25, 0.75 ] },
   "position_timestamps" : [ { "timestamp_ms" : 1000, "zoom" : 1.5, "zoom_is_relative" : true, "center" : null, "rotation" : 90 } ],
   "playback_skips" : [ { "start_ms" : 0, "end_ms" : 500 } ],
+  "playback_freezes" : [ { "timestamp_ms" : 3000, "duration_ms" : 2000 } ],
   "segments" : [ { "timestamp_ms" : 100, "name" : "intro" } ],
   "scripted_events" : [ { "timestamp_ms" : 50, "command" : "echo hi" } ],
   "image_overlay" : { "path" : "C:\\overlays\\frame.png", "opacity" : 0.5, "x" : 0.1, "y" : 0.2, "width" : 0.3, "height" : 0.4, "locked" : true, "stretch" : false }
@@ -222,6 +223,10 @@ Arguments: one file, `position_timestamps`: a list of `{ "timestamp_ms", "zoom",
 ### **POST `/manage_file_viewer_data/set_playback_skips`**
 
 Arguments: one file, `playback_skips`: a list of `{ "start_ms", "end_ms" }`. They replace what the file had, and ones that overlap or touch become one. Returns the `playback_skips` as saved.
+
+### **POST `/manage_file_viewer_data/set_playback_freezes`**
+
+Arguments: one file, `playback_freezes`: a list of `{ "timestamp_ms", "duration_ms" }`. When normal playback gets to `timestamp_ms`, the media viewer holds that frame for `duration_ms`, which is 100 to 3,600,000 (an hour), and then plays on. They replace what the file had. A point has one freeze, and a later one for the same point wins. Returns the `playback_freezes` as saved.
 
 ### **POST `/manage_file_viewer_data/set_segments`**
 

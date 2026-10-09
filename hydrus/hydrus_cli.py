@@ -592,11 +592,12 @@ def BuildRequest( args ) -> APIRequest:
             
             return APIRequest( 'POST', '/manage_file_viewer_data/reset_all_zooms', { 'saved_zooms' : args.saved_zooms, 'position_timestamps' : args.position_timestamps } )
             
-        elif sub in ( 'position-timestamps', 'skips', 'segments', 'scripted-events' ):
+        elif sub in ( 'position-timestamps', 'skips', 'freezes', 'segments', 'scripted-events' ):
             
             ( path, key ) = {
                 'position-timestamps' : ( 'set_position_timestamps', 'position_timestamps' ),
                 'skips' : ( 'set_playback_skips', 'playback_skips' ),
+                'freezes' : ( 'set_playback_freezes', 'playback_freezes' ),
                 'segments' : ( 'set_segments', 'segments' ),
                 'scripted-events' : ( 'set_scripted_events', 'scripted_events' )
             }[ sub ]
@@ -882,7 +883,7 @@ def GetArgumentParser() -> argparse.ArgumentParser:
     p.add_argument( '--saved-zooms', action = 'store_true' )
     p.add_argument( '--position-timestamps', action = 'store_true' )
     
-    for ( sub, sub_help ) in ( ( 'position-timestamps', 'set a file\'s position timestamps' ), ( 'skips', 'set a file\'s playback skips' ), ( 'segments', 'set a file\'s segments' ), ( 'scripted-events', 'set a file\'s scripted events. needs the "edit_scripted_events" permission' ) ):
+    for ( sub, sub_help ) in ( ( 'position-timestamps', 'set a file\'s position timestamps' ), ( 'skips', 'set a file\'s playback skips' ), ( 'freezes', 'set a file\'s freezes, the points where playback holds a frame for a while' ), ( 'segments', 'set a file\'s segments' ), ( 'scripted-events', 'set a file\'s scripted events. needs the "edit_scripted_events" permission' ) ):
         
         p = viewer.add_parser( sub, help = sub_help )
         p.add_argument( 'file' )

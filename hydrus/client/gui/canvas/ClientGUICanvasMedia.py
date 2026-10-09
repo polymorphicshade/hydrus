@@ -37,6 +37,7 @@ from hydrus.client.gui.media import ClientGUIMediaAudioEffects
 from hydrus.client.gui.media import ClientGUIMediaControls
 from hydrus.client.gui.media import ClientGUIMediaVolume
 from hydrus.client.media import ClientMedia
+from hydrus.client.media import ClientMediaPlaybackFreezes
 from hydrus.client.media import ClientMediaResult
 from hydrus.client.media import ClientMediaScriptedEvents
 from hydrus.client.media import ClientMediaSingle
@@ -1939,6 +1940,16 @@ class MediaContainer( QW.QWidget ):
         # where playback was at the last check, so we can see what it went past. None means we have not seen it playing yet
         self._scripted_events_last_timestamp_ms: float | None = None
         
+        # points in playback that hold the frame for a while, as ( timestamp_ms, duration_ms ). each file has its own, saved in the db
+        # only the media viewer does them, like scripted events. the preview should not stall
+        self._does_playback_freezes = self._canvas_type in ( CC.CANVAS_MEDIA_VIEWER, CC.CANVAS_MEDIA_VIEWER_ARCHIVE_DELETE )
+        self._playback_freezes: list[ ClientMediaPlaybackFreezes.PlaybackFreeze ] = []
+        self._playback_freezes_load_id = 0
+        self._playback_freezes_last_timestamp_ms: float | None = None
+        
+        # the freeze we paused for, and when to play again. None when we are not holding one
+        self._playback_freeze_hold: tuple[ ClientMediaPlaybackFreezes.PlaybackFreeze, float ] | None = None
+        
         # the zoom the user last set on the current file, which the media viewer opens it at next time. each file has its own, saved in the db
         # the duplicate filter is left out, since it wants to keep the zoom the same between the files it compares
         self._remembers_file_zooms = self._canvas_type in ( CC.CANVAS_MEDIA_VIEWER, CC.CANVAS_MEDIA_VIEWER_ARCHIVE_DELETE )
@@ -2085,9 +2096,80 @@ class MediaContainer( QW.QWidget ):
         CG.client_controller.sub( self, 'NotifyAudioVolumeOptionsChanged', 'new_audio_volume' )
         CG.client_controller.sub( self, 'Pause', 'pause_all_media' )
         CG.client_controller.sub( self, 'NotifyNewPlaybackSkips', 'new_file_playback_skips' )
+        CG.client_controller.sub( self, 'NotifyNewPlaybackFreezes', 'new_file_playback_freezes' )
         CG.client_controller.sub( self, 'NotifyNewZoomTimestamps', 'new_file_zoom_timestamps' )
         CG.client_controller.sub( self, 'NotifyNewScriptedEvents', 'new_file_scripted_events' )
         CG.client_controller.sub( self, 'NotifyAllSavedZoomsReset', 'reset_all_file_zooms' )
+        
+    
+    def _CheckPlaybackFreezes( self ):
+        
+        if len( self._playback_freezes ) == 0 or self._media is None or not self.CurrentlyPresentingMediaWithDuration():
+            
+            return
+            
+        
+        if self._playback_freeze_hold is not None:
+            
+            ( freeze, play_again_time ) = self._playback_freeze_hold
+            
+            if not self._media_window.IsPaused():
+                
+                # the user hit play themselves, so the hold is over early
+                self._playback_freeze_hold = None
+                
+            elif HydrusTime.TimeHasPassedFloat( play_again_time ):
+                
+                self._playback_freeze_hold = None
+                
+                self._media_window.Play()
+                
+            
+            return
+            
+        
+        animation_bar_status = self._media_window.GetAnimationBarStatus()
+        
+        if animation_bar_status is None:
+            
+            return
+            
+        
+        ( current_frame_index, current_timestamp_ms, paused, buffer_indices ) = animation_bar_status
+        
+        if current_timestamp_ms is None:
+            
+            return
+            
+        
+        if paused:
+            
+            # scanning around while paused does not hold anything. playback carries on from wherever it is when it unpauses
+            if self._playback_freezes_last_timestamp_ms is not None:
+                
+                self._playback_freezes_last_timestamp_ms = current_timestamp_ms
+                
+            
+            return
+            
+        
+        freeze = ClientMediaPlaybackFreezes.GetPlaybackFreezeToHold( self._playback_freezes, self._playback_freezes_last_timestamp_ms, current_timestamp_ms, self._media.GetDurationMS() )
+        
+        if freeze is None:
+            
+            self._playback_freezes_last_timestamp_ms = current_timestamp_ms
+            
+            return
+            
+        
+        ( timestamp_ms, duration_ms ) = freeze
+        
+        # we carry on from the freeze's point, not where playback is, so another freeze that playback went past in the same moment holds once this one is done
+        self._playback_freezes_last_timestamp_ms = timestamp_ms
+        
+        self._media_window.Pause()
+        
+        self._playback_freeze_hold = ( freeze, HydrusTime.GetNowFloat() + duration_ms / 1000 )
         
     
     def _CheckPlaybackSkips( self ):
@@ -2934,6 +3016,45 @@ class MediaContainer( QW.QWidget ):
         job.start()
         
     
+    def _LoadPlaybackFreezes( self ):
+        
+        self._playback_freezes_load_id += 1
+        
+        load_id = self._playback_freezes_load_id
+        
+        self._SetPlaybackFreezes( [] )
+        
+        self._playback_freezes_last_timestamp_ms = None
+        self._playback_freeze_hold = None
+        
+        if self._media is None or not self._does_playback_freezes or not MediaHasPlayback( self._media ):
+            
+            return
+            
+        
+        hash = self._media.GetHash()
+        
+        def work_callable():
+            
+            return CG.client_controller.Read( 'file_playback_freezes', hash )
+            
+        
+        def publish_callable( freezes ):
+            
+            # the media changed, or the freezes were edited, while we were waiting
+            if load_id != self._playback_freezes_load_id:
+                
+                return
+                
+            
+            self._SetPlaybackFreezes( freezes )
+            
+        
+        job = ClientGUIAsync.AsyncQtJob( self, work_callable, publish_callable )
+        
+        job.start()
+        
+    
     def _LoadScriptedEvents( self ):
         
         self._scripted_events_load_id += 1
@@ -3392,6 +3513,19 @@ class MediaContainer( QW.QWidget ):
             
         
     
+    def _SetPlaybackFreezes( self, freezes: list[ ClientMediaPlaybackFreezes.PlaybackFreeze ] ):
+        
+        self._playback_freezes = ClientMediaPlaybackFreezes.NormalisePlaybackFreezes( freezes )
+        
+        if len( self._playback_freezes ) == 0:
+            
+            # a hold that is going stays paused, like the user paused it. it just does not play again by itself
+            self._playback_freeze_hold = None
+            
+        
+        self._UpdateAnimationUpdateRegistration()
+        
+    
     def _SetPlaybackSkips( self, skips: list[ tuple[ int, int ] ] ):
         
         self._playback_skips = [ tuple( skip ) for skip in skips ]
@@ -3747,8 +3881,8 @@ class MediaContainer( QW.QWidget ):
     
     def _UpdateAnimationUpdateRegistration( self ):
         
-        # we only need to watch playback when there is something to skip, zoom, or run
-        if len( self._playback_skips ) > 0 or len( self._zoom_timestamps ) > 0 or len( self._scripted_events ) > 0:
+        # we only need to watch playback when there is something to skip, zoom, run, or hold
+        if len( self._playback_skips ) > 0 or len( self._zoom_timestamps ) > 0 or len( self._scripted_events ) > 0 or len( self._playback_freezes ) > 0:
             
             CG.client_controller.gui.RegisterAnimationUpdateWindow( self )
             
@@ -3873,6 +4007,8 @@ class MediaContainer( QW.QWidget ):
         self._SetABLoop( None, None )
         
         self._LoadPlaybackSkips()
+        
+        self._LoadPlaybackFreezes()
         
         self._LoadScriptedEvents()
         
@@ -4199,6 +4335,11 @@ class MediaContainer( QW.QWidget ):
         return self._media
         
     
+    def GetPlaybackFreezes( self ) -> list[ ClientMediaPlaybackFreezes.PlaybackFreeze ]:
+        
+        return list( self._playback_freezes )
+        
+    
     def GetPlaybackSkips( self ) -> list[ tuple[ int, int ] ]:
         
         return list( self._playback_skips )
@@ -4436,6 +4577,22 @@ class MediaContainer( QW.QWidget ):
             
         
     
+    def IsHoldingPlaybackFreeze( self ) -> bool:
+        
+        return self._playback_freeze_hold is not None
+        
+    
+    def NotifyNewPlaybackFreezes( self, hash: bytes, freezes: list[ ClientMediaPlaybackFreezes.PlaybackFreeze ] ):
+        
+        if self._media is not None and self._media.GetHash() == hash and self._does_playback_freezes:
+            
+            self._playback_freezes_load_id += 1
+            
+            # we carry on from where playback is, so a new one just behind us does not hold until next time round. a hold that is going finishes as it was
+            self._SetPlaybackFreezes( freezes )
+            
+    
+    
     def NotifyNewPlaybackSkips( self, hash: bytes, skips: list[ tuple[ int, int ] ] ):
         
         if self._media is not None and self._media.GetHash() == hash:
@@ -4475,16 +4632,22 @@ class MediaContainer( QW.QWidget ):
     
     def Pause( self ):
         
+        # something else wants it paused, so a freeze we are holding does not play it again
+        self._playback_freeze_hold = None
+        
         if self._media is not None:
             
             if self.CurrentlyPresentingMediaWithDuration():
                 
                 self._media_window.Pause()
                 
-            
-        
+    
+    
     
     def PausePlay( self ):
+        
+        # the user taking over. if this plays, the hold is over. if it pauses, it stays paused
+        self._playback_freeze_hold = None
         
         if self._media is not None:
             
@@ -4827,6 +4990,8 @@ class MediaContainer( QW.QWidget ):
         self._SetABLoop( None, None )
         
         self._LoadPlaybackSkips()
+        
+        self._LoadPlaybackFreezes()
         
         self._LoadScriptedEvents()
         
@@ -5672,6 +5837,11 @@ class MediaContainer( QW.QWidget ):
         return True
         
     
+    def SupportsPlaybackFreezes( self ) -> bool:
+        
+        return self._media is not None and self._does_playback_freezes and MediaHasPlayback( self._media )
+        
+    
     def SupportsScriptedEvents( self ) -> bool:
         
         return self._media is not None and self._does_scripted_events and MediaHasPlayback( self._media )
@@ -5728,6 +5898,8 @@ class MediaContainer( QW.QWidget ):
         self._CheckZoomTimestamps()
         
         self._CheckScriptedEvents()
+        
+        self._CheckPlaybackFreezes()
         
     
     def TIMERUIUpdate( self ):

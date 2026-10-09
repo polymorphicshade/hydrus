@@ -83,6 +83,7 @@ from hydrus.test import TestClientMigration
 from hydrus.test import TestClientNetworking
 from hydrus.test import TestClientNetworkingSettings
 from hydrus.test import TestClientParsing
+from hydrus.test import TestClientPlaybackFreezes
 from hydrus.test import TestClientPlaybackGaps
 from hydrus.test import TestClientPlaybackPoints
 from hydrus.test import TestClientPlaylistBlanks
@@ -964,6 +965,7 @@ class Controller( object ):
             TestClientImageOverlays,
             TestClientMediaViewerLayouts,
             TestClientMediaViewerLayoutFiles,
+            TestClientPlaybackFreezes,
             TestClientPlaybackGaps,
             TestClientPlaybackPoints,
             TestClientPlaylistBlanks,
