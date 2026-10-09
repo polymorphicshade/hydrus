@@ -38,7 +38,7 @@ def EditPlaybackFreeze( win: QW.QWidget, title: str, freeze: ClientMediaPlayback
         
         raise HydrusExceptions.CancelledException( 'Dialog cancelled.' )
         
-
+    
 
 def ManagePlaybackFreezes( win: QW.QWidget, freezes: list[ ClientMediaPlaybackFreezes.PlaybackFreeze ], duration_ms: int | None ) -> list[ ClientMediaPlaybackFreezes.PlaybackFreeze ]:
     
@@ -56,7 +56,7 @@ def ManagePlaybackFreezes( win: QW.QWidget, freezes: list[ ClientMediaPlaybackFr
         
         raise HydrusExceptions.CancelledException( 'Dialog cancelled.' )
         
-
+    
 
 class EditPlaybackFreezePanel( ClientGUIScrolledPanels.EditPanel ):
     
@@ -130,7 +130,7 @@ class EditPlaybackFreezePanel( ClientGUIScrolledPanels.EditPanel ):
         
         return ( timestamp_ms, freeze_duration_ms )
         
-
+    
 
 class ManagePlaybackFreezesPanel( ClientGUIScrolledPanels.EditPanel ):
     

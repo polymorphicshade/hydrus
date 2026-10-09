@@ -49,7 +49,7 @@ class FakeMediaWindow( object ):
         
         self.calls.append( 'pauseplay' )
         
-
+    
 
 class TestPlaybackFreezes( unittest.TestCase ):
     
@@ -169,7 +169,7 @@ class TestPlaybackFreezes( unittest.TestCase ):
             self.assertEqual( window.calls, [ 'pause', 'play', 'pause', 'pauseplay' ] )
             self.assertFalse( window.paused )
             
-    
+        
     
     def test_paused_and_other_pauses( self ):
         
@@ -216,7 +216,7 @@ class TestPlaybackFreezes( unittest.TestCase ):
             
             # something else pausing it while it holds means it stays paused
             container.Pause()
-
+            
             now[0] += 10
             
             container._CheckPlaybackFreezes()
@@ -224,7 +224,7 @@ class TestPlaybackFreezes( unittest.TestCase ):
             self.assertTrue( window.paused )
             self.assertNotIn( 'play', window.calls )
             
-    
+        
     
     def test_freeze_panels( self ):
         
@@ -257,7 +257,7 @@ class TestPlaybackFreezes( unittest.TestCase ):
                 
                 panel.GetValue()
                 
-        
+            
         
         # managing
         

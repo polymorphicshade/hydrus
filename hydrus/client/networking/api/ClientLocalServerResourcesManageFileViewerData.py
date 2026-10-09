@@ -89,7 +89,7 @@ class HydrusResourceClientAPIRestrictedManageFileViewerDataGetData( HydrusResour
         playback_skips = CG.client_controller.Read( 'file_playback_skips', hash )
         
         playback_freezes = CG.client_controller.Read( 'file_playback_freezes', hash )
-
+        
         segments = CG.client_controller.Read( 'file_segments', hash )
         
         scripted_events = CG.client_controller.Read( 'file_scripted_events', hash )
@@ -262,7 +262,7 @@ class HydrusResourceClientAPIRestrictedManageFileViewerDataSetPlaybackFreezes( H
         
         return ClientLocalServerCore.GenerateJSONResponse( request, { 'playback_freezes' : [ { 'timestamp_ms' : timestamp_ms, 'duration_ms' : duration_ms } for ( timestamp_ms, duration_ms ) in freezes ] } )
         
-
+    
 
 class HydrusResourceClientAPIRestrictedManageFileViewerDataSetPlaybackSkips( HydrusResourceClientAPIRestrictedManageFileViewerData ):
     

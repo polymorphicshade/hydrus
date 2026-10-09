@@ -5874,7 +5874,7 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
                         
                         ClientGUIMenus.AppendMenuLabel( freezes_menu, ClientGUIMediaPlaybackFreezes.ConvertPlaybackFreezeToPretty( freeze ) )
                         
-                
+                    
                 
                 ClientGUIMenus.AppendMenu( menu, freezes_menu, f'freezes ({len( playback_freezes )})' if len( playback_freezes ) > 0 else 'freezes' )
                 

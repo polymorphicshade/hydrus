@@ -4591,7 +4591,7 @@ class MediaContainer( QW.QWidget ):
             # we carry on from where playback is, so a new one just behind us does not hold until next time round. a hold that is going finishes as it was
             self._SetPlaybackFreezes( freezes )
             
-    
+        
     
     def NotifyNewPlaybackSkips( self, hash: bytes, skips: list[ tuple[ int, int ] ] ):
         
@@ -4641,8 +4641,8 @@ class MediaContainer( QW.QWidget ):
                 
                 self._media_window.Pause()
                 
-    
-    
+            
+        
     
     def PausePlay( self ):
         
