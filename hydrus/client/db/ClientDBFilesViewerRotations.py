@@ -27,6 +27,34 @@ class ClientDBFilesViewerRotations( ClientDBModule.ClientDBModule ):
         }
         
     
+    def ClearViewerRotations( self, hashes ):
+        
+        # just these files go back to how they are, not turned
+        hash_ids = self.modules_hashes_local_cache.GetHashIds( hashes )
+        
+        self._ExecuteMany( 'DELETE FROM file_viewer_rotations WHERE hash_id = ?;', ( ( hash_id, ) for hash_id in hash_ids ) )
+        
+    
+    def GetNumViewerRotations( self, hashes = None ) -> int:
+        
+        # every file's, or just these files'
+        if hashes is None:
+            
+            ( num_rotations, ) = self._Execute( 'SELECT COUNT( * ) FROM file_viewer_rotations;' ).fetchone()
+            
+            return num_rotations
+            
+        
+        hash_ids = self.modules_hashes_local_cache.GetHashIds( hashes )
+        
+        with self._MakeTemporaryIntegerTable( hash_ids, 'hash_id' ) as temp_hash_ids_table_name:
+            
+            ( num_rotations, ) = self._Execute( f'SELECT COUNT( * ) FROM {temp_hash_ids_table_name} CROSS JOIN file_viewer_rotations USING ( hash_id );' ).fetchone()
+            
+        
+        return num_rotations
+        
+    
     def GetTablesAndColumnsThatUseDefinitions( self, content_type: int ) -> list[ tuple[ str, str ] ]:
         
         tables_and_columns = []

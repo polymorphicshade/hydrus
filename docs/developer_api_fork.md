@@ -244,6 +244,10 @@ Arguments: one file, `image_overlay`: `{ "path", "opacity", "x", "y", "width", "
 
 For every file at once, like _reset all saved zooms_. Arguments: `saved_zooms` and/or `position_timestamps`, set to true for what to clear.
 
+### **POST `/manage_file_viewer_data/reset_positions`**
+
+For some files, or every file in a page, like a page tab's _reset all positions_. Arguments: files, or a `page_key` (which needs 'manage pages' too), and what to reset: `saved_zooms` (the zoom and pan, default true), `rotations` (how it is turned, default true), and `position_timestamps` (default false). Media viewers showing one of the files go back to normal straight away. Returns `num_files`, how many files there were. A page_key for a page that does not exist gives a 404.
+
 ## tag presets
 
 A tag preset is a named list of search entries that `system:presets name` expands to. Preset names are not case-sensitive, and an underscore counts as a space. Entries are lowercased, with extra spaces taken out. These all return every `tag_presets` afterwards.

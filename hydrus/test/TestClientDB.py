@@ -1394,6 +1394,62 @@ class TestClientDB( unittest.TestCase ):
         self.assertEqual( self._read( 'file_image_overlay', hash_b ), image_overlay_b )
         
     
+    def test_reset_file_viewer_positions( self ):
+        
+        hash_a = os.urandom( 32 )
+        hash_b = os.urandom( 32 )
+        hash_c = os.urandom( 32 )
+        hash_d = os.urandom( 32 )
+        
+        for hash in ( hash_a, hash_b, hash_c ):
+            
+            self._write( 'file_viewer_zoom', hash, 2.0, ( 0.25, 0.75 ) )
+            self._write( 'file_viewer_rotation', hash, 90 )
+            self._write( 'file_zoom_timestamps', hash, [ ( 0, 1.5, None, None, None ), ( 5000, 2.0, 0.5, 0.5, 90 ) ] )
+            
+        
+        num_zooms = self._read( 'num_file_viewer_zooms' )
+        num_rotations = self._read( 'num_file_viewer_rotations' )
+        num_zoom_timestamps = self._read( 'num_files_with_zoom_timestamps' )
+        
+        # counts for just some files. a file the db has never seen counts for nothing
+        self.assertEqual( self._read( 'num_file_viewer_zooms', [ hash_a, hash_b, hash_d ] ), 2 )
+        self.assertEqual( self._read( 'num_file_viewer_rotations', [ hash_a, hash_b, hash_d ] ), 2 )
+        self.assertEqual( self._read( 'num_files_with_zoom_timestamps', [ hash_a, hash_b, hash_d ] ), 2 )
+        self.assertEqual( self._read( 'num_file_viewer_zooms', [] ), 0 )
+        
+        # a and b go back to normal, but keep their position timestamps
+        self._write( 'reset_file_viewer_positions', { hash_a, hash_b, hash_d }, True, True, False )
+        
+        for hash in ( hash_a, hash_b ):
+            
+            self.assertEqual( self._read( 'file_viewer_zoom', hash ), ( None, None ) )
+            self.assertEqual( self._read( 'file_viewer_rotation', hash ), 0 )
+            self.assertEqual( len( self._read( 'file_zoom_timestamps', hash ) ), 2 )
+            
+        
+        # c is not touched
+        self.assertEqual( self._read( 'file_viewer_zoom', hash_c ), ( 2.0, ( 0.25, 0.75 ) ) )
+        self.assertEqual( self._read( 'file_viewer_rotation', hash_c ), 90 )
+        
+        self.assertEqual( self._read( 'num_file_viewer_zooms' ), num_zooms - 2 )
+        self.assertEqual( self._read( 'num_file_viewer_rotations' ), num_rotations - 2 )
+        self.assertEqual( self._read( 'num_files_with_zoom_timestamps' ), num_zoom_timestamps )
+        
+        # then just a's position timestamps
+        self._write( 'reset_file_viewer_positions', [ hash_a ], False, False, True )
+        
+        self.assertEqual( self._read( 'file_zoom_timestamps', hash_a ), [] )
+        self.assertEqual( len( self._read( 'file_zoom_timestamps', hash_b ) ), 2 )
+        self.assertEqual( self._read( 'num_files_with_zoom_timestamps', [ hash_a, hash_b, hash_c ] ), 2 )
+        
+        # and just c's rotation
+        self._write( 'reset_file_viewer_positions', [ hash_c ], False, True, False )
+        
+        self.assertEqual( self._read( 'file_viewer_zoom', hash_c ), ( 2.0, ( 0.25, 0.75 ) ) )
+        self.assertEqual( self._read( 'file_viewer_rotation', hash_c ), 0 )
+        
+    
     def test_file_viewer_rotation( self ):
         
         hash_a = os.urandom( 32 )

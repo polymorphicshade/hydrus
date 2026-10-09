@@ -592,6 +592,26 @@ def BuildRequest( args ) -> APIRequest:
             
             return APIRequest( 'POST', '/manage_file_viewer_data/reset_all_zooms', { 'saved_zooms' : args.saved_zooms, 'position_timestamps' : args.position_timestamps } )
             
+        elif sub == 'reset-positions':
+            
+            if ( args.page is None ) == ( len( args.files ) == 0 ):
+                
+                raise CLIError( 'Give some files, or a page with --page, but not both!' )
+                
+            
+            params = { 'saved_zooms' : not args.keep_saved_zooms, 'rotations' : not args.keep_rotations, 'position_timestamps' : args.position_timestamps }
+            
+            if args.page is None:
+                
+                params.update( ParseFiles( args.files ) )
+                
+            else:
+                
+                params[ 'page_key' ] = args.page.lower()
+                
+            
+            return APIRequest( 'POST', '/manage_file_viewer_data/reset_positions', params )
+            
         elif sub in ( 'position-timestamps', 'skips', 'freezes', 'segments', 'scripted-events' ):
             
             ( path, key ) = {
@@ -882,6 +902,12 @@ def GetArgumentParser() -> argparse.ArgumentParser:
     p = viewer.add_parser( 'reset-zooms', help = 'clear saved zooms and/or position timestamps for every file' )
     p.add_argument( '--saved-zooms', action = 'store_true' )
     p.add_argument( '--position-timestamps', action = 'store_true' )
+    p = viewer.add_parser( 'reset-positions', help = 'reset the saved zoom, pan, and turn of some files, or every file in a page' )
+    p.add_argument( 'files', nargs = '*', help = files_help )
+    p.add_argument( '--page', help = 'a page_key, from "call get manage_pages/get_pages", to reset every file in that page. needs the "manage_pages" permission' )
+    p.add_argument( '--keep-saved-zooms', action = 'store_true', help = 'leave the zoom and pan as they are' )
+    p.add_argument( '--keep-rotations', action = 'store_true', help = 'leave how they are turned as it is' )
+    p.add_argument( '--position-timestamps', action = 'store_true', help = 'reset their position timestamps too' )
     
     for ( sub, sub_help ) in ( ( 'position-timestamps', 'set a file\'s position timestamps' ), ( 'skips', 'set a file\'s playback skips' ), ( 'freezes', 'set a file\'s freezes, the points where playback holds a frame for a while' ), ( 'segments', 'set a file\'s segments' ), ( 'scripted-events', 'set a file\'s scripted events. needs the "edit_scripted_events" permission' ) ):
         

@@ -4122,6 +4122,7 @@ class DB( HydrusDB.HydrusDB ):
                 'missing_archive_timestamps_legacy_test' : self.modules_files_inbox.WeHaveMissingLegacyArchiveTimestamps,
                 'missing_repository_update_hashes' : self.modules_repositories.GetRepositoryUpdateHashesIDoNotHave,
                 'num_deferred_file_deletes' : self.modules_files_storage.GetDeferredPhysicalDeleteCounts,
+                'num_file_viewer_rotations' : self.modules_files_viewer_rotations.GetNumViewerRotations,
                 'num_file_viewer_zooms' : self.modules_files_viewer_zooms.GetNumViewerZooms,
                 'num_files_with_zoom_timestamps' : self.modules_files_zoom_timestamps.GetNumFilesWithZoomTimestamps,
                 'potential_duplicates_count' : self.modules_files_duplicates_file_query.GetPotentialDuplicatesCount,
@@ -4189,6 +4190,7 @@ class DB( HydrusDB.HydrusDB ):
                 'repopulate_tag_cache_missing_subtags' : self._RepopulateTagCacheMissingSubtags,
                 'repopulate_tag_display_mappings_cache' : self._RepopulateTagDisplayMappingsCache,
                 'repair_invalid_tags' : self._RepairInvalidTags,
+                'reset_file_viewer_positions' : self._ResetFileViewerPositions,
                 'reset_repository' : self._ResetRepository,
                 'reset_repository_processing' : self._ResetRepositoryProcessing,
                 'reset_potential_search_status' : self._PerceptualHashesResetSearchFromHashes,
@@ -5587,6 +5589,25 @@ class DB( HydrusDB.HydrusDB ):
         self.modules_repositories.SetUpdateProcessed( service_id, content_hash, content_types_to_process )
         
         return num_rows_processed
+        
+    
+    def _ResetFileViewerPositions( self, hashes, clear_zooms: bool, clear_rotations: bool, clear_zoom_timestamps: bool ):
+        
+        # just these files go back to how the media viewer shows a file it knows nothing about. one job, so it all happens or none of it does
+        if clear_zooms:
+            
+            self.modules_files_viewer_zooms.ClearViewerZooms( hashes )
+            
+        
+        if clear_rotations:
+            
+            self.modules_files_viewer_rotations.ClearViewerRotations( hashes )
+            
+        
+        if clear_zoom_timestamps:
+            
+            self.modules_files_zoom_timestamps.ClearZoomTimestamps( hashes )
+            
         
     
     def _RecoverFromMissingDefinitions( self, content_type ):

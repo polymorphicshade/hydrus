@@ -845,6 +845,50 @@ class TestClientAPIFork( unittest.TestCase ):
             self.assertNotIn( 'clear_all_file_viewer_zooms', TG.test_controller._write_call_args )
             pub.assert_called_with( 'reset_all_file_zooms', False, True )
             
+            # reset some files' positions
+            TG.test_controller.ClearWrites( 'reset_file_viewer_positions' )
+            
+            ( status, body ) = api_call( 'POST', '/manage_file_viewer_data/reset_positions', self.everything, { 'hashes' : [ hash_1.hex(), hash_2.hex() ] } )
+            
+            self.assertEqual( status, 200 )
+            self.assertEqual( body, { 'num_files' : 2 } )
+            self.assertEqual( TG.test_controller.GetWrite( 'reset_file_viewer_positions' ), [ ( ( { hash_1, hash_2 }, True, True, False ), {} ) ] )
+            pub.assert_called_with( 'reset_file_viewer_positions', { hash_1, hash_2 }, True, True, False )
+            
+            ( status, body ) = api_call( 'POST', '/manage_file_viewer_data/reset_positions', self.everything, { 'hash' : hash_1.hex(), 'saved_zooms' : False, 'rotations' : False, 'position_timestamps' : True } )
+            
+            self.assertEqual( TG.test_controller.GetWrite( 'reset_file_viewer_positions' ), [ ( ( { hash_1 }, False, False, True ), {} ) ] )
+            
+            # it has to reset something
+            ( status, body ) = api_call( 'POST', '/manage_file_viewer_data/reset_positions', self.everything, { 'hash' : hash_1.hex(), 'saved_zooms' : False, 'rotations' : False } )
+            
+            self.assertEqual( status, 400 )
+            
+            # or every file in a page, which needs the pages permission too
+            page = mock.Mock()
+            page.GetHashes.return_value = [ hash_2, hash_1 ]
+            
+            page_key = os.urandom( 32 )
+            
+            with mock.patch.object( TG.test_controller.gui, 'GetPageFromPageKey', create = True, side_effect = lambda key: page if key == page_key else None ):
+                
+                files_only = make_access( 'files only', False, [ ClientAPI.CLIENT_API_PERMISSION_EDIT_MEDIA_VIEWER_DATA ] )
+                
+                ( status, body ) = api_call( 'POST', '/manage_file_viewer_data/reset_positions', files_only, { 'page_key' : page_key.hex() } )
+                
+                self.assertEqual( status, 403 )
+                
+                ( status, body ) = api_call( 'POST', '/manage_file_viewer_data/reset_positions', self.everything, { 'page_key' : page_key.hex(), 'position_timestamps' : True } )
+                
+                self.assertEqual( status, 200 )
+                self.assertEqual( body, { 'num_files' : 2 } )
+                self.assertEqual( TG.test_controller.GetWrite( 'reset_file_viewer_positions' ), [ ( ( { hash_1, hash_2 }, True, True, True ), {} ) ] )
+                
+                ( status, body ) = api_call( 'POST', '/manage_file_viewer_data/reset_positions', self.everything, { 'page_key' : os.urandom( 32 ).hex() } )
+                
+                self.assertEqual( status, 404 )
+                
+            
         
         # segments, which the media viewer loads each time, so there is no pub
         TG.test_controller.ClearWrites( 'file_segments' )
@@ -1029,6 +1073,18 @@ class TestClientAPIForkCommandLine( unittest.TestCase ):
         self.assertEqual( self._GetRequest( [ 'viewer', 'zoom', '12', '--zoom', '2', '--center', '0.5', '0.25' ] ), hydrus_cli.APIRequest( 'POST', '/manage_file_viewer_data/set_zoom', { 'zoom' : 2.0, 'center' : [ 0.5, 0.25 ], 'file_ids' : [ 12 ] } ) )
         self.assertEqual( self._GetRequest( [ 'viewer', 'overlay', '12', 'none' ] ), hydrus_cli.APIRequest( 'POST', '/manage_file_viewer_data/set_image_overlay', { 'file_ids' : [ 12 ], 'image_overlay' : None } ) )
         self.assertEqual( self._GetRequest( [ 'viewer', 'freezes', '12', '[ { "timestamp_ms" : 3000, "duration_ms" : 2000 } ]' ] ), hydrus_cli.APIRequest( 'POST', '/manage_file_viewer_data/set_playback_freezes', { 'file_ids' : [ 12 ], 'playback_freezes' : [ { 'timestamp_ms' : 3000, 'duration_ms' : 2000 } ] } ) )
+        self.assertEqual( self._GetRequest( [ 'viewer', 'reset-positions', '12', hash_hex, '--keep-rotations' ] ), hydrus_cli.APIRequest( 'POST', '/manage_file_viewer_data/reset_positions', { 'saved_zooms' : True, 'rotations' : False, 'position_timestamps' : False, 'hashes' : [ hash_hex ], 'file_ids' : [ 12 ] } ) )
+        self.assertEqual( self._GetRequest( [ 'viewer', 'reset-positions', '--page', hash_hex.upper(), '--position-timestamps' ] ), hydrus_cli.APIRequest( 'POST', '/manage_file_viewer_data/reset_positions', { 'saved_zooms' : True, 'rotations' : True, 'position_timestamps' : True, 'page_key' : hash_hex } ) )
+        
+        # files or a page, not both or neither
+        for argv in ( [ 'viewer', 'reset-positions' ], [ 'viewer', 'reset-positions', '12', '--page', hash_hex ] ):
+            
+            with self.assertRaises( hydrus_cli.CLIError ):
+                
+                self._GetRequest( argv )
+                
+            
+        
         self.assertEqual( self._GetRequest( [ 'request-key', 'cli', '--permission', 'manage_playlists', '--permission', '107' ] ), hydrus_cli.APIRequest( 'GET', '/request_new_permissions', { 'name' : 'cli', 'permits_everything' : False, 'basic_permissions' : [ 101, 107 ] }, needs_key = False ) )
         
         self.assertEqual( self._GetRequest( [ 'export', 'video', '12', os.path.abspath( 'x' ), '--start-ms', '0', '--end-ms', '10', '--no-audio', '--quality', 'low' ] ), hydrus_cli.APIRequest( 'POST', '/manage_exports/export_video', { 'file_ids' : [ 12 ], 'path' : os.path.abspath( 'x' ), 'format' : 'mp4', 'start_ms' : 0, 'end_ms' : 10, 'quality' : 'low', 'audio_kbps' : None } ) )

@@ -170,6 +170,65 @@ class HydrusResourceClientAPIRestrictedManageFileViewerDataResetAllZooms( Hydrus
         
     
 
+class HydrusResourceClientAPIRestrictedManageFileViewerDataResetPositions( HydrusResourceClientAPIRestrictedManageFileViewerData ):
+    
+    def _threadDoPOSTJob( self, request: HydrusServerRequest.HydrusRequest ):
+        
+        # some files, or every file in a page, like a page tab's 'reset all positions'
+        if 'page_key' in request.parsed_request_args:
+            
+            # we are looking in the user's pages
+            request.client_api_permissions.CheckPermission( ClientAPI.CLIENT_API_PERMISSION_MANAGE_PAGES )
+            
+            page_key = request.parsed_request_args.GetValue( 'page_key', bytes )
+            
+            def do_it( page_key ):
+                
+                page = CG.client_controller.gui.GetPageFromPageKey( page_key )
+                
+                if page is None:
+                    
+                    return None
+                    
+                
+                return page.GetHashes()
+                
+            
+            hashes = CG.client_controller.CallBlockingToQtTLW( do_it, page_key )
+            
+            if hashes is None:
+                
+                raise HydrusExceptions.NotFoundException( f'Did not find a page for "{page_key.hex()}"!' )
+                
+            
+        else:
+            
+            hashes = ClientLocalServerCore.ParseHashes( request )
+            
+        
+        clear_file_viewer_zooms = request.parsed_request_args.GetValue( 'saved_zooms', bool, default_value = True )
+        clear_rotations = request.parsed_request_args.GetValue( 'rotations', bool, default_value = True )
+        clear_zoom_timestamps = request.parsed_request_args.GetValue( 'position_timestamps', bool, default_value = False )
+        
+        if not ( clear_file_viewer_zooms or clear_rotations or clear_zoom_timestamps ):
+            
+            raise HydrusExceptions.BadRequestException( 'Please say what to reset, with "saved_zooms", "rotations", and/or "position_timestamps" set to true!' )
+            
+        
+        hashes = set( hashes )
+        
+        if len( hashes ) > 0:
+            
+            CG.client_controller.WriteSynchronous( 'reset_file_viewer_positions', hashes, clear_file_viewer_zooms, clear_rotations, clear_zoom_timestamps )
+            
+            # open media viewers hold on to what they loaded for their current file
+            CG.client_controller.pub( 'reset_file_viewer_positions', hashes, clear_file_viewer_zooms, clear_rotations, clear_zoom_timestamps )
+            
+        
+        return ClientLocalServerCore.GenerateJSONResponse( request, { 'num_files' : len( hashes ) } )
+        
+    
+
 class HydrusResourceClientAPIRestrictedManageFileViewerDataSetImageOverlay( HydrusResourceClientAPIRestrictedManageFileViewerData ):
     
     def _threadDoPOSTJob( self, request: HydrusServerRequest.HydrusRequest ):

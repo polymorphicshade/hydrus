@@ -2100,6 +2100,7 @@ class MediaContainer( QW.QWidget ):
         CG.client_controller.sub( self, 'NotifyNewZoomTimestamps', 'new_file_zoom_timestamps' )
         CG.client_controller.sub( self, 'NotifyNewScriptedEvents', 'new_file_scripted_events' )
         CG.client_controller.sub( self, 'NotifyAllSavedZoomsReset', 'reset_all_file_zooms' )
+        CG.client_controller.sub( self, 'NotifyFileViewerPositionsReset', 'reset_file_viewer_positions' )
         
     
     def _CheckPlaybackFreezes( self ):
@@ -2477,6 +2478,66 @@ class MediaContainer( QW.QWidget ):
         else:
             
             return ClientGUIMediaVolume.GetCorrectCurrentMute( self._canvas_type )
+            
+        
+    
+    def _ForgetLoadedPositions( self, clear_file_viewer_zooms: bool, clear_rotation: bool, clear_zoom_timestamps: bool ):
+        
+        # what we loaded for the current file was reset in the db
+        if self._media is None:
+            
+            return
+            
+        
+        if clear_rotation:
+            
+            # anything we are still loading is now out of date
+            self._rotation_load_id += 1
+            
+            if self._file_rotation != 0:
+                
+                old_file_rotation = self._file_rotation
+                
+                self._file_rotation = 0
+                
+                # a position timestamp may have it turned another way for now. that holds until playback leaves it
+                if self._rotation == old_file_rotation and self.CanRotate():
+                    
+                    self._SetRotation( 0 )
+                    
+                
+            
+        
+        if clear_file_viewer_zooms and self._remembers_file_zooms:
+            
+            # anything we are still loading is now out of date
+            self._saved_zoom_load_id += 1
+            
+            self._pan_save_id += 1
+            
+            if self._saved_zoom is not None or self._saved_center is not None:
+                
+                self._saved_zoom = None
+                self._saved_center = None
+                
+                # like 'forget this file's zoom', we go back to the normal default zoom
+                if self.IsZoomable():
+                    
+                    self.ZoomReinit()
+                    
+                    self.ResetCenterPosition()
+                    
+                
+            
+        
+        if clear_zoom_timestamps and self._does_zoom_timestamps:
+            
+            self._zoom_timestamps_load_id += 1
+            
+            self._SetZoomTimestamps( [] )
+            
+            # like 'clear zoom timestamps', the zoom stays where it is. it goes back to normal next time the file is opened
+            self._current_zoom_timestamp = None
             
         
     
@@ -4519,41 +4580,23 @@ class MediaContainer( QW.QWidget ):
     
     def NotifyAllSavedZoomsReset( self, clear_file_viewer_zooms: bool, clear_zoom_timestamps: bool ):
         
-        if self._media is None:
+        # what we looked up ahead of time for the next file is out of date
+        self._ClearStandbyZoomData()
+        
+        self._ForgetLoadedPositions( clear_file_viewer_zooms, False, clear_zoom_timestamps )
+        
+    
+    def NotifyFileViewerPositionsReset( self, hashes: set[ bytes ], clear_file_viewer_zooms: bool, clear_rotations: bool, clear_zoom_timestamps: bool ):
+        
+        if self._standby_zoom_data_hash in hashes:
             
-            return
+            # what we looked up ahead of time is out of date. the file will look it up itself when it comes on
+            self._ClearStandbyZoomData()
             
         
-        if clear_file_viewer_zooms and self._remembers_file_zooms:
+        if self._media is not None and self._media.GetHash() in hashes:
             
-            # anything we are still loading is now out of date
-            self._saved_zoom_load_id += 1
-            
-            self._pan_save_id += 1
-            
-            if self._saved_zoom is not None or self._saved_center is not None:
-                
-                self._saved_zoom = None
-                self._saved_center = None
-                
-                # like 'forget this file's zoom', we go back to the normal default zoom
-                if self.IsZoomable():
-                    
-                    self.ZoomReinit()
-                    
-                    self.ResetCenterPosition()
-                    
-                
-            
-        
-        if clear_zoom_timestamps and self._does_zoom_timestamps:
-            
-            self._zoom_timestamps_load_id += 1
-            
-            self._SetZoomTimestamps( [] )
-            
-            # like 'clear zoom timestamps', the zoom stays where it is. it goes back to normal next time the file is opened
-            self._current_zoom_timestamp = None
+            self._ForgetLoadedPositions( clear_file_viewer_zooms, clear_rotations, clear_zoom_timestamps )
             
         
     

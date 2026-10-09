@@ -34,9 +34,30 @@ class ClientDBFilesViewerZooms( ClientDBModule.ClientDBModule ):
         self._Execute( 'DELETE FROM file_viewer_zooms;' )
         
     
-    def GetNumViewerZooms( self ) -> int:
+    def ClearViewerZooms( self, hashes ):
         
-        ( num_zooms, ) = self._Execute( 'SELECT COUNT( * ) FROM file_viewer_zooms;' ).fetchone()
+        # just these files go back to the normal default zoom, centered
+        hash_ids = self.modules_hashes_local_cache.GetHashIds( hashes )
+        
+        self._ExecuteMany( 'DELETE FROM file_viewer_zooms WHERE hash_id = ?;', ( ( hash_id, ) for hash_id in hash_ids ) )
+        
+    
+    def GetNumViewerZooms( self, hashes = None ) -> int:
+        
+        # every file's, or just these files'
+        if hashes is None:
+            
+            ( num_zooms, ) = self._Execute( 'SELECT COUNT( * ) FROM file_viewer_zooms;' ).fetchone()
+            
+            return num_zooms
+            
+        
+        hash_ids = self.modules_hashes_local_cache.GetHashIds( hashes )
+        
+        with self._MakeTemporaryIntegerTable( hash_ids, 'hash_id' ) as temp_hash_ids_table_name:
+            
+            ( num_zooms, ) = self._Execute( f'SELECT COUNT( * ) FROM {temp_hash_ids_table_name} CROSS JOIN file_viewer_zooms USING ( hash_id );' ).fetchone()
+            
         
         return num_zooms
         

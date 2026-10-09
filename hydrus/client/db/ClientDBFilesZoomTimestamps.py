@@ -36,9 +36,30 @@ class ClientDBFilesZoomTimestamps( ClientDBModule.ClientDBModule ):
         self._Execute( 'DELETE FROM file_zoom_timestamps;' )
         
     
-    def GetNumFilesWithZoomTimestamps( self ) -> int:
+    def ClearZoomTimestamps( self, hashes ):
         
-        ( num_files, ) = self._Execute( 'SELECT COUNT( DISTINCT hash_id ) FROM file_zoom_timestamps;' ).fetchone()
+        # just these files' zoom timestamps go
+        hash_ids = self.modules_hashes_local_cache.GetHashIds( hashes )
+        
+        self._ExecuteMany( 'DELETE FROM file_zoom_timestamps WHERE hash_id = ?;', ( ( hash_id, ) for hash_id in hash_ids ) )
+        
+    
+    def GetNumFilesWithZoomTimestamps( self, hashes = None ) -> int:
+        
+        # every file, or just these files
+        if hashes is None:
+            
+            ( num_files, ) = self._Execute( 'SELECT COUNT( DISTINCT hash_id ) FROM file_zoom_timestamps;' ).fetchone()
+            
+            return num_files
+            
+        
+        hash_ids = self.modules_hashes_local_cache.GetHashIds( hashes )
+        
+        with self._MakeTemporaryIntegerTable( hash_ids, 'hash_id' ) as temp_hash_ids_table_name:
+            
+            ( num_files, ) = self._Execute( f'SELECT COUNT( DISTINCT hash_id ) FROM {temp_hash_ids_table_name} CROSS JOIN file_zoom_timestamps USING ( hash_id );' ).fetchone()
+            
         
         return num_files
         

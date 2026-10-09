@@ -28,6 +28,7 @@ from hydrus.client.gui import ClientGUIMediaViewerLayouts
 from hydrus.client.gui import ClientGUIMenus
 from hydrus.client.gui import ClientGUIReviewWindowsQuick
 from hydrus.client.gui import QtPorting as QP
+from hydrus.client.gui.media import ClientGUIMediaZooms
 from hydrus.client.gui.canvas import ClientGUICanvas
 from hydrus.client.gui.pages import ClientGUIPagesCore
 from hydrus.client.gui.pages import ClientGUIPagesTreeView
@@ -1930,6 +1931,11 @@ class PagesNotebook( ClientGUIPagesTreeView.TabWidgetWithDnD ):
         self.dataChanged.emit( index, index )
         
     
+    def _ResetPageFileViewerPositions( self, page ):
+        
+        ClientGUIMediaZooms.AskToResetFileViewerPositions( self, page.GetHashes() )
+        
+    
     def _SendPageToNewNotebook( self, index ):
         
         if 0 <= index <= self.count() - 1:
@@ -2283,6 +2289,8 @@ class PagesNotebook( ClientGUIPagesTreeView.TabWidgetWithDnD ):
                 
                 ClientGUIMenus.AppendMenuItem( menu, 'refresh all this page\'s pages', 'Command every page below this one to refresh.', page.RefreshAllPages )
                 
+            
+            ClientGUIMenus.AppendMenuItem( menu, 'reset all positions' + HC.UNICODE_ELLIPSIS, 'Forget the zoom, pan, and turn the media viewer remembers for every file in this page, so they open at your normal default zoom, centered, and not turned. You can choose to reset their position timestamps too. You will be told how many there are, and asked to confirm.', self._ResetPageFileViewerPositions, page )
             
         
         existing_session_names = CG.client_controller.Read( 'serialisable_names', HydrusSerialisable.SERIALISABLE_TYPE_GUI_SESSION_CONTAINER )
