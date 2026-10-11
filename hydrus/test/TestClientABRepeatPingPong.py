@@ -294,6 +294,11 @@ class TestABRepeatPingPong( unittest.TestCase ):
         container._ab_loop_ping_pong_last_timestamp_ms = None
         container._ab_loop_ping_pong_turned_playback_backwards = False
         
+        container._playback_skips = []
+        container._zoom_timestamps = []
+        container._scripted_events = []
+        container._playback_freezes = []
+        
         return container
         
     
@@ -316,7 +321,9 @@ class TestABRepeatPingPong( unittest.TestCase ):
                 
             
         
-        with mock.patch.object( ClientGUICanvasMedia.ClientGUIMPV, 'MPVWidget', FakeMPVWidget ), mock.patch.object( container, 'CurrentlyPresentingMediaWithDuration', return_value = True ), mock.patch.object( ClientGUICanvasMedia.MediaContainer, 'abLoopChanged' ) as ab_loop_changed, mock.patch.object( ClientGUICanvasMedia.MediaContainer, 'abLoopPingPongChanged' ) as ping_pong_changed:
+        with mock.patch.object( ClientGUICanvasMedia.ClientGUIMPV, 'MPVWidget', FakeMPVWidget ), mock.patch.object( container, 'CurrentlyPresentingMediaWithDuration', return_value = True ), mock.patch.object( ClientGUICanvasMedia.MediaContainer, 'abLoopChanged' ) as ab_loop_changed, mock.patch.object( ClientGUICanvasMedia.MediaContainer, 'abLoopPingPongChanged' ) as ping_pong_changed, mock.patch.object( ClientGUICanvasMedia.CG, 'client_controller' ) as controller:
+            
+            gui = controller.gui
             
             ab_loop_changed.emit.side_effect = lambda a_ms, b_ms: ab_loop_changes.append( ( a_ms, b_ms ) )
             ping_pong_changed.emit.side_effect = ping_pong_changes.append
@@ -326,6 +333,10 @@ class TestABRepeatPingPong( unittest.TestCase ):
             
             self.assertEqual( mpv_widget.calls, [ ( 'ab loop', 1000, 4020 ) ] )
             self.assertEqual( ab_loop_changes, [ ( 1000, 4020 ) ] )
+            
+            # so we do not need to watch playback
+            gui.RegisterAnimationUpdateWindow.assert_not_called()
+            gui.UnregisterAnimationUpdateWindow.assert_called_with( container )
             
             play_to( [ 3960, 4000, 1000 ] )
             
@@ -339,6 +350,8 @@ class TestABRepeatPingPong( unittest.TestCase ):
             self.assertTrue( container.GetABLoopPingPong() )
             self.assertEqual( ping_pong_changes, [ True ] )
             self.assertEqual( mpv_widget.calls, [ ( 'ab loop', None, None ) ] )
+            
+            gui.RegisterAnimationUpdateWindow.assert_called_once_with( container )
             
             mpv_widget.calls.clear()
             
@@ -379,6 +392,8 @@ class TestABRepeatPingPong( unittest.TestCase ):
             
             self.assertEqual( mpv_widget.calls, [ ( 'reverse', False ), ( 'ab loop', 1000, 4020 ) ] )
             self.assertEqual( ping_pong_changes, [ True, False ] )
+            
+            gui.RegisterAnimationUpdateWindow.assert_called_once_with( container )
             
             # it stays on for the next file, whose loop starts with nothing set
             container.SetABLoopPingPong( True )
@@ -423,7 +438,7 @@ class TestABRepeatPingPong( unittest.TestCase ):
         
         container = self._GetContainer( media_window )
         
-        with mock.patch.object( container, 'CurrentlyPresentingMediaWithDuration', return_value = True ), mock.patch.object( ClientGUICanvasMedia.MediaContainer, 'abLoopChanged' ), mock.patch.object( ClientGUICanvasMedia.MediaContainer, 'abLoopPingPongChanged' ):
+        with mock.patch.object( container, 'CurrentlyPresentingMediaWithDuration', return_value = True ), mock.patch.object( ClientGUICanvasMedia.MediaContainer, 'abLoopChanged' ), mock.patch.object( ClientGUICanvasMedia.MediaContainer, 'abLoopPingPongChanged' ), mock.patch.object( ClientGUICanvasMedia.CG, 'client_controller' ):
             
             container.SetABLoopPingPong( True )
             container._SetABLoop( 1000, 4020 )
@@ -441,7 +456,7 @@ class TestABRepeatPingPong( unittest.TestCase ):
         
         container = self._GetContainer( animation )
         
-        with mock.patch.object( container, 'CurrentlyPresentingMediaWithDuration', return_value = True ), mock.patch.object( ClientGUICanvasMedia.MediaContainer, 'abLoopChanged' ), mock.patch.object( ClientGUICanvasMedia.MediaContainer, 'abLoopPingPongChanged' ):
+        with mock.patch.object( container, 'CurrentlyPresentingMediaWithDuration', return_value = True ), mock.patch.object( ClientGUICanvasMedia.MediaContainer, 'abLoopChanged' ), mock.patch.object( ClientGUICanvasMedia.MediaContainer, 'abLoopPingPongChanged' ), mock.patch.object( ClientGUICanvasMedia.CG, 'client_controller' ):
             
             container.SetABLoopPingPong( True )
             

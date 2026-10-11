@@ -4120,8 +4120,8 @@ class MediaContainer( QW.QWidget ):
     
     def _UpdateAnimationUpdateRegistration( self ):
         
-        # we only need to watch playback when there is something to skip, zoom, run, or hold
-        if len( self._playback_skips ) > 0 or len( self._zoom_timestamps ) > 0 or len( self._scripted_events ) > 0 or len( self._playback_freezes ) > 0:
+        # we only need to watch playback when there is something to skip, zoom, run, or hold, or a ping-pong loop to turn round
+        if len( self._playback_skips ) > 0 or len( self._zoom_timestamps ) > 0 or len( self._scripted_events ) > 0 or len( self._playback_freezes ) > 0 or self._DrivesABLoopPingPong():
             
             CG.client_controller.gui.RegisterAnimationUpdateWindow( self )
             
@@ -4141,6 +4141,9 @@ class MediaContainer( QW.QWidget ):
         
     
     def _UpdateMediaWindowABLoop( self ):
+        
+        # if we are turning a ping-pong loop round, we have to watch playback
+        self._UpdateAnimationUpdateRegistration()
         
         if not self.CurrentlyPresentingMediaWithDuration():
             
