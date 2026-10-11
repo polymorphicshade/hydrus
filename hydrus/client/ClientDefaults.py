@@ -441,6 +441,10 @@ def GetDefaultShortcuts():
         ClientGUIShortcuts.Shortcut( ClientGUIShortcuts.SHORTCUT_TYPE_KEYBOARD_CHARACTER, ord( 'C' ), ClientGUIShortcuts.SHORTCUT_PRESS_TYPE_PRESS, [] ),
         CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_MEDIA_CLEAR_LOOP_POINTS )
     )
+    media_viewer.SetCommand(
+        ClientGUIShortcuts.Shortcut( ClientGUIShortcuts.SHORTCUT_TYPE_KEYBOARD_CHARACTER, ord( 'L' ), ClientGUIShortcuts.SHORTCUT_PRESS_TYPE_PRESS, [] ),
+        CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_MEDIA_FLIP_LOOP_PING_PONG )
+    )
     
     media_viewer.SetCommand(
         ClientGUIShortcuts.Shortcut( ClientGUIShortcuts.SHORTCUT_TYPE_KEYBOARD_CHARACTER, ord( 'F' ), ClientGUIShortcuts.SHORTCUT_PRESS_TYPE_PRESS, [] ),

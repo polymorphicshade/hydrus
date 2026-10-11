@@ -743,6 +743,21 @@ def BuildRequest( args ) -> APIRequest:
             
             return APIRequest( 'POST', '/manage_media_viewers/open_layout', { 'layout' : layout } )
             
+        elif sub == 'ab-repeat':
+            
+            return APIRequest( 'GET', '/manage_media_viewers/get_ab_repeat' )
+            
+        elif sub == 'ping-pong':
+            
+            params = { 'ping_pong' : args.state == 'on' }
+            
+            if args.viewer is not None:
+                
+                params[ 'canvas_key' ] = args.viewer.lower()
+                
+            
+            return APIRequest( 'POST', '/manage_media_viewers/set_ab_repeat_ping_pong', params )
+            
         
     
     raise CLIError( f'Please say what to do with "{command}"! Try --help.' )
@@ -977,6 +992,10 @@ def GetArgumentParser() -> argparse.ArgumentParser:
     viewers.add_parser( 'layout', help = 'the open media viewers as a layout, the same json as a saved layout file' )
     p = viewers.add_parser( 'open-layout', help = 'open a layout\'s media viewers' )
     p.add_argument( 'json', help = 'a layout, which is ' + json_help )
+    viewers.add_parser( 'ab-repeat', help = 'the A-B repeat points of the open media viewers, and whether ping-pong is on' )
+    p = viewers.add_parser( 'ping-pong', help = 'make A-B repeat play backwards and forwards, rather than jumping from B back to A' )
+    p.add_argument( 'state', choices = [ 'on', 'off' ] )
+    p.add_argument( '--viewer', metavar = 'CANVAS_KEY', help = 'just this media viewer, by its canvas_key from "viewers list". Default is all that are open' )
     
     return parser
     

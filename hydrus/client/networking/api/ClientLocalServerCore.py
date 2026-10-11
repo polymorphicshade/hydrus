@@ -68,7 +68,8 @@ CLIENT_API_BYTE_PARAMS = {
     'tag_service_key_2',
     'rating_service_key',
     'job_status_key',
-    'counter_id'
+    'counter_id',
+    'canvas_key'
 }
 
 CLIENT_API_STRING_PARAMS = {

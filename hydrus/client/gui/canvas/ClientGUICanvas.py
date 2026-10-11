@@ -849,6 +849,18 @@ class Canvas( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         return self._my_shortcuts_handler.GetCustomShortcutNames()
         
     
+    def GetABRepeatAPIInfo( self ) -> dict:
+        
+        ( a_ms, b_ms ) = self._media_container.GetABLoop()
+        
+        return {
+            'canvas_key' : self._canvas_key.hex(),
+            'a_ms' : a_ms,
+            'b_ms' : b_ms,
+            'ping_pong' : self._media_container.GetABLoopPingPong()
+        }
+        
+    
     def GetCanvasKey( self ):
         
         return self._canvas_key
@@ -1389,6 +1401,10 @@ class Canvas( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
                 
                 self._media_container.ClearABLoopPoints()
                 
+            elif action == CAC.SIMPLE_MEDIA_FLIP_LOOP_PING_PONG:
+                
+                self._media_container.FlipABLoopPingPong()
+                
             elif action == CAC.SIMPLE_MOVE_ANIMATION_TO_PREVIOUS_FRAME:
                 
                 self._media_container.GotoPreviousOrNextFrame( -1 )
@@ -1622,6 +1638,11 @@ class Canvas( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         self._media_container.ResetCenterPosition()
         
         self.EndDrag()
+        
+    
+    def SetABLoopPingPong( self, ping_pong: bool ):
+        
+        self._media_container.SetABLoopPingPong( ping_pong )
         
     
     def SetLocationContext( self, location_context: ClientLocation.LocationContext ):
@@ -2390,6 +2411,7 @@ class CanvasWithHovers( Canvas ):
         
         self._media_container.zoomChanged.connect( self._top_hover.SetCurrentZoom )
         self._media_container.abLoopChanged.connect( self._top_hover.SetABLoop )
+        self._media_container.abLoopPingPongChanged.connect( self._top_hover.SetABLoopPingPong )
         self._media_container.sendApplicationCommand.connect( self.ProcessApplicationCommand, QC.Qt.ConnectionType.QueuedConnection )
         
         self._hovers.append( self._top_hover )

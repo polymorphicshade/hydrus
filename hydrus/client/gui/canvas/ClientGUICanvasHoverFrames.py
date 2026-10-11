@@ -838,7 +838,7 @@ class CanvasHoverFrameTop( CanvasHoverFrame ):
         
         self.sendApplicationCommand.emit( CAC.ApplicationCommand.STATICCreateSimpleCommand( simple_action ) )
         
-        # A and B flip their own pressed state when clicked, so snap them back to the real state in case nothing changed (e.g. no timestamp yet)
+        # A, B, and L flip their own pressed state when clicked, so snap them back to the real state in case nothing changed (e.g. no timestamp yet)
         self._UpdateABLoopButtons()
         
     
@@ -939,16 +939,19 @@ class CanvasHoverFrameTop( CanvasHoverFrame ):
         
         self._ab_loop_a_ms = None
         self._ab_loop_b_ms = None
+        self._ab_loop_ping_pong = False
         
         self._ab_loop_a_button = ClientGUICommon.BetterButton( self, 'A', self._ABLoopButtonClicked, CAC.SIMPLE_MEDIA_SET_LOOP_POINT_A )
         self._ab_loop_b_button = ClientGUICommon.BetterButton( self, 'B', self._ABLoopButtonClicked, CAC.SIMPLE_MEDIA_SET_LOOP_POINT_B )
+        self._ab_loop_ping_pong_button = ClientGUICommon.BetterButton( self, 'L', self._ABLoopButtonClicked, CAC.SIMPLE_MEDIA_FLIP_LOOP_PING_PONG )
         self._ab_loop_clear_button = ClientGUICommon.BetterButton( self, 'C', self._ABLoopButtonClicked, CAC.SIMPLE_MEDIA_CLEAR_LOOP_POINTS )
         
-        # A and B show as pressed-in while their point is set
+        # A and B show as pressed-in while their point is set, and L while ping-pong is on
         self._ab_loop_a_button.setCheckable( True )
         self._ab_loop_b_button.setCheckable( True )
+        self._ab_loop_ping_pong_button.setCheckable( True )
         
-        for button in ( self._ab_loop_a_button, self._ab_loop_b_button, self._ab_loop_clear_button ):
+        for button in ( self._ab_loop_a_button, self._ab_loop_b_button, self._ab_loop_ping_pong_button, self._ab_loop_clear_button ):
             
             button.setFixedWidth( ClientGUIFunctions.ConvertTextToPixelWidth( button, 4 ) )
             button.setFocusPolicy( QC.Qt.FocusPolicy.TabFocus )
@@ -1132,7 +1135,7 @@ class CanvasHoverFrameTop( CanvasHoverFrame ):
             
             has_playback = self._current_media.HasDuration() or self._current_media.GetMime() == HC.ANIMATION_UGOIRA
             
-            for button in ( self._ab_loop_a_button, self._ab_loop_b_button, self._ab_loop_clear_button ):
+            for button in ( self._ab_loop_a_button, self._ab_loop_b_button, self._ab_loop_ping_pong_button, self._ab_loop_clear_button ):
                 
                 button.setVisible( has_playback )
                 
@@ -1498,6 +1501,7 @@ class CanvasHoverFrameTop( CanvasHoverFrame ):
         
         self._ab_loop_a_button.setChecked( a_is_set )
         self._ab_loop_b_button.setChecked( b_is_set )
+        self._ab_loop_ping_pong_button.setChecked( self._ab_loop_ping_pong )
         self._ab_loop_clear_button.setEnabled( a_is_set or b_is_set )
         
         a_status = time_string( self._ab_loop_a_ms ) if a_is_set else 'not set, so the loop starts at the beginning'
@@ -1506,6 +1510,10 @@ class CanvasHoverFrameTop( CanvasHoverFrame ):
         self._ab_loop_a_button.SetToolTipWithShortcuts( f'A-B repeat: mark the current time as the loop start (A)\n\nA is currently: {a_status}', CAC.SIMPLE_MEDIA_SET_LOOP_POINT_A )
         self._ab_loop_b_button.SetToolTipWithShortcuts( f'A-B repeat: mark the current time as the loop end (B) and start looping\n\nB is currently: {b_status}', CAC.SIMPLE_MEDIA_SET_LOOP_POINT_B )
         self._ab_loop_clear_button.SetToolTipWithShortcuts( 'A-B repeat: clear A and B so playback goes back to normal', CAC.SIMPLE_MEDIA_CLEAR_LOOP_POINTS )
+        
+        ping_pong_status = 'on' if self._ab_loop_ping_pong else 'off'
+        
+        self._ab_loop_ping_pong_button.SetToolTipWithShortcuts( f'A-B repeat: ping-pong. At B, the loop plays backwards to A, and then forwards again, rather than jumping back to A. This stays on for the next file.\n\nOnly mpv and the native animation player can play backwards. With the Qt media player, the loop jumps back as normal.\n\nPing-pong is currently: {ping_pong_status}', CAC.SIMPLE_MEDIA_FLIP_LOOP_PING_PONG )
         
     
     def DragButtonHit( self ):
@@ -1569,6 +1577,13 @@ class CanvasHoverFrameTop( CanvasHoverFrame ):
         
         self._ab_loop_a_ms = a_ms
         self._ab_loop_b_ms = b_ms
+        
+        self._UpdateABLoopButtons()
+        
+    
+    def SetABLoopPingPong( self, ping_pong: bool ):
+        
+        self._ab_loop_ping_pong = ping_pong
         
         self._UpdateABLoopButtons()
         

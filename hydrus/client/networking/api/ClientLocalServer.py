@@ -283,6 +283,8 @@ class HydrusServiceClientAPI( HydrusClientService ):
         manage_media_viewers.putChild( b'get_layout', ClientLocalServerResourcesManageMediaViewers.HydrusResourceClientAPIRestrictedManageMediaViewersGetLayout( self._service, self._client_requests_domain ) )
         manage_media_viewers.putChild( b'open_layout', ClientLocalServerResourcesManageMediaViewers.HydrusResourceClientAPIRestrictedManageMediaViewersOpenLayout( self._service, self._client_requests_domain ) )
         manage_media_viewers.putChild( b'open_playlist', ClientLocalServerResourcesManageMediaViewers.HydrusResourceClientAPIRestrictedManageMediaViewersOpenPlaylist( self._service, self._client_requests_domain ) )
+        manage_media_viewers.putChild( b'get_ab_repeat', ClientLocalServerResourcesManageMediaViewers.HydrusResourceClientAPIRestrictedManageMediaViewersGetABRepeat( self._service, self._client_requests_domain ) )
+        manage_media_viewers.putChild( b'set_ab_repeat_ping_pong', ClientLocalServerResourcesManageMediaViewers.HydrusResourceClientAPIRestrictedManageMediaViewersSetABRepeatPingPong( self._service, self._client_requests_domain ) )
         
         manage_exports = notFound()
         

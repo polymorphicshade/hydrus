@@ -98,6 +98,9 @@ OPEN_EXTERNALLY_MAX_THUMBNAIL_SIZE = ( 200, 200 )
 # anything shorter than this is not a useful loop, and mpv's 'rewind loop' damaged-file detection gets twitchy if we restart near 0 many times a second
 MIN_AB_LOOP_DURATION_MS = 100
 
+# for ping-pong. a bigger step than this in playback time is a seek, or the player going round from one end of the file to the other
+AB_LOOP_PING_PONG_MAX_STEP_MS = 1000
+
 # players take a moment to land a seek, so after we jump over a skip we give them this long before trying again
 PLAYBACK_SKIP_SEEK_GRACE_PERIOD_S = 0.5
 
@@ -170,6 +173,43 @@ def ConvertFrameStartToPlaybackPointMS( frame_start_ms: float ) -> int:
     # A, zoom timestamps, and the like are the start of a frame. rounding down means playback is at or past the point as soon as that frame is up
     # the round first stops float fuzz like 999.9999999 from knocking a whole ms off
     return int( math.floor( round( frame_start_ms, 3 ) ) )
+    
+
+def ABLoopPingPongWantsToTurn( a_ms: int | None, b_ms: int, playing_backwards: bool, last_timestamp_ms: float | None, current_timestamp_ms: float, frame_duration_ms: float ) -> bool:
+    
+    # for a player that we watch from outside, like mpv: whether a ping-pong loop has got to the end it was heading for, and should now play back the other way
+    if last_timestamp_ms is None:
+        
+        return False
+        
+    
+    a_ms = 0 if a_ms is None else a_ms
+    
+    # audio has no frames, and playback time is never exactly on a point
+    frame_duration_ms = max( frame_duration_ms, 1.0 )
+    
+    step_ms = current_timestamp_ms - last_timestamp_ms
+    
+    if playing_backwards:
+        
+        # a jump forward from near A is the player running off the start of the file and going round to its end
+        if step_ms > AB_LOOP_PING_PONG_MAX_STEP_MS and last_timestamp_ms <= a_ms + AB_LOOP_PING_PONG_MAX_STEP_MS:
+            
+            return True
+            
+        
+        # A's frame is up, or the user seeked to before it
+        return current_timestamp_ms < a_ms + frame_duration_ms
+        
+    
+    # like a normal loop, only normal playback turns round at B. a seek to after B is left alone, and plays on
+    if not 0 <= step_ms < AB_LOOP_PING_PONG_MAX_STEP_MS or last_timestamp_ms > b_ms:
+        
+        return False
+        
+    
+    # B's frame is up. B is inside its frame, after its start
+    return current_timestamp_ms + frame_duration_ms > b_ms
     
 
 def ConvertFrameToABLoopPointBMS( frame_start_ms: float, frame_duration_ms: float ) -> int:
@@ -671,6 +711,10 @@ class Animation( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         self._ab_loop_a_ms: int | None = None
         self._ab_loop_b_ms: int | None = None
         
+        # ping-pong: at B, the loop plays back to A, frame by frame, rather than jumping there
+        self._ab_loop_ping_pong = False
+        self._ab_loop_playing_backwards = False
+        
         self._video_container = None
         
         self._canvas_qt_pixmap = None
@@ -752,6 +796,39 @@ class Animation( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         a_ms = 0 if self._ab_loop_a_ms is None else self._ab_loop_a_ms
         
         frame_index = self._GetFrameIndexAtPlaybackPoint( a_ms )
+        
+        self._current_frame_index = frame_index
+        self._current_timestamp_ms = self._video_container.GetTimestampMS( frame_index )
+        
+        self._video_container.GetReadyForFrame( frame_index )
+        
+    
+    def _StepABLoopBackwards( self ):
+        
+        if self._video_container is None or not self._video_container.IsInitialised():
+            
+            return
+            
+        
+        a_ms = 0 if self._ab_loop_a_ms is None else self._ab_loop_a_ms
+        
+        if self._current_frame_index > self._GetFrameIndexAtPlaybackPoint( a_ms ):
+            
+            frame_index = self._current_frame_index - 1
+            
+        else:
+            
+            # A's frame has had its time, or the user seeked to before it, so we play forwards again
+            self._ab_loop_playing_backwards = False
+            
+            frame_index = min( self._current_frame_index + 1, self._num_frames - 1 )
+            
+            if self._ab_loop_b_ms is not None and self._video_container.GetTimestampMS( frame_index ) > self._ab_loop_b_ms:
+                
+                # the loop is all one frame, so there is nowhere to go
+                frame_index = self._current_frame_index
+                
+            
         
         self._current_frame_index = frame_index
         self._current_timestamp_ms = self._video_container.GetTimestampMS( frame_index )
@@ -1146,6 +1223,21 @@ class Animation( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         self._ab_loop_a_ms = a_ms
         self._ab_loop_b_ms = b_ms
         
+        if b_ms is None:
+            
+            self._ab_loop_playing_backwards = False
+            
+        
+    
+    def SetABLoopPingPong( self, ping_pong: bool ):
+        
+        self._ab_loop_ping_pong = ping_pong
+        
+        if not ping_pong:
+            
+            self._ab_loop_playing_backwards = False
+            
+        
     
     def SetBackgroundColourGenerator( self, background_colour_generator ):
         
@@ -1320,9 +1412,23 @@ class Animation( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
                         
                         next_frame_index = ( self._current_frame_index + 1 ) % num_frames
                         
-                        if self._ABLoopWantsToJumpBack( next_frame_index ):
+                        if self._ab_loop_playing_backwards:
                             
-                            self._JumpToABLoopStart()
+                            self._StepABLoopBackwards()
+                            
+                        elif self._ABLoopWantsToJumpBack( next_frame_index ):
+                            
+                            if self._ab_loop_ping_pong:
+                                
+                                # B's frame has had its time, so now we play back to A
+                                self._ab_loop_playing_backwards = True
+                                
+                                self._StepABLoopBackwards()
+                                
+                            else:
+                                
+                                self._JumpToABLoopStart()
+                                
                             
                         elif next_frame_index == 0:
                             
@@ -1872,6 +1978,7 @@ class MediaContainer( QW.QWidget ):
     
     zoomChanged = QC.Signal( int, float )
     abLoopChanged = QC.Signal( object, object )
+    abLoopPingPongChanged = QC.Signal( bool )
     muteStateChanged = QC.Signal()
     volumeChanged = QC.Signal()
     
@@ -1909,6 +2016,13 @@ class MediaContainer( QW.QWidget ):
         # a-b repeat. None for 'a' means the start of the media. the loop is active whenever 'b' is set
         self._ab_loop_a_ms: int | None = None
         self._ab_loop_b_ms: int | None = None
+        
+        # ping-pong: at B, the loop plays back to A rather than jumping there. unlike the points, this stays on from file to file
+        self._ab_loop_ping_pong = False
+        
+        # mpv does not go back and forth by itself, so we watch where it is and turn it round at each end
+        self._ab_loop_ping_pong_last_timestamp_ms: float | None = None
+        self._ab_loop_ping_pong_turned_playback_backwards = False
         
         # spans of the current file that playback jumps over. each file has its own, saved in the db
         self._playback_skips: list[ tuple[ int, int ] ] = []
@@ -2101,6 +2215,55 @@ class MediaContainer( QW.QWidget ):
         CG.client_controller.sub( self, 'NotifyNewScriptedEvents', 'new_file_scripted_events' )
         CG.client_controller.sub( self, 'NotifyAllSavedZoomsReset', 'reset_all_file_zooms' )
         CG.client_controller.sub( self, 'NotifyFileViewerPositionsReset', 'reset_file_viewer_positions' )
+        
+    
+    def _CheckABLoopPingPong( self ):
+        
+        if not self._DrivesABLoopPingPong():
+            
+            return
+            
+        
+        animation_bar_status = self._media_window.GetAnimationBarStatus()
+        
+        if animation_bar_status is None:
+            
+            return
+            
+        
+        ( current_frame_index, current_timestamp_ms, paused, buffer_indices ) = animation_bar_status
+        
+        if paused or current_timestamp_ms is None:
+            
+            # scanning around while paused does not turn anything round. playback carries on from wherever it is when it unpauses
+            self._ab_loop_ping_pong_last_timestamp_ms = None
+            
+            return
+            
+        
+        last_timestamp_ms = self._ab_loop_ping_pong_last_timestamp_ms
+        
+        self._ab_loop_ping_pong_last_timestamp_ms = current_timestamp_ms
+        
+        playing_backwards = self._media_window.IsPlaybackReversed()
+        
+        if not ABLoopPingPongWantsToTurn( self._ab_loop_a_ms, self._ab_loop_b_ms, playing_backwards, last_timestamp_ms, current_timestamp_ms, self._GetAverageFrameDurationMS() ):
+            
+            return
+            
+        
+        self._media_window.SetPlaybackReversed( not playing_backwards )
+        
+        self._ab_loop_ping_pong_turned_playback_backwards = not playing_backwards
+        
+        # the player's time can wobble as it turns round
+        self._ab_loop_ping_pong_last_timestamp_ms = None
+        
+        if playing_backwards and current_timestamp_ms > self._ab_loop_b_ms:
+            
+            # it ran off the start of the file and went round to the end
+            self._media_window.Seek( 0 if self._ab_loop_a_ms is None else self._ab_loop_a_ms )
+            
         
     
     def _CheckPlaybackFreezes( self ):
@@ -2577,6 +2740,34 @@ class MediaContainer( QW.QWidget ):
         return int( current_timestamp_ms )
         
     
+    def _DrivesABLoopPingPong( self ) -> bool:
+        
+        # whether a ping-pong loop is running that we have to turn round ourselves. that is just mpv: the native animation player does its own, and Qt cannot play backwards, so it loops as normal
+        if not self._ab_loop_ping_pong or self._ab_loop_b_ms is None or self._media is None or not isinstance( self._media_window, ClientGUIMPV.MPVWidget ):
+            
+            return False
+            
+        
+        a_ms = 0 if self._ab_loop_a_ms is None else self._ab_loop_a_ms
+        
+        # a loop that is all one frame has nowhere to play back to, so that loops as normal too
+        return self._ab_loop_b_ms - a_ms > self._GetAverageFrameDurationMS()
+        
+    
+    def _GetAverageFrameDurationMS( self ) -> float:
+        
+        # mpv and Qt do not tell us how long each frame is. audio has no frames at all, which is 0
+        num_frames = self._media.GetNumFrames()
+        duration_ms = self._media.GetDurationMS()
+        
+        if num_frames is None or num_frames < 2 or duration_ms is None or duration_ms <= 0:
+            
+            return 0.0
+            
+        
+        return duration_ms / num_frames
+        
+    
     def _GetCurrentFrameStartAndDurationMS( self ) -> tuple[ float, float ] | None:
         
         # the frame on screen, so A-B loops and zoom timestamps land on frames, not somewhere between them
@@ -2605,17 +2796,7 @@ class MediaContainer( QW.QWidget ):
             
         
         # mpv and Qt do not tell us how long each frame is, so we go with the average. audio has no frames at all
-        num_frames = self._media.GetNumFrames()
-        duration_ms = self._media.GetDurationMS()
-        
-        if num_frames is None or num_frames < 2 or duration_ms is None or duration_ms <= 0:
-            
-            frame_duration_ms = 0.0
-            
-        else:
-            
-            frame_duration_ms = duration_ms / num_frames
-            
+        frame_duration_ms = self._GetAverageFrameDurationMS()
         
         if isinstance( self._media_window, ClientGUIQtMediaPlayer.QtMediaPlayer ) and frame_duration_ms > 0:
             
@@ -3426,10 +3607,7 @@ class MediaContainer( QW.QWidget ):
         self._ab_loop_a_ms = a_ms
         self._ab_loop_b_ms = b_ms
         
-        if self.CurrentlyPresentingMediaWithDuration():
-            
-            self._media_window.SetABLoop( a_ms, b_ms )
-            
+        self._UpdateMediaWindowABLoop()
         
         self.abLoopChanged.emit( a_ms, b_ms )
         
@@ -3962,6 +4140,42 @@ class MediaContainer( QW.QWidget ):
             
         
     
+    def _UpdateMediaWindowABLoop( self ):
+        
+        if not self.CurrentlyPresentingMediaWithDuration():
+            
+            return
+            
+        
+        self._ab_loop_ping_pong_last_timestamp_ms = None
+        
+        if isinstance( self._media_window, Animation ):
+            
+            self._media_window.SetABLoopPingPong( self._ab_loop_ping_pong )
+            
+        
+        if self._DrivesABLoopPingPong():
+            
+            # mpv's own loop jumps from B to A, so that is off, and we turn playback round at each end
+            self._media_window.SetABLoop( None, None )
+            
+            return
+            
+        
+        if self._ab_loop_ping_pong_turned_playback_backwards:
+            
+            # the ping-pong is over, so playback goes forwards again
+            self._ab_loop_ping_pong_turned_playback_backwards = False
+            
+            if isinstance( self._media_window, ClientGUIMPV.MPVWidget ):
+                
+                self._media_window.SetPlaybackReversed( False )
+                
+            
+        
+        self._media_window.SetABLoop( self._ab_loop_a_ms, self._ab_loop_b_ms )
+        
+    
     def _UpdateMediaWindowMute( self ):
         
         muteable_window_classes = ( ClientGUIMPV.MPVWidget, ClientGUIQtMediaPlayer.QtMediaPlayer )
@@ -4048,6 +4262,11 @@ class MediaContainer( QW.QWidget ):
     def AddPlaybackSkip( self, start_ms: int, end_ms: int ):
         
         self._SavePlaybackSkips( MergePlaybackSkips( self._playback_skips + [ ( start_ms, end_ms ) ] ) )
+        
+    
+    def FlipABLoopPingPong( self ):
+        
+        self.SetABLoopPingPong( not self._ab_loop_ping_pong )
         
     
     def ClearABLoopPoints( self ):
@@ -4348,6 +4567,11 @@ class MediaContainer( QW.QWidget ):
     def GetABLoop( self ) -> tuple[ int | None, int | None ]:
         
         return ( self._ab_loop_a_ms, self._ab_loop_b_ms )
+        
+    
+    def GetABLoopPingPong( self ) -> bool:
+        
+        return self._ab_loop_ping_pong
         
     
     def GetAudioEffects( self ) -> ClientGUIMediaAudioEffects.AudioEffects:
@@ -4908,6 +5132,20 @@ class MediaContainer( QW.QWidget ):
             
             self._media_window.Seek( timestamp_ms )
             
+        
+    
+    def SetABLoopPingPong( self, ping_pong: bool ):
+        
+        if ping_pong == self._ab_loop_ping_pong:
+            
+            return
+            
+        
+        self._ab_loop_ping_pong = ping_pong
+        
+        self._UpdateMediaWindowABLoop()
+        
+        self.abLoopPingPongChanged.emit( ping_pong )
         
     
     def SetABLoopPointA( self ):
@@ -5935,6 +6173,8 @@ class MediaContainer( QW.QWidget ):
         
     
     def TIMERAnimationUpdate( self ):
+        
+        self._CheckABLoopPingPong()
         
         self._CheckPlaybackSkips()
         

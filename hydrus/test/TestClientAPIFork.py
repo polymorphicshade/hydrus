@@ -992,6 +992,55 @@ class TestClientAPIFork( unittest.TestCase ):
         
         self.assertEqual( status, 403 )
         
+        # a-b repeat
+        
+        from hydrus.client.gui import ClientGUIMediaViewerABRepeat
+        
+        canvas_key = b'\xab' * 32
+        
+        ab_repeat = [ { 'canvas_key' : canvas_key.hex(), 'a_ms' : None, 'b_ms' : 4500, 'ping_pong' : True } ]
+        
+        with mock.patch.object( ClientGUIMediaViewerABRepeat, 'GetOpenMediaViewersABRepeat', return_value = ab_repeat ):
+            
+            ( status, body ) = api_call( 'GET', '/manage_media_viewers/get_ab_repeat', self.pages_only )
+            
+        
+        self.assertEqual( status, 200 )
+        self.assertEqual( body, { 'media_viewers' : ab_repeat } )
+        
+        with mock.patch.object( ClientGUIMediaViewerABRepeat, 'SetOpenMediaViewersABRepeatPingPong', return_value = 3 ) as set_ping_pong:
+            
+            ( status, body ) = api_call( 'POST', '/manage_media_viewers/set_ab_repeat_ping_pong', self.pages_only, { 'ping_pong' : True } )
+            
+        
+        self.assertEqual( status, 200 )
+        self.assertEqual( body, { 'num_media_viewers' : 3 } )
+        set_ping_pong.assert_called_once_with( True, canvas_key = None )
+        
+        with mock.patch.object( ClientGUIMediaViewerABRepeat, 'SetOpenMediaViewersABRepeatPingPong', return_value = 1 ) as set_ping_pong:
+            
+            ( status, body ) = api_call( 'POST', '/manage_media_viewers/set_ab_repeat_ping_pong', self.pages_only, { 'ping_pong' : False, 'canvas_key' : canvas_key.hex() } )
+            
+        
+        self.assertEqual( status, 200 )
+        set_ping_pong.assert_called_once_with( False, canvas_key = canvas_key )
+        
+        # a media viewer that is not open
+        with mock.patch.object( ClientGUIMediaViewerABRepeat, 'SetOpenMediaViewersABRepeatPingPong', return_value = 0 ):
+            
+            ( status, body ) = api_call( 'POST', '/manage_media_viewers/set_ab_repeat_ping_pong', self.pages_only, { 'ping_pong' : True, 'canvas_key' : canvas_key.hex() } )
+            
+        
+        self.assertEqual( status, 404 )
+        
+        ( status, body ) = api_call( 'POST', '/manage_media_viewers/set_ab_repeat_ping_pong', self.pages_only, {} )
+        
+        self.assertEqual( status, 400 )
+        
+        ( status, body ) = api_call( 'POST', '/manage_media_viewers/set_ab_repeat_ping_pong', self.counters_only, { 'ping_pong' : True } )
+        
+        self.assertEqual( status, 403 )
+        
     
     
     def test_command_line( self ):
@@ -1067,6 +1116,11 @@ class TestClientAPIForkCommandLine( unittest.TestCase ):
         self.assertEqual( self._GetRequest( [ 'counters', 'set', 'tally', '5', '12' ] ), hydrus_cli.APIRequest( 'POST', '/manage_counters/set_count', { 'counter_name' : 'tally', 'count' : 5, 'file_ids' : [ 12 ] } ) )
         self.assertEqual( self._GetRequest( [ 'counters', 'inc', hash_hex, '12', '--by', '-2' ] ), hydrus_cli.APIRequest( 'POST', '/manage_counters/increment_count', { 'counter_id' : hash_hex, 'delta' : -2, 'file_ids' : [ 12 ] } ) )
         self.assertEqual( self._GetRequest( [ 'playlists', 'play', '3' ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/open_playlist', { 'playlist_id' : 3 } ) )
+        
+        # a-b repeat
+        self.assertEqual( self._GetRequest( [ 'viewers', 'ab-repeat' ] ), hydrus_cli.APIRequest( 'GET', '/manage_media_viewers/get_ab_repeat' ) )
+        self.assertEqual( self._GetRequest( [ 'viewers', 'ping-pong', 'on' ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/set_ab_repeat_ping_pong', { 'ping_pong' : True } ) )
+        self.assertEqual( self._GetRequest( [ 'viewers', 'ping-pong', 'off', '--viewer', hash_hex.upper() ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/set_ab_repeat_ping_pong', { 'ping_pong' : False, 'canvas_key' : hash_hex } ) )
         self.assertEqual( self._GetRequest( [ 'playlists', 'add', 'chill', '12', '--start-ms', '0', '--end-ms', '500' ] ), hydrus_cli.APIRequest( 'POST', '/manage_playlists/add_files', { 'playlist_name' : 'chill', 'file_ids' : [ 12 ], 'start_ms' : 0, 'end_ms' : 500 } ) )
         self.assertEqual( self._GetRequest( [ 'playlists', 'set', 'chill', '[ { "blank_ms" : 100 } ]' ] ), hydrus_cli.APIRequest( 'POST', '/manage_playlists/set_items', { 'playlist_name' : 'chill', 'items' : [ { 'blank_ms' : 100 } ] } ) )
         self.assertEqual( self._GetRequest( [ 'paths', 'remove', '12', '--path', 'a/b', '--path', 'c' ] ), hydrus_cli.APIRequest( 'POST', '/manage_virtual_paths/remove_paths', { 'paths' : [ 'a/b', 'c' ], 'file_ids' : [ 12 ] } ) )

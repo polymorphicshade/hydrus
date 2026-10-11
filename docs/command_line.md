@@ -101,6 +101,11 @@ python hydrus_cli.py export playlist "morning run" "C:\exports\morning run"
 # save the open media viewers, and open them again later
 python hydrus_cli.py viewers layout > viewers.json
 python hydrus_cli.py viewers open-layout @viewers.json
+
+# A-B repeat: see each media viewer's loop, and have them play it backwards and forwards
+python hydrus_cli.py viewers ab-repeat
+python hydrus_cli.py viewers ping-pong on
+python hydrus_cli.py viewers ping-pong off --viewer <canvas_key>
 ```
 
 ## everything else
