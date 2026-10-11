@@ -707,6 +707,18 @@ class Canvas( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
             
         
     
+    def _ShouldStartMediaMuted( self, previous_media: ClientMediaSingle.MediaSingle | None ) -> bool:
+        
+        # in a media viewer, every file opens muted, whatever the last one was left at, and the user unmutes the ones they want to hear. the preview just follows the options
+        if self.CANVAS_TYPE == CC.CANVAS_MEDIA_VIEWER_DUPLICATES:
+            
+            # the duplicate filter goes back and forth between the same files, so that is just when it starts on some
+            return previous_media is None
+            
+        
+        return self.CANVAS_TYPE in CC.CANVAS_MEDIA_VIEWER_TYPES
+        
+    
     def _SaveCurrentMediaViewTime( self ):
         
         now_ms = HydrusTime.GetNowMS()
@@ -1717,7 +1729,7 @@ class Canvas( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
                         maintain_pan = self._new_options.GetBoolean( 'media_viewer_lock_current_pan' )
                         
                     
-                    self._media_container.SetMedia( self._current_media, maintain_zoom, maintain_zoom_type, maintain_pan, start_paused = start_paused )
+                    self._media_container.SetMedia( self._current_media, maintain_zoom, maintain_zoom_type, maintain_pan, start_paused = start_paused, start_muted = self._ShouldStartMediaMuted( previous_media ) )
                     
                 else:
                     
@@ -6219,6 +6231,17 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
         super().SetMedia( media, start_paused = start_paused )
         
     
+    def _ShouldStartMediaMuted( self, previous_media: ClientMediaSingle.MediaSingle | None ) -> bool:
+        
+        # a slideshow plays on with the sound however the user has it
+        if self._slideshow_is_running:
+            
+            return False
+            
+        
+        return super()._ShouldStartMediaMuted( previous_media )
+        
+    
     def SetNextMediaStartMS( self, hash: bytes, start_ms: int ):
         
         # the next time the file with this hash comes up, it starts playing here. only a player that can start part way in, like mpv, does this
@@ -7211,6 +7234,12 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
             
         
         self._ShowPlaylistItem( random.randrange( len( self._playlist_items ) ) )
+        
+    
+    def _ShouldStartMediaMuted( self, previous_media: ClientMediaSingle.MediaSingle | None ) -> bool:
+        
+        # a playlist plays on with the sound however the user has it. with nothing set, that is how the options have it
+        return False
         
     
     def _StartSlideshow( self, period: float ):

@@ -79,6 +79,7 @@ from hydrus.test import TestClientImportSubscriptions
 from hydrus.test import TestClientListBoxes
 from hydrus.test import TestClientMediaViewerLayoutFiles
 from hydrus.test import TestClientMediaViewerLayouts
+from hydrus.test import TestClientMediaViewerMute
 from hydrus.test import TestClientMetadataConditional
 from hydrus.test import TestClientMetadataMigration
 from hydrus.test import TestClientMigration
@@ -973,6 +974,7 @@ class Controller( object ):
             TestClientPlaybackFreezes,
             TestClientPlaybackGaps,
             TestClientPlaybackPoints,
+            TestClientMediaViewerMute,
             TestClientPlaylistBlanks,
             TestClientPlaylistItems,
             TestClientPlaylistLooping,

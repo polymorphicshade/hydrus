@@ -2156,16 +2156,8 @@ class MediaContainer( QW.QWidget ):
         
         if self._canvas_type in CC.CANVAS_MEDIA_VIEWER_TYPES:
             
-            # a new media viewer starts with whatever mute and volume the last one was set to
-            # the mute is stored as 0/1 so that None can mean 'nothing set yet, follow the options'
-            last_mute = CG.client_controller.new_options.GetNoneableInteger( 'media_viewer_last_mute' )
-            
-            if last_mute is not None:
-                
-                self._has_per_player_mute_state = True
-                self._per_player_mute_state = bool( last_mute )
-                
-            
+            # a new media viewer starts with whatever volume the last one was set to
+            # the mute is not remembered. the canvas says whether each file starts muted when it gives it to us
             last_volume = CG.client_controller.new_options.GetNoneableInteger( 'media_viewer_last_volume' )
             
             if last_volume is not None:
@@ -3750,6 +3742,21 @@ class MediaContainer( QW.QWidget ):
         return isinstance( self._media_window, ClientGUIMPV.MPVWidget ) and self._media_window.IsPlaybackReversed()
         
     
+    def _StartMuted( self ):
+        
+        mute_state_changed = not self._GetCurrentMuteState()
+        
+        self._has_per_player_mute_state = True
+        self._per_player_mute_state = True
+        
+        if mute_state_changed:
+            
+            self._UpdateMediaWindowMute()
+            
+            self.muteStateChanged.emit()
+            
+        
+    
     def _SeekPastPlaybackSkip( self, end_ms: int ):
         
         if isinstance( self._media_window, Animation ):
@@ -5267,11 +5274,11 @@ class MediaContainer( QW.QWidget ):
         self._static_image_window.SetBackgroundColourGenerator( self._background_colour_generator )
         
     
-    def SetMedia( self, media: ClientMediaSingle.MediaSingle, maintain_zoom, maintain_zoom_type, maintain_pan, start_paused = None ):
+    def SetMedia( self, media: ClientMediaSingle.MediaSingle, maintain_zoom, maintain_zoom_type, maintain_pan, start_paused = None, start_muted = False ):
         
         if not self.ReadyToSwitchMedia():
             
-            self._deferred_set_media_call = HydrusData.Call( self.SetMedia, media, maintain_zoom, maintain_zoom_type, maintain_pan, start_paused = start_paused )
+            self._deferred_set_media_call = HydrusData.Call( self.SetMedia, media, maintain_zoom, maintain_zoom_type, maintain_pan, start_paused = start_paused, start_muted = start_muted )
             
             return
             
@@ -5279,6 +5286,12 @@ class MediaContainer( QW.QWidget ):
         previous_media = self._media
         
         self._media = media
+        
+        if start_muted:
+            
+            # the file opens muted, whatever the last one was left at. this is before its media window is made, so it never makes a sound
+            self._StartMuted()
+            
         
         ( self._show_action, self._start_paused, self._start_with_embed ) = ClientMedia.GetShowAction( self._media.GetMediaResult(), self._canvas_type )
         
@@ -5425,12 +5438,6 @@ class MediaContainer( QW.QWidget ):
             
             self._has_per_player_mute_state = True
             self._per_player_mute_state = mute_state
-            
-        
-        if self._canvas_type in CC.CANVAS_MEDIA_VIEWER_TYPES:
-            
-            # 'stop forcing' clears this, so new media viewers go back to following the options
-            CG.client_controller.new_options.SetNoneableInteger( 'media_viewer_last_mute', None if mute_state is None else int( mute_state ) )
             
         
         self._UpdateMediaWindowMute()
