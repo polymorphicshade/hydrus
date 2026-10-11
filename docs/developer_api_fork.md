@@ -240,6 +240,14 @@ Needs permission 107. Arguments: one file, `scripted_events`: a list of `{ "time
 
 Arguments: one file, `image_overlay`: `{ "path", "opacity", "x", "y", "width", "height", "locked", "stretch" }`, or null to take it away. `path` has to be an image file on the client's computer. `opacity` is 0 to 1, default 1. `x`, `y`, `width`, and `height` are fractions of the media viewer's size, default the whole of it. `locked` lets clicks go through it, and `stretch` fills its box rather than keeping its shape, both default false.
 
+### **GET `/manage_file_viewer_data/get_ignore_saved_positions`**
+
+Whether the media viewer is ignoring what files have saved, as `ignore_saved_positions`.
+
+### **POST `/manage_file_viewer_data/set_ignore_saved_positions`**
+
+Arguments: `ignore_saved_positions`. Like the media viewer's _zoom->ignore saved zooms and pans_. With true, the media viewer opens every file at the normal default zoom, fit to the window and centered, whatever saved zoom, pan, and position timestamps it has, and it does not save any new zoom or pan. How a file is turned still counts. Nothing is deleted, so with false, files open how they were left again. Media viewers that are open change straight away, and it stays set when the client restarts.
+
 ### **POST `/manage_file_viewer_data/reset_all_zooms`**
 
 For every file at once, like _reset all saved zooms_. Arguments: `saved_zooms` and/or `position_timestamps`, set to true for what to clear.

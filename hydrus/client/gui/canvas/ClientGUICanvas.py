@@ -53,6 +53,7 @@ from hydrus.client.gui.media import ClientGUIMediaMenus
 from hydrus.client.gui.media import ClientGUIMediaPlaybackFreezes
 from hydrus.client.gui.media import ClientGUIMediaScriptedEvents
 from hydrus.client.gui.media import ClientGUIMediaSegments
+from hydrus.client.gui.media import ClientGUIMediaZooms
 from hydrus.client.gui.metadata import ClientGUIManageTags
 from hydrus.client.gui.panels import ClientGUIScrolledPanelsCommitFiltering
 from hydrus.client.gui.panels import ClientGUIScrolledPanelsEdit
@@ -5774,6 +5775,15 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
                     ClientGUIMenus.AppendSeparator( zoom_menu )
                     
                     ClientGUIMenus.AppendMenuItem( zoom_menu, "forget this file's zoom and pan", 'This file opens at the zoom and pan you last left it at. Go back to the normal default zoom, centered, and open like that from now on.', self._media_container.ForgetSavedZoom )
+                    
+                
+                if self._media_container.RemembersFileZooms():
+                    
+                    ignore_saved_positions = CG.client_controller.new_options.GetBoolean( 'media_viewer_ignore_saved_positions' )
+                    
+                    ClientGUIMenus.AppendSeparator( zoom_menu )
+                    
+                    ClientGUIMenus.AppendMenuCheckItem( zoom_menu, 'ignore saved zooms and pans', 'Open every file at the normal default zoom, fit to the window and centered, whatever zoom, pan, and position timestamps it has saved. While this is on, nothing new is saved either. Nothing is deleted: turn it off, and files open how they were left again. This is for all media viewers.', ignore_saved_positions, ClientGUIMediaZooms.SetIgnoreSavedPositions, not ignore_saved_positions )
                     
                 
                 ClientGUIMenus.AppendMenu( menu, zoom_menu, 'zoom: {}'.format( ClientData.ConvertZoomToPercentage( self._media_container.GetCurrentZoom() ) ) )

@@ -167,6 +167,15 @@ def ResetFileViewerPositions( hashes: collections.abc.Collection[ bytes ], clear
     CG.client_controller.pub( 'reset_file_viewer_positions', hashes, clear_file_viewer_zooms, clear_rotations, clear_zoom_timestamps )
     
 
+def SetIgnoreSavedPositions( ignore_saved_positions: bool ):
+    
+    # while this is on, the media viewer leaves every file's saved zoom, pan, and position timestamps alone, so files always open at the default zoom. nothing is deleted
+    CG.client_controller.new_options.SetBoolean( 'media_viewer_ignore_saved_positions', ignore_saved_positions )
+    
+    # open media viewers go to the default zoom, or back to what their current file has saved, straight away
+    CG.client_controller.pub( 'media_viewer_ignore_saved_positions' )
+    
+
 def ResetAllSavedZooms( clear_file_viewer_zooms: bool, clear_zoom_timestamps: bool ):
     
     if clear_file_viewer_zooms:

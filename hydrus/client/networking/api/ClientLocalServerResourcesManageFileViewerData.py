@@ -140,6 +140,31 @@ class HydrusResourceClientAPIRestrictedManageFileViewerDataGetSavedZoomCounts( H
         
     
 
+class HydrusResourceClientAPIRestrictedManageFileViewerDataGetIgnoreSavedPositions( HydrusResourceClientAPIRestrictedManageFileViewerData ):
+    
+    def _threadDoGETJob( self, request: HydrusServerRequest.HydrusRequest ):
+        
+        ignore_saved_positions = CG.client_controller.new_options.GetBoolean( 'media_viewer_ignore_saved_positions' )
+        
+        return ClientLocalServerCore.GenerateJSONResponse( request, { 'ignore_saved_positions' : ignore_saved_positions } )
+        
+    
+
+class HydrusResourceClientAPIRestrictedManageFileViewerDataSetIgnoreSavedPositions( HydrusResourceClientAPIRestrictedManageFileViewerData ):
+    
+    def _threadDoPOSTJob( self, request: HydrusServerRequest.HydrusRequest ):
+        
+        # like the media viewer's 'ignore saved zooms and pans'
+        ignore_saved_positions = request.parsed_request_args.GetValue( 'ignore_saved_positions', bool )
+        
+        from hydrus.client.gui.media import ClientGUIMediaZooms
+        
+        ClientGUIMediaZooms.SetIgnoreSavedPositions( ignore_saved_positions )
+        
+        return ClientLocalServerCore.GenerateJSONResponse( request, { 'ignore_saved_positions' : ignore_saved_positions } )
+        
+    
+
 class HydrusResourceClientAPIRestrictedManageFileViewerDataResetAllZooms( HydrusResourceClientAPIRestrictedManageFileViewerData ):
     
     def _threadDoPOSTJob( self, request: HydrusServerRequest.HydrusRequest ):

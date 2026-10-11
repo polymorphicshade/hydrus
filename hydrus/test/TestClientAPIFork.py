@@ -890,6 +890,42 @@ class TestClientAPIFork( unittest.TestCase ):
                 
             
         
+        # ignoring what is saved
+        new_options = CG.client_controller.new_options
+        
+        ( status, body ) = api_call( 'GET', '/manage_file_viewer_data/get_ignore_saved_positions', self.everything )
+        
+        self.assertEqual( status, 200 )
+        self.assertEqual( body, { 'ignore_saved_positions' : False } )
+        
+        with mock.patch.object( CG.client_controller, 'pub' ) as pub:
+            
+            ( status, body ) = api_call( 'POST', '/manage_file_viewer_data/set_ignore_saved_positions', self.everything, { 'ignore_saved_positions' : True } )
+            
+            self.assertEqual( status, 200 )
+            self.assertEqual( body, { 'ignore_saved_positions' : True } )
+            self.assertTrue( new_options.GetBoolean( 'media_viewer_ignore_saved_positions' ) )
+            pub.assert_called_with( 'media_viewer_ignore_saved_positions' )
+            
+        
+        ( status, body ) = api_call( 'GET', '/manage_file_viewer_data/get_ignore_saved_positions', self.everything )
+        
+        self.assertEqual( body, { 'ignore_saved_positions' : True } )
+        
+        ( status, body ) = api_call( 'POST', '/manage_file_viewer_data/set_ignore_saved_positions', self.everything, { 'ignore_saved_positions' : False } )
+        
+        self.assertEqual( status, 200 )
+        self.assertFalse( new_options.GetBoolean( 'media_viewer_ignore_saved_positions' ) )
+        
+        ( status, body ) = api_call( 'POST', '/manage_file_viewer_data/set_ignore_saved_positions', self.everything, {} )
+        
+        self.assertEqual( status, 400 )
+        
+        ( status, body ) = api_call( 'POST', '/manage_file_viewer_data/set_ignore_saved_positions', self.counters_only, { 'ignore_saved_positions' : True } )
+        
+        self.assertEqual( status, 403 )
+        self.assertFalse( new_options.GetBoolean( 'media_viewer_ignore_saved_positions' ) )
+        
         # segments, which the media viewer loads each time, so there is no pub
         TG.test_controller.ClearWrites( 'file_segments' )
         
@@ -1128,6 +1164,9 @@ class TestClientAPIForkCommandLine( unittest.TestCase ):
         self.assertEqual( self._GetRequest( [ 'viewer', 'overlay', '12', 'none' ] ), hydrus_cli.APIRequest( 'POST', '/manage_file_viewer_data/set_image_overlay', { 'file_ids' : [ 12 ], 'image_overlay' : None } ) )
         self.assertEqual( self._GetRequest( [ 'viewer', 'freezes', '12', '[ { "timestamp_ms" : 3000, "duration_ms" : 2000 } ]' ] ), hydrus_cli.APIRequest( 'POST', '/manage_file_viewer_data/set_playback_freezes', { 'file_ids' : [ 12 ], 'playback_freezes' : [ { 'timestamp_ms' : 3000, 'duration_ms' : 2000 } ] } ) )
         self.assertEqual( self._GetRequest( [ 'viewer', 'reset-positions', '12', hash_hex, '--keep-rotations' ] ), hydrus_cli.APIRequest( 'POST', '/manage_file_viewer_data/reset_positions', { 'saved_zooms' : True, 'rotations' : False, 'position_timestamps' : False, 'hashes' : [ hash_hex ], 'file_ids' : [ 12 ] } ) )
+        self.assertEqual( self._GetRequest( [ 'viewer', 'ignore-positions' ] ), hydrus_cli.APIRequest( 'GET', '/manage_file_viewer_data/get_ignore_saved_positions' ) )
+        self.assertEqual( self._GetRequest( [ 'viewer', 'ignore-positions', 'on' ] ), hydrus_cli.APIRequest( 'POST', '/manage_file_viewer_data/set_ignore_saved_positions', { 'ignore_saved_positions' : True } ) )
+        self.assertEqual( self._GetRequest( [ 'viewer', 'ignore-positions', 'off' ] ), hydrus_cli.APIRequest( 'POST', '/manage_file_viewer_data/set_ignore_saved_positions', { 'ignore_saved_positions' : False } ) )
         self.assertEqual( self._GetRequest( [ 'viewer', 'reset-positions', '--page', hash_hex.upper(), '--position-timestamps' ] ), hydrus_cli.APIRequest( 'POST', '/manage_file_viewer_data/reset_positions', { 'saved_zooms' : True, 'rotations' : True, 'position_timestamps' : True, 'page_key' : hash_hex } ) )
         
         # files or a page, not both or neither

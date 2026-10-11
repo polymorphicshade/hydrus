@@ -238,6 +238,7 @@ class ClientOptions( HydrusSerialisable.SerialisableBase ):
             'preview_audio_mute' : False,
             'preview_uses_its_own_audio_volume' : True,
             'always_loop_gifs' : True,
+            'media_viewer_ignore_saved_positions' : False,
             'always_show_system_tray_icon' : False,
             'minimise_client_to_system_tray' : False,
             'close_client_to_system_tray' : False,

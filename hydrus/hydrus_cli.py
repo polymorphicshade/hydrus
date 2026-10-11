@@ -588,6 +588,15 @@ def BuildRequest( args ) -> APIRequest:
             
             return APIRequest( 'POST', '/manage_file_viewer_data/set_zoom', { 'zoom' : args.zoom, 'center' : args.center, **ParseFiles( args.files ) } )
             
+        elif sub == 'ignore-positions':
+            
+            if args.state is None:
+                
+                return APIRequest( 'GET', '/manage_file_viewer_data/get_ignore_saved_positions' )
+                
+            
+            return APIRequest( 'POST', '/manage_file_viewer_data/set_ignore_saved_positions', { 'ignore_saved_positions' : args.state == 'on' } )
+            
         elif sub == 'reset-zooms':
             
             return APIRequest( 'POST', '/manage_file_viewer_data/reset_all_zooms', { 'saved_zooms' : args.saved_zooms, 'position_timestamps' : args.position_timestamps } )
@@ -914,6 +923,8 @@ def GetArgumentParser() -> argparse.ArgumentParser:
     p.add_argument( 'files', nargs = '+', help = files_help )
     p.add_argument( '--zoom', type = float, help = 'like 2.0 for twice the size' )
     p.add_argument( '--center', type = float, nargs = 2, metavar = ( 'X', 'Y' ), help = 'the point in the middle of the window, as fractions of the file\'s width and height' )
+    p = viewer.add_parser( 'ignore-positions', help = 'have the media viewer open every file at the default zoom, whatever zoom, pan, and position timestamps it has saved. with no state, says whether it is on' )
+    p.add_argument( 'state', nargs = '?', choices = [ 'on', 'off' ] )
     p = viewer.add_parser( 'reset-zooms', help = 'clear saved zooms and/or position timestamps for every file' )
     p.add_argument( '--saved-zooms', action = 'store_true' )
     p.add_argument( '--position-timestamps', action = 'store_true' )

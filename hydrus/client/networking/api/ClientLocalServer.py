@@ -258,6 +258,8 @@ class HydrusServiceClientAPI( HydrusClientService ):
         manage_file_viewer_data.putChild( b'set_scripted_events', ClientLocalServerResourcesManageFileViewerData.HydrusResourceClientAPIRestrictedManageFileViewerDataSetScriptedEvents( self._service, self._client_requests_domain ) )
         manage_file_viewer_data.putChild( b'set_image_overlay', ClientLocalServerResourcesManageFileViewerData.HydrusResourceClientAPIRestrictedManageFileViewerDataSetImageOverlay( self._service, self._client_requests_domain ) )
         manage_file_viewer_data.putChild( b'reset_all_zooms', ClientLocalServerResourcesManageFileViewerData.HydrusResourceClientAPIRestrictedManageFileViewerDataResetAllZooms( self._service, self._client_requests_domain ) )
+        manage_file_viewer_data.putChild( b'get_ignore_saved_positions', ClientLocalServerResourcesManageFileViewerData.HydrusResourceClientAPIRestrictedManageFileViewerDataGetIgnoreSavedPositions( self._service, self._client_requests_domain ) )
+        manage_file_viewer_data.putChild( b'set_ignore_saved_positions', ClientLocalServerResourcesManageFileViewerData.HydrusResourceClientAPIRestrictedManageFileViewerDataSetIgnoreSavedPositions( self._service, self._client_requests_domain ) )
         manage_file_viewer_data.putChild( b'reset_positions', ClientLocalServerResourcesManageFileViewerData.HydrusResourceClientAPIRestrictedManageFileViewerDataResetPositions( self._service, self._client_requests_domain ) )
         
         manage_tag_presets = notFound()

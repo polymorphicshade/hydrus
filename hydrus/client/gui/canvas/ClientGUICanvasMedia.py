@@ -2215,6 +2215,7 @@ class MediaContainer( QW.QWidget ):
         CG.client_controller.sub( self, 'NotifyNewScriptedEvents', 'new_file_scripted_events' )
         CG.client_controller.sub( self, 'NotifyAllSavedZoomsReset', 'reset_all_file_zooms' )
         CG.client_controller.sub( self, 'NotifyFileViewerPositionsReset', 'reset_file_viewer_positions' )
+        CG.client_controller.sub( self, 'NotifyIgnoreSavedPositionsChanged', 'media_viewer_ignore_saved_positions' )
         
     
     def _CheckABLoopPingPong( self ):
@@ -2442,6 +2443,11 @@ class MediaContainer( QW.QWidget ):
     def _CheckZoomTimestamps( self ):
         
         if len( self._zoom_timestamps ) == 0 or self._media is None or not self.CurrentlyPresentingMediaWithDuration() or not self.IsZoomable():
+            
+            return
+            
+        
+        if self._IgnoresSavedPositions():
             
             return
             
@@ -3052,11 +3058,23 @@ class MediaContainer( QW.QWidget ):
             
         
     
+    def _IgnoresSavedPositions( self ) -> bool:
+        
+        # the user can have the media viewer leave every file's saved zoom, pan, and position timestamps alone, so files always open at the default zoom. what is saved stays in the db, and nothing new is saved over it
+        return self._remembers_file_zooms and CG.client_controller.new_options.GetBoolean( 'media_viewer_ignore_saved_positions' )
+        
+    
+    def _ShowsDefaultZoom( self ) -> bool:
+        
+        # whether the file is at the default zoom, over its saved zoom and any position timestamp it is in
+        return self._holding_default_zoom or self._IgnoresSavedPositions()
+        
+    
     def _SetLoadedSavedZoom( self, saved_zoom_and_center: tuple[ float | None, tuple[ float, float ] | None ] ):
         
         ( self._saved_zoom, self._saved_center ) = saved_zoom_and_center
         
-        if ( self._saved_zoom is not None or self._saved_center is not None ) and self.IsZoomable() and not self._holding_default_zoom:
+        if ( self._saved_zoom is not None or self._saved_center is not None ) and self.IsZoomable() and not self._ShowsDefaultZoom():
             
             if self._saved_zoom is not None:
                 
@@ -3634,7 +3652,7 @@ class MediaContainer( QW.QWidget ):
     
     def _SaveZoom( self ):
         
-        if self._media is None or not self._remembers_file_zooms:
+        if self._media is None or not self._remembers_file_zooms or self._IgnoresSavedPositions():
             
             return
             
@@ -3667,7 +3685,7 @@ class MediaContainer( QW.QWidget ):
     def _SavePanSoon( self ):
         
         # the user moved the file. once they stop for a moment, we remember where it is, with its zoom
-        if self._media is None or not self._remembers_file_zooms:
+        if self._media is None or not self._remembers_file_zooms or self._IgnoresSavedPositions():
             
             return
             
@@ -4708,6 +4726,11 @@ class MediaContainer( QW.QWidget ):
         return True
         
     
+    def RemembersFileZooms( self ) -> bool:
+        
+        return self._remembers_file_zooms
+        
+    
     def HasSavedZoom( self ):
         
         return self._saved_zoom is not None or self._saved_center is not None
@@ -4824,6 +4847,28 @@ class MediaContainer( QW.QWidget ):
         if self._media is not None and self._media.GetHash() in hashes:
             
             self._ForgetLoadedPositions( clear_file_viewer_zooms, clear_rotations, clear_zoom_timestamps )
+            
+        
+    
+    def NotifyIgnoreSavedPositionsChanged( self ):
+        
+        if self._media is None or not self._remembers_file_zooms:
+            
+            return
+            
+        
+        # a pan that was about to save is dropped
+        self._pan_save_id += 1
+        
+        # back to how the file fits the window, out of any position timestamp it is in
+        self._ZoomToZoomTimestamp( None )
+        
+        if not self._IgnoresSavedPositions():
+            
+            # and then its own zoom and pan go back on, and any position timestamp it is in follows at the next check
+            self._SetLoadedSavedZoom( ( self._saved_zoom, self._saved_center ) )
+            
+            self._current_zoom_timestamp_needs_reapply = True
             
         
     
@@ -5900,7 +5945,7 @@ class MediaContainer( QW.QWidget ):
             
         
         # this is a resize or a new file. if we are in a zoom timestamp, it needs to go back on, unless we are holding the default zoom
-        self._current_zoom_timestamp_needs_reapply = not self._holding_default_zoom
+        self._current_zoom_timestamp_needs_reapply = not self._ShowsDefaultZoom()
         
         canvas_size = self.parentWidget().size()
         my_dpr = self.devicePixelRatio()
@@ -5912,7 +5957,7 @@ class MediaContainer( QW.QWidget ):
         zoom = self._zoom_types_to_zooms[ self._current_zoom_type ]
         
         # a file with its own zoom keeps it, e.g. when the media viewer window is resized
-        if self._saved_zoom is not None and not self._holding_default_zoom:
+        if self._saved_zoom is not None and not self._ShowsDefaultZoom():
             
             zoom = self._GetZoomWithinMaxDimension( self._saved_zoom )
             

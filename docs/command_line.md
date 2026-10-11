@@ -93,6 +93,10 @@ python hydrus_cli.py viewer freezes 1234 "[ { \"timestamp_ms\" : 3000, \"duratio
 python hydrus_cli.py viewer reset-positions 1234 1235 --position-timestamps
 python hydrus_cli.py viewer reset-positions --page <page_key>
 
+# open every file at the default zoom, whatever it has saved. nothing is deleted
+python hydrus_cli.py viewer ignore-positions on
+python hydrus_cli.py viewer ignore-positions
+
 # exports, which the client makes in the background
 python hydrus_cli.py export video 1234 "C:\exports\clip" --start-ms 30000 --end-ms 45000 --resolution 1280 720
 python hydrus_cli.py export audio 1234 "C:\exports\song" --format wav
