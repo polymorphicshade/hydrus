@@ -2217,6 +2217,12 @@ class MediaContainer( QW.QWidget ):
             return
             
         
+        if self._media_window.GetPingPongLoopPoints() is not None:
+            
+            # mpv is playing the loop round from memory, and it turns itself round
+            return
+            
+        
         animation_bar_status = self._media_window.GetAnimationBarStatus()
         
         if animation_bar_status is None:
@@ -2251,6 +2257,13 @@ class MediaContainer( QW.QWidget ):
         
         # the player's time can wobble as it turns round
         self._ab_loop_ping_pong_last_timestamp_ms = None
+        
+        # mpv stalls for a moment every time it turns round, so now we are back at A, we have it play the loop round from memory instead, if it can
+        # it has to start from A, so the first time to B and back is always the slow way
+        if playing_backwards and self._media_window.StartPingPongLoop( self._ab_loop_a_ms, self._ab_loop_b_ms ):
+            
+            return
+            
         
         if playing_backwards and current_timestamp_ms > self._ab_loop_b_ms:
             
@@ -4182,7 +4195,25 @@ class MediaContainer( QW.QWidget ):
             self._media_window.SetABLoopPingPong( self._ab_loop_ping_pong )
             
         
-        if self._DrivesABLoopPingPong():
+        drives_ping_pong = self._DrivesABLoopPingPong()
+        
+        if isinstance( self._media_window, ClientGUIMPV.MPVWidget ):
+            
+            ping_pong_loop_points = self._media_window.GetPingPongLoopPoints()
+            
+            if ping_pong_loop_points is not None:
+                
+                if drives_ping_pong and ping_pong_loop_points == ( self._ab_loop_a_ms, self._ab_loop_b_ms ):
+                    
+                    # mpv is already playing this loop round from memory
+                    return
+                    
+                
+                self._media_window.StopPingPongLoop()
+                
+            
+        
+        if drives_ping_pong:
             
             # mpv's own loop jumps from B to A, so that is off, and we turn playback round at each end
             self._media_window.SetABLoop( None, None )

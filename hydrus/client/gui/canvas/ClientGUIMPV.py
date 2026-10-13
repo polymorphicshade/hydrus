@@ -1,4 +1,5 @@
 import locale
+import math
 import os
 import threading
 import traceback
@@ -297,6 +298,126 @@ def ConvertABLoopToMPVValues( a_s: float | None, b_s: float | None ):
 
 AUDIO_EFFECTS_FILTER_LABEL = '@hydrus_audio_effects'
 
+# a ping-pong loop that mpv holds in memory is decoded frames, which are big. a longer loop than this is turned round at each end instead
+PING_PONG_LOOP_MAX_BUFFER_BYTES = 1024 * 1024 * 1024
+
+# lavfi's loop filter holds 32767 frames at most, and it has both ways round
+PING_PONG_LOOP_MAX_NUM_FRAMES = 16000
+
+# as mpv goes into or out of a ping-pong loop, the time it gives is briefly from the other side. this is how close it has to get to where we sent it, and how long we wait for that
+PING_PONG_LOOP_TIME_HOLD_TOLERANCE_S = 0.5
+PING_PONG_LOOP_TIME_HOLD_PERIOD_S = 1.0
+
+# what we need to know about a file to set up a ping-pong loop for it
+PING_PONG_LOOP_PROPERTY_NAMES = ( 'vid', 'aid', 'container-fps', 'hwdec-current', 'video-params/pixelformat' )
+
+def ConvertPingPongLoopTimeToPlaybackTime( time_s: float, first_frame_index: int, last_frame_index: int, fps: float ) -> float:
+    
+    # in a ping-pong loop, mpv's time just goes up as the loop goes round. this is where in the file the frame it is showing came from
+    start_s = first_frame_index / fps
+    leg_s = ( last_frame_index - first_frame_index ) / fps
+    
+    if leg_s <= 0:
+        
+        return start_s
+        
+    
+    offset_s = ( time_s - start_s ) % ( 2 * leg_s )
+    
+    if offset_s > leg_s:
+        
+        # it is on the way back
+        offset_s = ( 2 * leg_s ) - offset_s
+        
+    
+    return start_s + offset_s
+    
+
+def EstimatePingPongLoopBufferBytes( num_frames: int, width: int, height: int, pixel_format: str | None ) -> int:
+    
+    # how much memory the decoded frames of a ping-pong loop take up. both ways round share the same frames
+    if pixel_format is None:
+        
+        # we do not know, so we guess high
+        bytes_per_pixel = 3.0
+    
+    else:
+        
+        if '420' in pixel_format or pixel_format.startswith( ( 'nv12', 'nv21', 'p010', 'p016' ) ):
+            
+            bytes_per_pixel = 1.5
+        
+        elif '422' in pixel_format:
+            
+            bytes_per_pixel = 2.0
+        
+        elif '444' in pixel_format or pixel_format.startswith( ( 'gbrp', 'rgb24', 'bgr24' ) ):
+            
+            bytes_per_pixel = 3.0
+        
+        else:
+            
+            bytes_per_pixel = 4.0
+            
+        
+        sample_format = pixel_format.removesuffix( 'le' ).removesuffix( 'be' )
+        
+        if sample_format.startswith( ( 'p010', 'p016' ) ) or ( not sample_format.startswith( 'nv' ) and sample_format.endswith( ( 'p9', 'p10', 'p12', 'p14', 'p16', '48', '64' ) ) ):
+            
+            # more than eight bits a sample is stored as two bytes
+            bytes_per_pixel *= 2
+            
+        
+    
+    return int( num_frames * width * height * bytes_per_pixel )
+    
+
+def GetPingPongLoopFrameRange( a_ms: int | None, b_ms: int, fps: float ) -> tuple[ int, int ]:
+    
+    # a ping-pong loop works at a fixed frame rate, where frame n starts at n / fps. this is the first and last frame of the loop
+    # A is the start of its frame, give or take a millisecond, and B is somewhere inside its frame
+    a_s = 0.0 if a_ms is None else a_ms / 1000
+    b_s = b_ms / 1000
+    
+    first_frame_index = int( math.floor( ( a_s * fps ) + 0.5 ) )
+    
+    # the little bit extra is for float fuzz, for a B right on the start of a frame
+    last_frame_index = int( math.floor( ( b_s * fps ) + 0.000001 ) )
+    
+    return ( first_frame_index, last_frame_index )
+    
+
+def GetPingPongLoopFilterGraph( first_frame_index: int, last_frame_index: int, fps: float, video_track_id: int, audio_track_id: int | None ) -> str:
+    
+    # an mpv lavfi-complex graph that plays the loop forwards, then backwards, and then round again forever, all from frames it keeps in memory
+    # once it has been round once, there is nothing to seek or decode at either end, so it turns round with no stall
+    # neither end is shown twice. the way back is everything but the first frame, reversed, and then without the last frame
+    # the times it gives out start at the first frame's and just go up. ConvertPingPongLoopTimeToPlaybackTime turns them back into file time
+    
+    # half a frame of slack on either side, so no rounding can lose or gain a frame
+    video_start_s = max( 0.0, ( first_frame_index - 0.5 ) / fps )
+    video_end_s = ( last_frame_index + 0.5 ) / fps
+    backwards_start_s = ( first_frame_index + 0.5 ) / fps
+    
+    graph = f'[vid{video_track_id}]fps={fps:.6f},trim=start={video_start_s:.6f}:end={video_end_s:.6f},split[forwards][to_reverse];'
+    graph += f'[to_reverse]trim=start={backwards_start_s:.6f},reverse,select=\'gt(n\\,0)\'[backwards];'
+    graph += f'[forwards][backwards]concat=n=2:v=1:a=0,loop=loop=-1:size=32767,setpts=(N+{first_frame_index})/({fps:.6f}*TB)[vo]'
+    
+    if audio_track_id is not None:
+        
+        # one time round of the audio has to be exactly as long as one of the video, or they drift apart
+        # the video is ( 2 * num_frames ) - 2 frames, so the audio is one frame short of the whole loop, each way
+        audio_start_s = first_frame_index / fps
+        audio_end_s = last_frame_index / fps
+        
+        graph += f';[aid{audio_track_id}]atrim=start={audio_start_s:.6f}:end={audio_end_s:.6f},asplit[forwards_audio][to_reverse_audio];'
+        graph += '[to_reverse_audio]areverse[backwards_audio];'
+        graph += f'[forwards_audio][backwards_audio]concat=n=2:v=0:a=1,aloop=loop=-1:size=2147480000,asetpts=(N/SR+{audio_start_s:.6f})/TB[ao]'
+        
+    
+    return graph
+    
+
 def ConvertStartMSToMPVLoadFileOptions( start_ms: int | None ) -> str:
     
     # the per-file options for loadfile, which mpv applies before the file starts
@@ -345,6 +466,12 @@ class MPVMediator( object ):
         raise NotImplementedError()
         
     
+    def GetProperty( self, name: str ):
+        
+        # one of PING_PONG_LOOP_PROPERTY_NAMES. None if mpv has nothing for it
+        raise NotImplementedError()
+        
+    
     def GotoPreviousOrNextFrame( self, direction ):
         
         raise NotImplementedError()
@@ -385,8 +512,20 @@ class MPVMediator( object ):
         raise NotImplementedError()
         
     
+    def SetComplexFilterGraph( self, graph: str ):
+        
+        # lavfi-complex. '' is no graph
+        raise NotImplementedError()
+        
+    
     def SetPlayDirection( self, reverse: bool ):
         
+        raise NotImplementedError()
+        
+    
+    def SetTracks( self, video_track: str, audio_track: str ):
+        
+        # each is a track id, 'auto', or 'no'
         raise NotImplementedError()
         
     
@@ -515,6 +654,23 @@ class MPVMediatorRude( MPVMediator ):
         return self._mpv_player.time_pos
         
     
+    def GetProperty( self, name: str ):
+        
+        try:
+            
+            return self._mpv_player[ name ]
+        
+        except mpv.ShutdownError:
+            
+            raise
+        
+        except Exception as e:
+            
+            # mpv has nothing for this right now
+            return None
+            
+        
+    
     def GotoPreviousOrNextFrame( self, direction ):
         
         command = 'frame-step'
@@ -559,9 +715,20 @@ class MPVMediatorRude( MPVMediator ):
         self._mpv_player[ 'ab-loop-b' ] = b_value
         
     
+    def SetComplexFilterGraph( self, graph: str ):
+        
+        self._mpv_player[ 'lavfi-complex' ] = graph
+        
+    
     def SetPlayDirection( self, reverse: bool ):
         
         self._mpv_player.play_direction = 'backward' if reverse else 'forward'
+        
+    
+    def SetTracks( self, video_track: str, audio_track: str ):
+        
+        self._mpv_player[ 'vid' ] = video_track
+        self._mpv_player[ 'aid' ] = audio_track
         
     
     def SetAudioDevice( self, name: str ):
@@ -632,6 +799,12 @@ class MPVMediatorPolite( MPVMediator ):
         self._mpv_player.observe_property( 'playback-time', self._Catcher )
         self._mpv_player.observe_property( 'path', self._Catcher )
         self._mpv_player.observe_property( 'playlist', self._Catcher )
+        
+        for name in PING_PONG_LOOP_PROPERTY_NAMES:
+            
+            self._mpv_player.observe_property( name, self._Catcher )
+            
+        
         # self._mpv_player.observe_property( 'vo-configured', self._Catcher ) kind of useful, it seems to show when the video connection with Qt is initialised
         
     
@@ -650,6 +823,14 @@ class MPVMediatorPolite( MPVMediator ):
         with self._lock:
             
             return self._properties[ 'playback-time' ]
+            
+        
+    
+    def GetProperty( self, name: str ):
+        
+        with self._lock:
+            
+            return self._properties.get( name )
             
         
     
@@ -755,12 +936,17 @@ class MPVMediatorPolite( MPVMediator ):
     
     def ResetForNewMedia( self, paused: bool ):
         
+        old_properties = self._properties
+        
         self._properties = {
             'pause' : paused,
             'playback-time' : 0,
             'path' : 'assumed_ok_and_not_none_to_start',
             'playlist' : []
         }
+        
+        # mpv only tells us about these when they change, so if the next file has the same, what we have is all we get
+        self._properties.update( { name : old_properties[ name ] for name in PING_PONG_LOOP_PROPERTY_NAMES if name in old_properties } )
         
         self._waiting_on_a_seek = False
         self._seek_time_and_precise_to_do_after_current_seek_done = None
@@ -798,6 +984,17 @@ class MPVMediatorPolite( MPVMediator ):
         
         self._mpv_player.command_async( 'set', 'ab-loop-a', a_value )
         self._mpv_player.command_async( 'set', 'ab-loop-b', b_value )
+        
+    
+    def SetComplexFilterGraph( self, graph: str ):
+        
+        self._mpv_player.command_async( 'set', 'lavfi-complex', graph )
+        
+    
+    def SetTracks( self, video_track: str, audio_track: str ):
+        
+        self._mpv_player.command_async( 'set', 'vid', video_track )
+        self._mpv_player.command_async( 'set', 'aid', audio_track )
         
     
     def SetPlayDirection( self, reverse: bool ):
@@ -942,6 +1139,17 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         # whether mpv is set to play backwards
         self._playback_reversed = False
         
+        # a ping-pong loop that mpv is playing round from memory. ( first_frame_index, last_frame_index, fps )
+        self._ping_pong_loop: tuple[ int, int, float ] | None = None
+        self._ping_pong_loop_points: tuple[ int | None, int ] | None = None
+        
+        # the loop takes the tracks over, and they are not selected any more when it goes. ( video, audio )
+        self._ping_pong_loop_tracks: tuple[ int, int | None ] = ( 1, None )
+        self._tracks_are_set_by_hand = False
+        
+        # the time to give out while mpv gets into or out of the loop. ( playback time, the mpv time we are waiting for, when we stop waiting )
+        self._ping_pong_loop_time_hold: tuple[ float, float, float ] | None = None
+        
         self._current_second_of_seek_restarts = 0.0
         self._number_of_restarts_this_second = 0
         self._current_seek_to_start_count = 0
@@ -1031,6 +1239,58 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
             
         
         return ClientGUIMediaControls.volume_types_to_option_names[ ClientGUIMediaControls.AUDIO_GLOBAL ]
+        
+    
+    def _GetPingPongLoopFPS( self ) -> float | None:
+        
+        num_frames = self._media.GetNumFrames()
+        duration_ms = self._media.GetDurationMS()
+        
+        if num_frames is None or num_frames < 2 or duration_ms is None or duration_ms <= 0:
+            
+            return None
+            
+        
+        average_fps = num_frames * 1000 / duration_ms
+        
+        container_fps = self._mpv_mediator.GetProperty( 'container-fps' )
+        
+        # the container's is exact, where ours is worked out from rounded numbers, but for some files it is a nonsense like 1000
+        if isinstance( container_fps, float ) and abs( container_fps - average_fps ) < average_fps * 0.1:
+            
+            return round( container_fps, 6 )
+            
+        
+        return round( average_fps, 6 )
+        
+    
+    def _GetPlaybackTime( self ) -> float | None:
+        
+        # where we are in the file, in seconds. mpv's own time is not that while it is in a ping-pong loop
+        time_s = self._mpv_mediator.GetPlaybackTime()
+        
+        if self._ping_pong_loop_time_hold is not None:
+            
+            ( held_time_s, expected_mpv_time_s, time_to_stop_waiting ) = self._ping_pong_loop_time_hold
+            
+            mpv_has_arrived = time_s is not None and abs( time_s - expected_mpv_time_s ) < PING_PONG_LOOP_TIME_HOLD_TOLERANCE_S
+            
+            if not mpv_has_arrived and not HydrusTime.TimeHasPassedFloat( time_to_stop_waiting ):
+                
+                return held_time_s
+                
+            
+            self._ping_pong_loop_time_hold = None
+            
+        
+        if time_s is not None and self._ping_pong_loop is not None:
+            
+            ( first_frame_index, last_frame_index, fps ) = self._ping_pong_loop
+            
+            time_s = ConvertPingPongLoopTimeToPlaybackTime( time_s, first_frame_index, last_frame_index, fps )
+            
+        
+        return time_s
         
     
     def _HandleLoadError( self ):
@@ -1309,7 +1569,7 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
                 
             else:
                 
-                current_timestamp_s = self._mpv_mediator.GetPlaybackTime()
+                current_timestamp_s = self._GetPlaybackTime()
                 
                 if current_timestamp_s is None:
                     
@@ -1363,12 +1623,40 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         
         try:
             
+            if self._ping_pong_loop is not None:
+
+                # the next frame of the loop is not always the next frame of the file, so we leave it
+                # mpv is not ready for a frame step until it has got out, so we seek to the frame instead. a seek lands on the first frame at or after its time
+                ( first_frame_index, last_frame_index, fps ) = self._ping_pong_loop
+
+                current_timestamp_s = self._GetPlaybackTime()
+
+                if current_timestamp_s is None:
+
+                    current_timestamp_s = first_frame_index / fps
+
+
+                frame_index = int( round( current_timestamp_s * fps ) ) + direction
+
+                self._mpv_mediator.SetPaused( True )
+
+                self.StopPingPongLoop( seek_ms = max( 0.0, ( frame_index - 0.5 ) / fps ) * 1000 )
+
+                return
+
+
             self._mpv_mediator.GotoPreviousOrNextFrame( direction )
-            
+        
         except mpv.ShutdownError:
             
             pass
             
+        
+    
+    def GetPingPongLoopPoints( self ) -> tuple[ int | None, int ] | None:
+        
+        # the A and B of the ping-pong loop we are playing from memory, if we are
+        return self._ping_pong_loop_points
         
     
     def HasPlayedOnceThrough( self ):
@@ -1524,6 +1812,14 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
             return
             
         
+        if self._ping_pong_loop is not None:
+            
+            # there is no seeking inside the loop, so we leave it. whoever started it can start it again
+            self.StopPingPongLoop( seek_ms = time_index_ms )
+            
+            return
+            
+        
         time_index_s = HydrusTime.SecondiseMSFloat( time_index_ms )
         
         # TODO: could also say like 'if it is between current time +/-5ms to catch odd frame float rounding stuff, but this would need careful testing with previous/next frame navigation etc..
@@ -1567,14 +1863,14 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         
         try:
             
-            current_timestamp_s = self._mpv_mediator.GetPlaybackTime()
-            
+            current_timestamp_s = self._GetPlaybackTime()
+        
         except mpv.ShutdownError:
             
             # libmpv core probably shut down
             return
             
-        
+            
         
         if current_timestamp_s is None:
             
@@ -1637,6 +1933,9 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
             
         
         try:
+            
+            # a ping-pong loop only goes the one way
+            self.StopPingPongLoop()
             
             self._mpv_mediator.SetPlayDirection( reverse )
             
@@ -1711,6 +2010,24 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
                 self._playback_reversed = False
                 
             
+            # and a ping-pong loop, and the tracks we put back after one
+            if self._ping_pong_loop is not None:
+                
+                self._mpv_mediator.SetComplexFilterGraph( '' )
+                
+                self._ping_pong_loop = None
+                self._ping_pong_loop_points = None
+                self._tracks_are_set_by_hand = True
+                
+            
+            if self._tracks_are_set_by_hand:
+                
+                self._mpv_mediator.SetTracks( 'auto', 'auto' )
+                
+                self._tracks_are_set_by_hand = False
+                
+            
+            self._ping_pong_loop_time_hold = None
             
             if self._media is None:
                 
@@ -1847,6 +2164,146 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
             # libmpv core probably shut down
             pass
             
+        
+    
+    def StartPingPongLoop( self, a_ms: int | None, b_ms: int ) -> bool:
+        
+        # plays A to B and back again, round and round, from frames mpv holds in memory. it starts from A, playing forwards
+        # mpv cannot turn round on the spot. changing its play direction is a seek, and it has to decode its way back to where it was, which is a visible stall at each end of the loop
+        # returns False if we cannot do it for this file or this loop. it ends with StopPingPongLoop, a seek, a frame step, or a new file
+        
+        if self._currently_in_media_load_error_state or self._media is None or not self._file_header_is_loaded or self._disallow_seek_on_this_file:
+            
+            return False
+            
+        
+        try:
+            
+            self.StopPingPongLoop()
+            
+            fps = self._GetPingPongLoopFPS()
+            
+            video_track_id = self._mpv_mediator.GetProperty( 'vid' )
+            audio_track_id = self._mpv_mediator.GetProperty( 'aid' )
+            hardware_decoder = self._mpv_mediator.GetProperty( 'hwdec-current' )
+            pixel_format = self._mpv_mediator.GetProperty( 'video-params/pixelformat' )
+            
+            # 'no' comes back as False, which is an int, but we want an actual track
+            if fps is None or type( video_track_id ) is not int:
+                
+                return False
+                
+            
+            if type( audio_track_id ) is not int:
+                
+                audio_track_id = None
+                
+            
+            if isinstance( hardware_decoder, str ) and hardware_decoder not in ( '', 'no' ) and not hardware_decoder.endswith( '-copy' ):
+                
+                # these frames stay on the graphics card, where the filters cannot get at them
+                return False
+                
+            
+            ( first_frame_index, last_frame_index ) = GetPingPongLoopFrameRange( a_ms, b_ms, fps )
+            
+            num_frames = last_frame_index - first_frame_index + 1
+            
+            if num_frames < 2 or num_frames > PING_PONG_LOOP_MAX_NUM_FRAMES:
+                
+                return False
+                
+            
+            ( width, height ) = self._media.GetResolution()
+            
+            if width is None or height is None:
+                
+                return False
+                
+            
+            if EstimatePingPongLoopBufferBytes( num_frames, width, height, pixel_format if isinstance( pixel_format, str ) else None ) > PING_PONG_LOOP_MAX_BUFFER_BYTES:
+                
+                return False
+                
+            
+            self.SetPlaybackReversed( False )
+            
+            if self._playback_reversed:
+                
+                return False
+                
+            
+            start_s = first_frame_index / fps
+            
+            self._mpv_mediator.SetComplexFilterGraph( GetPingPongLoopFilterGraph( first_frame_index, last_frame_index, fps, video_track_id, audio_track_id ) )
+            
+            # this resets the graph, and it starts filling itself from the first frame
+            self._mpv_mediator.Seek( start_s )
+        
+        except mpv.ShutdownError:
+            
+            # libmpv core probably shut down
+            return False
+            
+        
+        self._ping_pong_loop = ( first_frame_index, last_frame_index, fps )
+        self._ping_pong_loop_points = ( a_ms, b_ms )
+        self._ping_pong_loop_tracks = ( video_track_id, audio_track_id )
+        
+        self._ping_pong_loop_time_hold = ( start_s, start_s, HydrusTime.GetNowFloat() + PING_PONG_LOOP_TIME_HOLD_PERIOD_S )
+        
+        return True
+        
+    
+    def StopPingPongLoop( self, seek_ms: float | None = None ):
+        
+        # back to normal playback, at the given time or from where the loop has got to
+        if self._ping_pong_loop is None:
+            
+            return
+            
+        
+        if seek_ms is None:
+            
+            seek_s = self._GetPlaybackTime()
+            
+            if seek_s is None:
+                
+                ( first_frame_index, last_frame_index, fps ) = self._ping_pong_loop
+                
+                seek_s = first_frame_index / fps
+            
+        
+        else:
+            
+            seek_s = HydrusTime.SecondiseMSFloat( seek_ms )
+            
+        
+        ( video_track_id, audio_track_id ) = self._ping_pong_loop_tracks
+        
+        self._ping_pong_loop = None
+        self._ping_pong_loop_points = None
+        
+        try:
+            
+            self._mpv_mediator.SetComplexFilterGraph( '' )
+            
+            # mpv leaves nothing selected after a graph, and 'auto' does not pick anything again until the next file
+            # setting a track to what we set it to last time does nothing, so we clear them first
+            self._mpv_mediator.SetTracks( 'no', 'no' )
+            self._mpv_mediator.SetTracks( str( video_track_id ), 'no' if audio_track_id is None else str( audio_track_id ) )
+            
+            self._tracks_are_set_by_hand = True
+            
+            self._mpv_mediator.Seek( seek_s )
+        
+        except mpv.ShutdownError:
+            
+            # libmpv core probably shut down
+            return
+            
+        
+        self._ping_pong_loop_time_hold = ( seek_s, seek_s, HydrusTime.GetNowFloat() + PING_PONG_LOOP_TIME_HOLD_PERIOD_S )
         
     
     def StartCleanBeforeDestroy( self ):
