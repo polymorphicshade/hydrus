@@ -6,6 +6,7 @@ from hydrus.core.networking import HydrusServerRequest
 from hydrus.client import ClientAPI
 from hydrus.client import ClientGlobals as CG
 from hydrus.client import ClientMediaViewerLayouts
+from hydrus.client.media import ClientMediaSlideshows
 from hydrus.client.networking.api import ClientLocalServerCore
 from hydrus.client.networking.api import ClientLocalServerResources
 from hydrus.client.networking.api import ClientLocalServerResourcesManagePlaylists
@@ -103,6 +104,81 @@ class HydrusResourceClientAPIRestrictedManageMediaViewersApplyScreenZoom( Hydrus
         if canvas_key is not None and num_media_viewers == 0:
             
             raise HydrusExceptions.NotFoundException( f'Did not find a media viewer for "{canvas_key.hex()}"!' )
+            
+        
+        return ClientLocalServerCore.GenerateJSONResponse( request, { 'num_media_viewers' : num_media_viewers } )
+        
+    
+
+class HydrusResourceClientAPIRestrictedManageMediaViewersGetSlideshows( HydrusResourceClientAPIRestrictedManageMediaViewers ):
+    
+    def _threadDoGETJob( self, request: HydrusServerRequest.HydrusRequest ):
+        
+        def do_it():
+            
+            from hydrus.client.gui import ClientGUIMediaViewerSlideshows
+            
+            return ClientGUIMediaViewerSlideshows.GetOpenMediaViewersSlideshows()
+            
+        
+        media_viewers = CG.client_controller.CallBlockingToQtTLW( do_it )
+        
+        return ClientLocalServerCore.GenerateJSONResponse( request, { 'media_viewers' : media_viewers } )
+        
+    
+
+class HydrusResourceClientAPIRestrictedManageMediaViewersStartSlideshow( HydrusResourceClientAPIRestrictedManageMediaViewers ):
+    
+    def _threadDoPOSTJob( self, request: HydrusServerRequest.HydrusRequest ):
+        
+        # seconds. 0 plays each file once through, and moves on as soon as it is done
+        period = request.parsed_request_args.GetValue( 'period', float )
+        
+        if not ClientMediaSlideshows.SlideshowPeriodIsValid( period ):
+            
+            raise HydrusExceptions.BadRequestException( f'The slideshow period cannot be less than 0, but it was {period}!' )
+            
+        
+        # with no canvas_key, it is every media viewer that is open
+        canvas_key = request.parsed_request_args.GetValueOrNone( 'canvas_key', bytes )
+        
+        def do_it():
+            
+            from hydrus.client.gui import ClientGUIMediaViewerSlideshows
+            
+            return ClientGUIMediaViewerSlideshows.StartOpenMediaViewersSlideshow( period, canvas_key = canvas_key )
+            
+        
+        num_media_viewers = CG.client_controller.CallBlockingToQtTLW( do_it )
+        
+        if canvas_key is not None and num_media_viewers == 0:
+            
+            raise HydrusExceptions.NotFoundException( f'Did not find a media viewer that can run a slideshow for "{canvas_key.hex()}"!' )
+            
+        
+        return ClientLocalServerCore.GenerateJSONResponse( request, { 'num_media_viewers' : num_media_viewers } )
+        
+    
+
+class HydrusResourceClientAPIRestrictedManageMediaViewersStopSlideshow( HydrusResourceClientAPIRestrictedManageMediaViewers ):
+    
+    def _threadDoPOSTJob( self, request: HydrusServerRequest.HydrusRequest ):
+        
+        # with no canvas_key, it is every media viewer that is open
+        canvas_key = request.parsed_request_args.GetValueOrNone( 'canvas_key', bytes )
+        
+        def do_it():
+            
+            from hydrus.client.gui import ClientGUIMediaViewerSlideshows
+            
+            return ClientGUIMediaViewerSlideshows.StopOpenMediaViewersSlideshow( canvas_key = canvas_key )
+            
+        
+        num_media_viewers = CG.client_controller.CallBlockingToQtTLW( do_it )
+        
+        if canvas_key is not None and num_media_viewers == 0:
+            
+            raise HydrusExceptions.NotFoundException( f'Did not find a media viewer that can run a slideshow for "{canvas_key.hex()}"!' )
             
         
         return ClientLocalServerCore.GenerateJSONResponse( request, { 'num_media_viewers' : num_media_viewers } )

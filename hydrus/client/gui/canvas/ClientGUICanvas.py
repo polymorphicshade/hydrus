@@ -66,6 +66,7 @@ from hydrus.client.media import ClientMediaResult
 from hydrus.client.media import ClientMediaResultPrettyInfo
 from hydrus.client.media import ClientMediaScreenZooms
 from hydrus.client.media import ClientMediaSingle
+from hydrus.client.media import ClientMediaSlideshows
 from hydrus.client.metadata import ClientContentUpdates
 from hydrus.client.metadata import ClientRatings
 from hydrus.client.metadata import ClientTags
@@ -1778,6 +1779,11 @@ class Canvas( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         
         # whether the user can go to the next/previous file themselves. the hover window's navigation buttons follow this
         return True
+        
+    
+    def GetSlideshowPeriod( self ) -> float | None:
+        
+        return None
         
     
     def SlideshowIsRunning( self ) -> bool:
@@ -4856,7 +4862,9 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
         
         self._slideshow_is_running = False
         self._last_slideshow_switch_time = 0
-        self._normal_slideshow_period = 0.0
+        
+        # None until a slideshow is started. 0 plays each file once through, and moves on when it is done
+        self._normal_slideshow_period: float | None = None
         self._special_slideshow_period_for_current_media = None
         
         # while a sub-window like manage tags is open, the slideshow holds still. this is when that started
@@ -5005,6 +5013,12 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
         
     
     def _CalculateAnySpecialSlideshowPeriodForCurrentMedia( self ):
+        
+        if self._SlideshowPlaysEachFileOnceThrough():
+            
+            # each file goes when it is done, which _DoSlideshowWork sorts out as it goes
+            return
+            
         
         if self._media_container.CurrentlyPresentingMediaWithDuration():
             
@@ -5210,9 +5224,19 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
                 return
                 
             
-            if self._media_container.CurrentlyPresentingMediaWithDuration():
+            presenting_media_with_duration = self._media_container.CurrentlyPresentingMediaWithDuration()
+            
+            plays_each_file_once_through = self._SlideshowPlaysEachFileOnceThrough()
+            
+            if presenting_media_with_duration:
                 
-                if self._slideshow_is_playing_once_through:
+                if plays_each_file_once_through:
+                    
+                    # it stops at the end, rather than looping round. a player can forget that when it loads a file, so we keep telling it
+                    self._media_container.StopForSlideshow( True )
+                    
+                
+                if plays_each_file_once_through or self._slideshow_is_playing_once_through:
                     
                     if not self._media_container.HasPlayedOnceThrough():
                         
@@ -5221,14 +5245,21 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
                     
                 
             
-            if self._special_slideshow_period_for_current_media is None:
+            if plays_each_file_once_through:
                 
-                time_to_switch = self._last_slideshow_switch_time + self._normal_slideshow_period
+                # a file with playback goes as soon as it is done. an image has nothing to play, so it stays up like it would in a playlist
+                period = 0.0 if presenting_media_with_duration else ClientMediaSlideshows.GetStillPeriod()
+                
+            elif self._special_slideshow_period_for_current_media is None:
+                
+                period = self._normal_slideshow_period
                 
             else:
                 
-                time_to_switch = self._last_slideshow_switch_time + self._special_slideshow_period_for_current_media
+                period = self._special_slideshow_period_for_current_media
                 
+            
+            time_to_switch = self._last_slideshow_switch_time + period
             
             if not HydrusTime.TimeHasPassedFloat( time_to_switch ):
                 
@@ -5382,7 +5413,7 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
             
         else:
             
-            if self._normal_slideshow_period == 0.0:
+            if self._normal_slideshow_period is None:
                 
                 slideshow_durations = CG.client_controller.new_options.GetSlideshowDurations()
                 
@@ -5481,11 +5512,16 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
         CG.client_controller.Write( 'playlist_remove_file', playlist_id, hash )
         
     
+    def _SlideshowPlaysEachFileOnceThrough( self ) -> bool:
+        
+        return self._normal_slideshow_period == ClientMediaSlideshows.SLIDESHOW_PERIOD_ONCE_THROUGH
+        
+    
     def _StartSlideshow( self, period: float ):
         
         self._StopSlideshow()
         
-        if period > 0.0:
+        if ClientMediaSlideshows.SlideshowPeriodIsValid( period ):
             
             self._normal_slideshow_period = period
             
@@ -5528,7 +5564,7 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
         
         try:
             
-            message = 'Enter the interval, in seconds.'
+            message = 'Enter the interval, in seconds. 0 plays each file once through, without looping, and moves on as soon as it is done.'
             
             period_str = ClientGUIDialogsQuick.EnterText( self, message, default = '15.0', min_char_width = 12 )
             
@@ -5544,6 +5580,13 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
         except Exception as e:
             
             ClientGUIDialogsMessage.ShowWarning( self, 'Could not parse that slideshow period!' )
+            
+            return
+            
+        
+        if not ClientMediaSlideshows.SlideshowPeriodIsValid( period ):
+            
+            ClientGUIDialogsMessage.ShowWarning( self, 'The slideshow period cannot be less than 0!' )
             
             return
             
@@ -5669,6 +5712,21 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
             
         
         return False
+        
+    
+    def GetSlideshowPeriod( self ) -> float | None:
+        
+        return self._normal_slideshow_period
+        
+    
+    def StartSlideshow( self, period: float ):
+        
+        self._StartSlideshow( period )
+        
+    
+    def StopSlideshow( self ):
+        
+        self._StopSlideshow()
         
     
     def SlideshowIsShuffling( self ):
@@ -6319,8 +6377,6 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
 PLAYLIST_SEEK_GRACE_PERIOD_S = 0.5
 # a player that is still loading can drop a seek, so we try a few times
 PLAYLIST_SEEK_MAX_ATTEMPTS = 5
-# how long a file with no duration, like an image, stays up if there is no slideshow duration in the options to use
-PLAYLIST_DEFAULT_STILL_PERIOD_S = 5.0
 
 # the 'play each item n times' choices in the playlist menu. anything else is 'custom'
 PLAYLIST_ITEM_LOOP_TIMES_CHOICES = ( 2, 3, 5 )
@@ -6847,14 +6903,7 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
             return self._playlist_item_loop_seconds
             
         
-        slideshow_durations = CG.client_controller.new_options.GetSlideshowDurations()
-        
-        if len( slideshow_durations ) > 0:
-            
-            return slideshow_durations[0]
-            
-        
-        return PLAYLIST_DEFAULT_STILL_PERIOD_S
+        return ClientMediaSlideshows.GetStillPeriod()
         
     
     def _GetPlayOrder( self ) -> list[ int ]:

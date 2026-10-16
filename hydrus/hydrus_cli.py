@@ -774,6 +774,33 @@ def BuildRequest( args ) -> APIRequest:
             
             return APIRequest( 'POST', '/manage_media_viewers/set_ab_repeat_ping_pong', params )
             
+        elif sub == 'slideshows':
+            
+            return APIRequest( 'GET', '/manage_media_viewers/get_slideshows' )
+            
+        elif sub == 'slideshow':
+            
+            params = {}
+            
+            if args.viewer is not None:
+                
+                params[ 'canvas_key' ] = args.viewer.lower()
+                
+            
+            if args.action == 'stop':
+                
+                return APIRequest( 'POST', '/manage_media_viewers/stop_slideshow', params )
+                
+            
+            if args.period is None:
+                
+                raise CLIError( 'Please say how many seconds each file stays up for! 0 plays each one once through.' )
+                
+            
+            params[ 'period' ] = args.period
+            
+            return APIRequest( 'POST', '/manage_media_viewers/start_slideshow', params )
+            
         elif sub == 'screens':
             
             return APIRequest( 'GET', '/manage_media_viewers/get_screens' )
@@ -1033,6 +1060,11 @@ def GetArgumentParser() -> argparse.ArgumentParser:
     viewers.add_parser( 'screens', help = 'the screens, and which one each open media viewer is on' )
     p = viewers.add_parser( 'screen-zoom', help = 'zoom and pan the files in media viewers how they are on another screen, and keep them like that on the screen they are on' )
     p.add_argument( 'screen', help = 'the screen\'s name, from "viewers screens"' )
+    p.add_argument( '--viewer', metavar = 'CANVAS_KEY', help = 'just this media viewer, by its canvas_key from "viewers list". Default is all that are open' )
+    viewers.add_parser( 'slideshows', help = 'whether each open media viewer\'s slideshow is running, and its period' )
+    p = viewers.add_parser( 'slideshow', help = 'start or stop media viewers\' slideshows' )
+    p.add_argument( 'action', choices = [ 'start', 'stop' ] )
+    p.add_argument( 'period', nargs = '?', type = float, help = 'for start, seconds each file stays up. 0 plays each file once through, without looping, and moves on when it is done' )
     p.add_argument( '--viewer', metavar = 'CANVAS_KEY', help = 'just this media viewer, by its canvas_key from "viewers list". Default is all that are open' )
     
     return parser

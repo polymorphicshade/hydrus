@@ -6,7 +6,7 @@ title: This Fork's Client API
 
 These endpoints are for the features this fork adds: counters, playlists, virtual paths, snapshots, what the media viewer remembers for each file, tag presets, screen locations, media viewer layouts, and exporting video, audio, and playlists. They work just like hydrus's own [Client API](developer_api.md): the same access keys and session keys, json in and out, and the same errors. The [command line tool](command_line.md) can use all of them.
 
-`/api_version` has a `fork_api_version`, which goes up when these change. It is `3` now.
+`/api_version` has a `fork_api_version`, which goes up when these change. It is `4` now.
 
 ## permissions
 
@@ -356,6 +356,22 @@ The screens connected now, the main one first, with where they are on the deskto
 ### **POST `/manage_media_viewers/apply_screen_zoom`**
 
 Arguments: `screen_name`, and `canvas_key` (optional, default every media viewer that is open). Like the media viewer's _screen->zoom and pan as on_: the file goes how it is zoomed and panned on that screen, and that is saved for the screen the media viewer is on. A screen it has nothing for is the default zoom, centered. Media viewers that do not remember zooms, like the duplicate filter, and ones set to ignore saved zooms leave their files alone. Returns `num_media_viewers`. A canvas_key for a media viewer that is not open gives a 404.
+
+### **GET `/manage_media_viewers/get_slideshows`**
+
+The slideshow of each media viewer that is open now. A null `period` is one that has not had a slideshow yet. A `period` of 0 is one that plays each file once through. Playlists and the filters cannot run a slideshow, so they have `supports_slideshow` false.
+
+```json
+{ "media_viewers" : [ { "canvas_key" : "a1b2...", "supports_slideshow" : true, "running" : true, "period" : 0.0 } ] }
+```
+
+### **POST `/manage_media_viewers/start_slideshow`**
+
+Arguments: `period`, in seconds, and `canvas_key` (optional, default every media viewer that is open that can run one). A `period` of 0 plays each file once through, without looping, and moves on as soon as it is done. Images, which have nothing to play, stay up for the first of your slideshow durations, like they do in a playlist. Returns `num_media_viewers`, how many it was started in. A canvas_key for a media viewer that is not open, or cannot run a slideshow, gives a 404.
+
+### **POST `/manage_media_viewers/stop_slideshow`**
+
+Arguments: `canvas_key` (optional, default every media viewer that is open that can run one). Returns `num_media_viewers`. A canvas_key for a media viewer that is not open, or cannot run a slideshow, gives a 404.
 
 ### **GET `/manage_media_viewers/get_ab_repeat`**
 

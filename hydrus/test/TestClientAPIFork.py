@@ -1089,6 +1089,78 @@ class TestClientAPIFork( unittest.TestCase ):
         
         self.assertEqual( status, 403 )
         
+        # slideshows
+        
+        from hydrus.client.gui import ClientGUIMediaViewerSlideshows
+        
+        slideshows = [ { 'canvas_key' : canvas_key.hex(), 'supports_slideshow' : True, 'running' : True, 'period' : 0.0 } ]
+        
+        with mock.patch.object( ClientGUIMediaViewerSlideshows, 'GetOpenMediaViewersSlideshows', return_value = slideshows ):
+            
+            ( status, body ) = api_call( 'GET', '/manage_media_viewers/get_slideshows', self.pages_only )
+            
+        
+        self.assertEqual( status, 200 )
+        self.assertEqual( body, { 'media_viewers' : slideshows } )
+        
+        # 0 plays each file once through
+        with mock.patch.object( ClientGUIMediaViewerSlideshows, 'StartOpenMediaViewersSlideshow', return_value = 2 ) as start_slideshow:
+            
+            ( status, body ) = api_call( 'POST', '/manage_media_viewers/start_slideshow', self.pages_only, { 'period' : 0 } )
+            
+        
+        self.assertEqual( status, 200 )
+        self.assertEqual( body, { 'num_media_viewers' : 2 } )
+        start_slideshow.assert_called_once_with( 0.0, canvas_key = None )
+        
+        with mock.patch.object( ClientGUIMediaViewerSlideshows, 'StartOpenMediaViewersSlideshow', return_value = 1 ) as start_slideshow:
+            
+            ( status, body ) = api_call( 'POST', '/manage_media_viewers/start_slideshow', self.pages_only, { 'period' : 2.5, 'canvas_key' : canvas_key.hex() } )
+            
+        
+        self.assertEqual( status, 200 )
+        start_slideshow.assert_called_once_with( 2.5, canvas_key = canvas_key )
+        
+        with mock.patch.object( ClientGUIMediaViewerSlideshows, 'StartOpenMediaViewersSlideshow', return_value = 1 ) as start_slideshow:
+            
+            for bad_params in ( { 'period' : -1 }, {} ):
+                
+                ( status, body ) = api_call( 'POST', '/manage_media_viewers/start_slideshow', self.pages_only, bad_params )
+                
+                self.assertEqual( status, 400, bad_params )
+                
+            
+            start_slideshow.assert_not_called()
+            
+        
+        # a media viewer that is not open, or cannot run one
+        with mock.patch.object( ClientGUIMediaViewerSlideshows, 'StartOpenMediaViewersSlideshow', return_value = 0 ):
+            
+            ( status, body ) = api_call( 'POST', '/manage_media_viewers/start_slideshow', self.pages_only, { 'period' : 0, 'canvas_key' : canvas_key.hex() } )
+            
+        
+        self.assertEqual( status, 404 )
+        
+        with mock.patch.object( ClientGUIMediaViewerSlideshows, 'StopOpenMediaViewersSlideshow', return_value = 3 ) as stop_slideshow:
+            
+            ( status, body ) = api_call( 'POST', '/manage_media_viewers/stop_slideshow', self.pages_only, {} )
+            
+        
+        self.assertEqual( status, 200 )
+        self.assertEqual( body, { 'num_media_viewers' : 3 } )
+        stop_slideshow.assert_called_once_with( canvas_key = None )
+        
+        with mock.patch.object( ClientGUIMediaViewerSlideshows, 'StopOpenMediaViewersSlideshow', return_value = 0 ):
+            
+            ( status, body ) = api_call( 'POST', '/manage_media_viewers/stop_slideshow', self.pages_only, { 'canvas_key' : canvas_key.hex() } )
+            
+        
+        self.assertEqual( status, 404 )
+        
+        ( status, body ) = api_call( 'POST', '/manage_media_viewers/start_slideshow', self.counters_only, { 'period' : 0 } )
+        
+        self.assertEqual( status, 403 )
+        
         # screens, and showing files how they are on another one
         
         from hydrus.client.gui import ClientGUIMediaViewerScreens
@@ -1219,6 +1291,15 @@ class TestClientAPIForkCommandLine( unittest.TestCase ):
         self.assertEqual( self._GetRequest( [ 'viewers', 'ab-repeat' ] ), hydrus_cli.APIRequest( 'GET', '/manage_media_viewers/get_ab_repeat' ) )
         self.assertEqual( self._GetRequest( [ 'viewers', 'ping-pong', 'on' ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/set_ab_repeat_ping_pong', { 'ping_pong' : True } ) )
         self.assertEqual( self._GetRequest( [ 'viewers', 'ping-pong', 'off', '--viewer', hash_hex.upper() ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/set_ab_repeat_ping_pong', { 'ping_pong' : False, 'canvas_key' : hash_hex } ) )
+        self.assertEqual( self._GetRequest( [ 'viewers', 'slideshows' ] ), hydrus_cli.APIRequest( 'GET', '/manage_media_viewers/get_slideshows' ) )
+        self.assertEqual( self._GetRequest( [ 'viewers', 'slideshow', 'start', '0' ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/start_slideshow', { 'period' : 0.0 } ) )
+        self.assertEqual( self._GetRequest( [ 'viewers', 'slideshow', 'start', '2.5', '--viewer', hash_hex.upper() ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/start_slideshow', { 'period' : 2.5, 'canvas_key' : hash_hex } ) )
+        self.assertEqual( self._GetRequest( [ 'viewers', 'slideshow', 'stop' ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/stop_slideshow', {} ) )
+        
+        with self.assertRaises( hydrus_cli.CLIError ):
+            
+            self._GetRequest( [ 'viewers', 'slideshow', 'start' ] )
+            
         self.assertEqual( self._GetRequest( [ 'viewers', 'screens' ] ), hydrus_cli.APIRequest( 'GET', '/manage_media_viewers/get_screens' ) )
         self.assertEqual( self._GetRequest( [ 'viewers', 'screen-zoom', '\\\\.\\DISPLAY2' ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/apply_screen_zoom', { 'screen_name' : '\\\\.\\DISPLAY2' } ) )
         self.assertEqual( self._GetRequest( [ 'viewers', 'screen-zoom', 'DISPLAY2', '--viewer', hash_hex.upper() ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/apply_screen_zoom', { 'screen_name' : 'DISPLAY2', 'canvas_key' : hash_hex } ) )

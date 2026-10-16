@@ -5,13 +5,11 @@ from hydrus.core import HydrusTime
 from hydrus.client import ClientApplicationCommand as CAC
 from hydrus.client import ClientGlobals as CG
 from hydrus.client.gui import ClientGUIMenus
+from hydrus.client.media import ClientMediaSlideshows
 
 def AppendSlideshowMenu( win: CAC.ApplicationCommandProcessorMixin, menu: QW.QMenu, slideshow_is_running: bool, do_submenu = True, slideshow_duration = None, slideshow_is_shuffling = False, slideshow_is_playing_once_through = False ):
     
-    if slideshow_duration == 0.0:
-        
-        slideshow_duration = None
-        
+    # slideshow_duration is None if no slideshow has been started yet. 0 is one that plays each file once through
     
     slideshow_menu_label = 'slideshow running' if slideshow_is_running else 'start slideshow'
     
@@ -30,13 +28,13 @@ def AppendSlideshowMenu( win: CAC.ApplicationCommandProcessorMixin, menu: QW.QMe
     
     if slideshow_is_running:
         
-        ClientGUIMenus.AppendMenuItem( slideshow_menu, 'stop' + ( '' if slideshow_duration is None else ( ' (' + HydrusTime.TimeDeltaToPrettyTimeDelta( slideshow_duration ) + ')' ) ), 'Stop the current slideshow.', win.ProcessApplicationCommand, CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_PAUSE_PLAY_SLIDESHOW ) )
+        ClientGUIMenus.AppendMenuItem( slideshow_menu, 'stop' + ( '' if slideshow_duration is None else ( ' (' + ClientMediaSlideshows.ConvertSlideshowPeriodToPretty( slideshow_duration ) + ')' ) ), 'Stop the current slideshow.', win.ProcessApplicationCommand, CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_PAUSE_PLAY_SLIDESHOW ) )
         
     else:
         
         if slideshow_duration is not None:
             
-            ClientGUIMenus.AppendMenuItem( slideshow_menu, 'resume at ' + HydrusTime.TimeDeltaToPrettyTimeDelta( slideshow_duration ), 'Resume at the previous slideshow period.', win.ProcessApplicationCommand, CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_PAUSE_PLAY_SLIDESHOW ) )
+            ClientGUIMenus.AppendMenuItem( slideshow_menu, 'resume at ' + ClientMediaSlideshows.ConvertSlideshowPeriodToPretty( slideshow_duration ), 'Resume at the previous slideshow period.', win.ProcessApplicationCommand, CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_PAUSE_PLAY_SLIDESHOW ) )
             
         
     
@@ -49,6 +47,9 @@ def AppendSlideshowMenu( win: CAC.ApplicationCommandProcessorMixin, menu: QW.QMe
         ClientGUIMenus.AppendMenuItem( slideshow_menu, pretty_duration, f'Start a slideshow that changes media every {pretty_duration}.', win.ProcessApplicationCommand, CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_START_SLIDESHOW, slideshow_duration ) )
         
     
+    pretty_still_period = HydrusTime.TimeDeltaToPrettyTimeDelta( ClientMediaSlideshows.GetStillPeriod() )
+    
+    ClientGUIMenus.AppendMenuItem( slideshow_menu, ClientMediaSlideshows.ConvertSlideshowPeriodToPretty( ClientMediaSlideshows.SLIDESHOW_PERIOD_ONCE_THROUGH ), f'Start a slideshow that plays each file once through, without looping, and moves on as soon as it is done--a 0 second slideshow. Images, which have nothing to play, stay up for {pretty_still_period}, the first of your slideshow durations.', win.ProcessApplicationCommand, CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_START_SLIDESHOW, ClientMediaSlideshows.SLIDESHOW_PERIOD_ONCE_THROUGH ) )
     ClientGUIMenus.AppendMenuItem( slideshow_menu, 'very fast', 'Start a very fast slideshow.', win.ProcessApplicationCommand, CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_START_SLIDESHOW, 0.08 ) )
     ClientGUIMenus.AppendMenuItem( slideshow_menu, 'custom interval', 'Start a slideshow with a custom interval.', win.ProcessApplicationCommand, CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_START_SLIDESHOW ) )
     

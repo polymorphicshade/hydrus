@@ -115,6 +115,12 @@ python hydrus_cli.py viewers open-layout @viewers.json
 python hydrus_cli.py viewers ab-repeat
 python hydrus_cli.py viewers ping-pong on
 python hydrus_cli.py viewers ping-pong off --viewer <canvas_key>
+
+# slideshows. 0 seconds plays each file once through, without looping, and moves on when it is done
+python hydrus_cli.py viewers slideshows
+python hydrus_cli.py viewers slideshow start 0
+python hydrus_cli.py viewers slideshow start 10 --viewer <canvas_key>
+python hydrus_cli.py viewers slideshow stop
 ```
 
 ## everything else

@@ -797,7 +797,8 @@ class CanvasHoverFrameTop( CanvasHoverFrame ):
         self._current_zoom = 1.0
         self._current_index_string = ''
         
-        self._slideshow_period = 0.0
+        # None until a slideshow is started
+        self._slideshow_period: float | None = None
         
         self._top_left_hbox = QP.HBoxLayout()
         self._top_center_hbox = QP.HBoxLayout()
@@ -1615,7 +1616,7 @@ class CanvasHoverFrameTop( CanvasHoverFrame ):
         self._SizeAndPosition()
         
     
-    def SetSlideshowPeriod( self, value: float ):
+    def SetSlideshowPeriod( self, value: float | None ):
         
         self._slideshow_period = value
         
