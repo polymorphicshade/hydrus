@@ -131,7 +131,7 @@ SOFTWARE_VERSION = 688
 CLIENT_API_VERSION = 95
 
 # this fork's own Client API endpoints. it goes up when they change, separately from hydrus's version above
-CLIENT_API_FORK_VERSION = 2
+CLIENT_API_FORK_VERSION = 3
 
 SERVER_THUMBNAIL_DIMENSIONS = ( 200, 200 )
 

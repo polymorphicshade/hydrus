@@ -4101,6 +4101,7 @@ class DB( HydrusDB.HydrusDB ):
                 'file_query_ids' : self.modules_files_query.GetHashIdsFromQuery,
                 'file_relationships_for_api' : self.modules_files_duplicates_storage.GetFileRelationshipsForAPI,
                 'file_viewer_rotation' : self.modules_files_viewer_rotations.GetViewerRotation,
+                'file_viewer_screen_zooms' : self.modules_files_viewer_zooms.GetViewerScreenZooms,
                 'file_viewer_zoom' : self.modules_files_viewer_zooms.GetViewerZoom,
                 'file_zoom_timestamps' : self.modules_files_zoom_timestamps.GetZoomTimestamps,
                 'filter_existing_tags' : self.modules_mappings_counts_update.FilterExistingTags,

@@ -39,6 +39,7 @@ from hydrus.client.gui.media import ClientGUIMediaVolume
 from hydrus.client.media import ClientMedia
 from hydrus.client.media import ClientMediaPlaybackFreezes
 from hydrus.client.media import ClientMediaResult
+from hydrus.client.media import ClientMediaScreenZooms
 from hydrus.client.media import ClientMediaScriptedEvents
 from hydrus.client.media import ClientMediaSingle
 
@@ -2073,10 +2074,18 @@ class MediaContainer( QW.QWidget ):
         # and where it was panned to, saved with the zoom. the part of the file in the middle of the window, as a fraction of its width and height. None is centered
         self._saved_center: tuple[ float, float ] | None = None
         
+        # the file has its own zoom and pan for each screen it was shown on. this is all of them, screen_name -> ( zoom, center ), so moving the media viewer to another screen can put the file back how it was there
+        # _saved_zoom and _saved_center are the ones for the screen we are on, which is _screen_name
+        self._screen_zooms: dict[ str, ClientMediaScreenZooms.ScreenZoom ] = {}
+        self._screen_name = ClientMediaScreenZooms.ANY_SCREEN
+        
         # a pan is lots of little moves, so we save it once they stop for a moment. this is bumped on each one, so only the last one saves
         self._pan_save_id = 0
         
-        # after a move to a screen location, the file sits at the default zoom until the user zooms or we go to another file. its saved zoom stays in the db for next time
+        # the pan_save_id of a pan that is waiting to save, so a move to another screen can save it for the screen it was made on first
+        self._pan_save_pending_id: int | None = None
+        
+        # after a move to a screen location on the same screen, the file sits at the default zoom until the user zooms, we go to another file, or the media viewer goes to another screen. its saved zoom stays in the db for next time
         self._holding_default_zoom = False
         
         # degrees clockwise that the current file is turned. each file has its own, saved in the db
@@ -2093,13 +2102,13 @@ class MediaContainer( QW.QWidget ):
         self._standby_media: ClientMediaSingle.MediaSingle | None = None
         self._standby_start_ms: int | None = None
         
-        # the standby file's saved zoom and zoom timestamp rows, looked up ahead of time, so its zoom is right from the first frame. ( hash, ( saved_zoom, saved_center ), zoom_timestamp_rows ). None until they come back
-        self._standby_zoom_data: tuple[ bytes, tuple, list ] | None = None
+        # the standby file's saved zooms and zoom timestamp rows, looked up ahead of time, so its zoom is right from the first frame. ( hash, screen_zooms, zoom_timestamp_rows ). None until they come back
+        self._standby_zoom_data: tuple[ bytes, dict, list ] | None = None
         self._standby_zoom_data_load_id = 0
         self._standby_zoom_data_hash: bytes | None = None
         
         # what the new file got from that, waiting for its zoom to be set up. ( load_id, value )
-        self._saved_zoom_from_standby: tuple[ int, tuple ] | None = None
+        self._saved_zoom_from_standby: tuple[ int, ClientMediaScreenZooms.ScreenZoom ] | None = None
         self._zoom_timestamp_rows_from_standby: tuple[ int, list ] | None = None
         
         self._zoom_types_to_zooms = {
@@ -2689,6 +2698,9 @@ class MediaContainer( QW.QWidget ):
             
             self._pan_save_id += 1
             
+            # every screen's
+            self._screen_zooms = {}
+            
             if self._saved_zoom is not None or self._saved_center is not None:
                 
                 self._saved_zoom = None
@@ -2947,21 +2959,21 @@ class MediaContainer( QW.QWidget ):
         self._standby_zoom_data_hash = None
         
     
-    def _GetStandbyZoomData( self, hash: bytes ) -> tuple[ float | None, list ] | None:
+    def _GetStandbyZoomData( self, hash: bytes ) -> tuple[ dict[ str, ClientMediaScreenZooms.ScreenZoom ], list ] | None:
         
         if self._standby_zoom_data is None:
             
             return None
             
         
-        ( standby_hash, saved_zoom, zoom_timestamp_rows ) = self._standby_zoom_data
+        ( standby_hash, screen_zooms, zoom_timestamp_rows ) = self._standby_zoom_data
         
         if standby_hash != hash:
             
             return None
             
         
-        return ( saved_zoom, zoom_timestamp_rows )
+        return ( screen_zooms, zoom_timestamp_rows )
         
     
     def _LoadStandbyZoomData( self, media: ClientMediaSingle.MediaSingle ):
@@ -2986,10 +2998,10 @@ class MediaContainer( QW.QWidget ):
         
         def work_callable():
             
-            saved_zoom = CG.client_controller.Read( 'file_viewer_zoom', hash ) if remembers_file_zooms else ( None, None )
+            screen_zooms = CG.client_controller.Read( 'file_viewer_screen_zooms', hash ) if remembers_file_zooms else {}
             zoom_timestamp_rows = CG.client_controller.Read( 'file_zoom_timestamps', hash ) if does_zoom_timestamps else []
             
-            return ( saved_zoom, zoom_timestamp_rows )
+            return ( screen_zooms, zoom_timestamp_rows )
             
         
         def publish_callable( result ):
@@ -3000,9 +3012,9 @@ class MediaContainer( QW.QWidget ):
                 return
                 
             
-            ( saved_zoom, zoom_timestamp_rows ) = result
+            ( screen_zooms, zoom_timestamp_rows ) = result
             
-            self._standby_zoom_data = ( hash, saved_zoom, zoom_timestamp_rows )
+            self._standby_zoom_data = ( hash, screen_zooms, zoom_timestamp_rows )
             
         
         job = ClientGUIAsync.AsyncQtJob( self, work_callable, publish_callable )
@@ -3239,12 +3251,17 @@ class MediaContainer( QW.QWidget ):
         self._saved_center = None
         self._saved_zoom_from_standby = None
         
+        self._screen_zooms = {}
+        
         self._holding_default_zoom = False
         
         if self._media is None or not self._remembers_file_zooms:
             
             return
             
+        
+        # the file opens how it was left on the screen we are on
+        self._screen_name = self._GetScreenName()
         
         hash = self._media.GetHash()
         
@@ -3253,19 +3270,21 @@ class MediaContainer( QW.QWidget ):
         if standby_zoom_data is not None:
             
             # we looked it up ahead of time, so it goes on as soon as the new file's zoom is set up, before it is shown
-            ( saved_zoom, zoom_timestamp_rows ) = standby_zoom_data
+            ( screen_zooms, zoom_timestamp_rows ) = standby_zoom_data
             
-            self._saved_zoom_from_standby = ( load_id, saved_zoom )
+            self._screen_zooms = dict( screen_zooms )
+            
+            self._saved_zoom_from_standby = ( load_id, ClientMediaScreenZooms.GetScreenZoom( self._screen_zooms, self._screen_name ) )
             
             return
             
         
         def work_callable():
             
-            return CG.client_controller.Read( 'file_viewer_zoom', hash )
+            return CG.client_controller.Read( 'file_viewer_screen_zooms', hash )
             
         
-        def publish_callable( saved_zoom_and_center ):
+        def publish_callable( screen_zooms ):
             
             # the media changed, or the user zoomed, while we were waiting
             if load_id != self._saved_zoom_load_id:
@@ -3273,7 +3292,10 @@ class MediaContainer( QW.QWidget ):
                 return
                 
             
-            self._SetLoadedSavedZoom( saved_zoom_and_center )
+            self._screen_zooms = dict( screen_zooms )
+            
+            # the screen we are on now, in case the media viewer moved while we were waiting
+            self._SetLoadedSavedZoom( ClientMediaScreenZooms.GetScreenZoom( self._screen_zooms, self._screen_name ) )
             
         
         job = ClientGUIAsync.AsyncQtJob( self, work_callable, publish_callable )
@@ -3385,7 +3407,7 @@ class MediaContainer( QW.QWidget ):
         if standby_zoom_data is not None:
             
             # we looked them up ahead of time. they go on once the new file's zoom is set up, since old ones are converted using it
-            ( saved_zoom, zoom_timestamp_rows ) = standby_zoom_data
+            ( screen_zooms, zoom_timestamp_rows ) = standby_zoom_data
             
             self._zoom_timestamp_rows_from_standby = ( load_id, zoom_timestamp_rows )
             
@@ -3676,15 +3698,24 @@ class MediaContainer( QW.QWidget ):
         
         center = self._GetPanCenterToSave()
         
+        self._holding_default_zoom = False
+        
+        self._WriteScreenZoom( ( zoom, center ) )
+        
+    
+    def _WriteScreenZoom( self, screen_zoom: ClientMediaScreenZooms.ScreenZoom ):
+        
+        # the file's zoom and pan for the screen we are on. the ones for other screens stay as they are
         # anything we are still loading is now out of date
         self._saved_zoom_load_id += 1
         
-        self._saved_zoom = zoom
-        self._saved_center = center
+        ( self._saved_zoom, self._saved_center ) = screen_zoom
         
-        self._holding_default_zoom = False
+        ClientMediaScreenZooms.SetScreenZoom( self._screen_zooms, self._screen_name, screen_zoom )
         
-        CG.client_controller.Write( 'file_viewer_zoom', self._media.GetHash(), zoom, center )
+        ( zoom, center ) = screen_zoom
+        
+        CG.client_controller.Write( 'file_viewer_zoom', self._media.GetHash(), zoom, center, self._screen_name )
         
     
     def _SavePanSoon( self ):
@@ -3700,6 +3731,8 @@ class MediaContainer( QW.QWidget ):
         pan_save_id = self._pan_save_id
         media = self._media
         
+        self._pan_save_pending_id = pan_save_id
+        
         def do_it():
             
             if pan_save_id != self._pan_save_id or media != self._media:
@@ -3707,10 +3740,48 @@ class MediaContainer( QW.QWidget ):
                 return
                 
             
+            self._pan_save_pending_id = None
+            
             self._SaveZoom()
             
         
         CG.client_controller.CallLaterQtSafe( self, PAN_SAVE_DELAY_S, 'save media viewer pan', do_it )
+        
+    
+    def _GetScreenName( self ) -> str:
+        
+        # the monitor the media viewer is on
+        screen = self.window().screen()
+        
+        if screen is None:
+            
+            return ClientMediaScreenZooms.ANY_SCREEN
+            
+        
+        return screen.name()
+        
+    
+    def _ShowScreenZoom( self, screen_zoom: ClientMediaScreenZooms.ScreenZoom ):
+        
+        # the file goes to this zoom and pan. the default zoom, centered, is what it has on a screen it was never zoomed on
+        ( self._saved_zoom, self._saved_center ) = screen_zoom
+        
+        if not self.IsZoomable() or self._ShowsDefaultZoom():
+            
+            return
+            
+        
+        # this takes the saved zoom over the default one, and a position timestamp we are in goes back on at the next check
+        self.ZoomReinit()
+        
+        if self._saved_center is None:
+            
+            self.ResetCenterPosition()
+            
+        else:
+            
+            self._MoveToZoomCenter( self._saved_center )
+            
         
     
     def _GetPanCenterToSave( self ) -> tuple[ float, float ] | None:
@@ -4318,6 +4389,26 @@ class MediaContainer( QW.QWidget ):
         return self.ReadyToSwitchMedia()
         
     
+    def ApplyScreenZoom( self, screen_name: str ):
+        
+        # the file goes how it is on another screen, and that is saved for the screen we are on
+        if self._media is None or not self._remembers_file_zooms or not self.IsZoomable() or self._IgnoresSavedPositions():
+            
+            return
+            
+        
+        # a pan that was about to save would undo this
+        self._pan_save_id += 1
+        
+        self._holding_default_zoom = False
+        
+        screen_zoom = ClientMediaScreenZooms.GetScreenZoom( self._screen_zooms, screen_name )
+        
+        self._WriteScreenZoom( screen_zoom )
+        
+        self._ShowScreenZoom( screen_zoom )
+        
+    
     def AddPlaybackSkip( self, start_ms: int, end_ms: int ):
         
         self._SavePlaybackSkips( MergePlaybackSkips( self._playback_skips + [ ( start_ms, end_ms ) ] ) )
@@ -4548,13 +4639,10 @@ class MediaContainer( QW.QWidget ):
             return
             
         
-        self._saved_zoom_load_id += 1
         self._pan_save_id += 1
         
-        self._saved_zoom = None
-        self._saved_center = None
-        
-        CG.client_controller.Write( 'file_viewer_zoom', self._media.GetHash(), None, None )
+        # just on this screen. the file is at the default zoom here now, whatever it has on other screens
+        self._WriteScreenZoom( ClientMediaScreenZooms.DEFAULT_SCREEN_ZOOM )
         
         self.ZoomReinit()
         
@@ -4564,6 +4652,17 @@ class MediaContainer( QW.QWidget ):
     def GetCanvasZoom( self ) -> float:
         
         return self._zoom_types_to_zooms[ MEDIA_VIEWER_ZOOM_TYPE_CANVAS ]
+        
+    
+    def GetScreenName( self ) -> str:
+        
+        return self._screen_name
+        
+    
+    def GetScreenZooms( self ) -> dict[ str, ClientMediaScreenZooms.ScreenZoom ]:
+        
+        # every screen's zoom and pan for the file, as far as we know
+        return dict( self._screen_zooms )
         
     
     def GetRotation( self ) -> int:
@@ -4965,6 +5064,53 @@ class MediaContainer( QW.QWidget ):
             # we carry on from where playback is, so a new one just behind us does not run until next time round
             self._SetScriptedEvents( scripted_events )
             
+        
+    
+    def NotifyScreenChanged( self, screen_name: str | None = None ):
+        
+        # the media viewer moved onto another monitor, so the file goes how it was left there
+        if screen_name is None:
+            
+            screen_name = self._GetScreenName()
+            
+        
+        if screen_name == self._screen_name:
+            
+            return
+            
+        
+        if self._pan_save_pending_id is not None and self._pan_save_pending_id == self._pan_save_id:
+            
+            # a pan that had not saved yet was made on the screen we were on
+            self._SaveZoom()
+            
+        
+        self._pan_save_pending_id = None
+        self._pan_save_id += 1
+        
+        self._screen_name = screen_name
+        
+        if self._media is None or not self._remembers_file_zooms:
+            
+            return
+            
+        
+        screen_zoom = ClientMediaScreenZooms.GetScreenZoom( self._screen_zooms, screen_name )
+        
+        if self._saved_zoom_from_standby is not None:
+            
+            # the new file's zoom is not set up yet. it goes on with this screen's when it is
+            ( load_id, old_screen_zoom ) = self._saved_zoom_from_standby
+            
+            self._saved_zoom_from_standby = ( load_id, screen_zoom )
+            
+            return
+            
+        
+        # a fresh start on this screen, even after a move to a screen location
+        self._holding_default_zoom = False
+        
+        self._ShowScreenZoom( screen_zoom )
         
     
     def NotifyNewZoomTimestamps( self, hash: bytes, zoom_timestamps: list[ ZoomTimestamp ] ):

@@ -62,6 +62,11 @@ def GetScreenLocationForWindow( window: QW.QWidget, name: str ) -> ClientScreenL
     return ( name, screen.name(), frame_geometry.x() - screen_geometry.x(), frame_geometry.y() - screen_geometry.y(), window.width(), window.height() )
     
 
+def GetTargetScreenName( screen_location: ClientScreenLocations.ScreenLocation ) -> str:
+    
+    return ClientScreenLocations.GetTargetScreenName( screen_location, GetCurrentScreenGeometries() )
+    
+
 def MoveWindowToScreenLocation( win: QW.QWidget, window: QW.QWidget, screen_location: ClientScreenLocations.ScreenLocation ):
     
     ( found_the_screen, x, y, width, height ) = ClientScreenLocations.GetTargetGeometry( screen_location, GetCurrentScreenGeometries() )

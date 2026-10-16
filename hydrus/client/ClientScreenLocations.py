@@ -68,6 +68,19 @@ def GetTargetGeometry( screen_location: ScreenLocation, screens: collections.abc
     return ( found_the_screen, screen_x + x, screen_y + y, width, height )
     
 
+def GetTargetScreenName( screen_location: ScreenLocation, screens: collections.abc.Sequence[ ScreenGeometry ] ) -> str:
+    
+    # the screen a move to this location ends up on. like GetTargetGeometry, the first screen if its own is not connected
+    ( name, screen_name, x, y, width, height ) = screen_location
+    
+    if screen_name in [ screen[0] for screen in screens ]:
+        
+        return screen_name
+        
+    
+    return screens[0][0]
+    
+
 def NormaliseScreenLocationName( name: str ) -> str:
     
     return ' '.join( name.split() )

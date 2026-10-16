@@ -64,6 +64,7 @@ from hydrus.client.media import ClientMediaPlaybackFreezes
 from hydrus.client.media import ClientMediaPlaylists
 from hydrus.client.media import ClientMediaResult
 from hydrus.client.media import ClientMediaResultPrettyInfo
+from hydrus.client.media import ClientMediaScreenZooms
 from hydrus.client.media import ClientMediaSingle
 from hydrus.client.metadata import ClientContentUpdates
 from hydrus.client.metadata import ClientRatings
@@ -874,6 +875,20 @@ class Canvas( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         }
         
     
+    def ApplyScreenZoom( self, screen_name: str ):
+        
+        self._media_container.ApplyScreenZoom( screen_name )
+        
+    
+    def GetScreenAPIInfo( self ) -> dict:
+        
+        return {
+            'canvas_key' : self._canvas_key.hex(),
+            'screen_name' : self._media_container.GetScreenName(),
+            'hash' : None if self._current_media is None else self._current_media.GetHash().hex()
+        }
+        
+    
     def GetCanvasKey( self ):
         
         return self._canvas_key
@@ -937,6 +952,11 @@ class Canvas( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
             
             return self._media_container.MouseIsNearAnimationBar()
             
+        
+    
+    def NotifyScreenChanged( self, screen_name: str ):
+        
+        self._media_container.NotifyScreenChanged( screen_name )
         
     
     def NotifyFilesNeedRedraw( self, hashes ):
@@ -5337,10 +5357,21 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
             return
             
         
+        screen_name_before = self._media_container.GetScreenName()
+        
+        target_screen_name = ClientGUIScreenLocations.GetTargetScreenName( screen_location )
+        
         ClientGUIScreenLocations.MoveWindowToScreenLocation( self, self.window(), screen_location )
         
-        # a new place and size, so a fresh start at the default zoom
-        self._media_container.ResetZoomToDefault()
+        if target_screen_name != screen_name_before:
+            
+            # another monitor, so the file goes how it was left there. the window will tell us it moved too, but maybe not until later
+            self._media_container.NotifyScreenChanged( target_screen_name )
+            
+        else:
+            
+            # a new place and size on the same monitor, so a fresh start at the default zoom
+            self._media_container.ResetZoomToDefault()
         
     
     def _PausePlaySlideshow( self ):
@@ -5786,7 +5817,7 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
                     
                     ClientGUIMenus.AppendSeparator( zoom_menu )
                     
-                    ClientGUIMenus.AppendMenuItem( zoom_menu, "forget this file's zoom and pan", 'This file opens at the zoom and pan you last left it at. Go back to the normal default zoom, centered, and open like that from now on.', self._media_container.ForgetSavedZoom )
+                    ClientGUIMenus.AppendMenuItem( zoom_menu, "forget this file's zoom and pan", 'This file opens at the zoom and pan you last left it at on this screen. Go back to the normal default zoom, centered, and open like that on this screen from now on. Other screens keep theirs.', self._media_container.ForgetSavedZoom )
                     
                 
                 if self._media_container.RemembersFileZooms():
@@ -5841,6 +5872,21 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
             
             ClientGUIMenus.AppendMenuItem( screen_menu, 'save location' + HC.UNICODE_ELLIPSIS, 'Give where this media viewer is on your screens, and its size, a name, so you can snap back to it later.', ClientGUIScreenLocations.SaveScreenLocationForWindow, self, self.window() )
             ClientGUIMenus.AppendMenuItem( screen_menu, 'move to location' + HC.UNICODE_ELLIPSIS, 'Snap this media viewer to one of your saved screen locations, size and all.', self._MoveToScreenLocation )
+            
+            if self._media_container.RemembersFileZooms() and self._media_container.IsZoomable() and not CG.client_controller.new_options.GetBoolean( 'media_viewer_ignore_saved_positions' ):
+                
+                # each file has its own zoom and pan on each screen. this shows it how it is on another one
+                screen_zoom_menu = ClientGUIMenus.GenerateMenu( screen_menu )
+                
+                connected_screen_names = [ screen_name for ( screen_name, x, y, width, height ) in ClientGUIScreenLocations.GetCurrentScreenGeometries() ]
+                
+                for ( label, screen_name ) in ClientMediaScreenZooms.GetScreenZoomChoices( connected_screen_names, self._media_container.GetScreenName(), self._media_container.GetScreenZooms() ):
+                    
+                    ClientGUIMenus.AppendMenuItem( screen_zoom_menu, label, 'Zoom and pan this file how it is on that screen, and keep it like that on this one.', self._media_container.ApplyScreenZoom, screen_name )
+                    
+                
+                ClientGUIMenus.AppendMenu( screen_menu, screen_zoom_menu, 'zoom and pan as on' )
+                
             
             ClientGUIMenus.AppendSeparator( screen_menu )
             

@@ -65,6 +65,7 @@ class TestResetPositions( unittest.TestCase ):
         container._saved_center = ( 0.25, 0.75 )
         container._saved_zoom_load_id = 0
         container._pan_save_id = 0
+        container._screen_zooms = { '' : ( 2.0, ( 0.25, 0.75 ) ), 'DISPLAY2' : ( 0.5, None ) }
         
         container._does_zoom_timestamps = True
         container._zoom_timestamps = [ ( 0, 1.0, None, None, None ) ]
@@ -121,6 +122,8 @@ class TestResetPositions( unittest.TestCase ):
             self.assertEqual( container._file_rotation, 0 )
             self.assertIsNone( container._saved_zoom )
             self.assertIsNone( container._saved_center )
+            # every screen's
+            self.assertEqual( container._screen_zooms, {} )
             self.assertEqual( container._rotation_load_id, 1 )
             self.assertEqual( container._saved_zoom_load_id, 1 )
             self.assertEqual( container._zoom_timestamps, [ ( 0, 1.0, None, None, None ) ] )

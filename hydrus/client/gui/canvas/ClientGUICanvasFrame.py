@@ -39,6 +39,9 @@ class CanvasFrame( CAC.ApplicationCommandProcessorMixin, ClientGUITopLevelWindow
         
         self._was_maximised_before_fullscreen = True
         
+        # the media viewer remembers each file's zoom and pan for each screen, so it wants to know when it is moved onto another one. we can only listen once the window is shown
+        self._watching_screen_changes = False
+        
     
     def _NotifyCanvasHasDestroyedAllMediaWindows( self ):
         
@@ -51,6 +54,14 @@ class CanvasFrame( CAC.ApplicationCommandProcessorMixin, ClientGUITopLevelWindow
             
         
     
+    def _NotifyScreenChanged( self, screen ):
+        
+        if self._canvas_window is not None and screen is not None:
+            
+            self._canvas_window.NotifyScreenChanged( screen.name() )
+            
+        
+    
     def moveEvent( self, event ):
         
         # manually calling SaveTLW on moveEvent fixes a bug that does not save the position of the window when it is moved, but not resized, by Windows Snap™
@@ -58,6 +69,23 @@ class CanvasFrame( CAC.ApplicationCommandProcessorMixin, ClientGUITopLevelWindow
         ClientGUITopLevelWindows.SaveTLWSizeAndPosition( self, self._frame_key )
         
         super().moveEvent( event )
+        
+    
+    def showEvent( self, event ):
+        
+        super().showEvent( event )
+        
+        if not self._watching_screen_changes:
+            
+            window_handle = self.windowHandle()
+            
+            if window_handle is not None:
+                
+                window_handle.screenChanged.connect( self._NotifyScreenChanged )
+                
+                self._watching_screen_changes = True
+                
+            
         
     
     def ReadyToDestroy( self ):

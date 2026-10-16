@@ -43,7 +43,10 @@ class TestIgnoreSavedPositions( unittest.TestCase ):
         container._saved_center = None
         container._saved_zoom_load_id = 0
         container._pan_save_id = 0
+        container._pan_save_pending_id = None
         container._holding_default_zoom = False
+        container._screen_zooms = {}
+        container._screen_name = ''
         
         container._does_zoom_timestamps = True
         container._zoom_timestamps = []
@@ -188,7 +191,7 @@ class TestIgnoreSavedPositions( unittest.TestCase ):
             
             container._SaveZoom()
             
-            write.assert_called_once_with( 'file_viewer_zoom', b'a' * 32, 3.0, ( 0.25, 0.75 ) )
+            write.assert_called_once_with( 'file_viewer_zoom', b'a' * 32, 3.0, ( 0.25, 0.75 ), '' )
             
             container._SavePanSoon()
             

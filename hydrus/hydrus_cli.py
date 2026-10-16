@@ -586,7 +586,14 @@ def BuildRequest( args ) -> APIRequest:
             
         elif sub == 'zoom':
             
-            return APIRequest( 'POST', '/manage_file_viewer_data/set_zoom', { 'zoom' : args.zoom, 'center' : args.center, **ParseFiles( args.files ) } )
+            params = { 'zoom' : args.zoom, 'center' : args.center, **ParseFiles( args.files ) }
+            
+            if args.screen is not None:
+                
+                params[ 'screen_name' ] = args.screen
+                
+            
+            return APIRequest( 'POST', '/manage_file_viewer_data/set_zoom', params )
             
         elif sub == 'ignore-positions':
             
@@ -767,6 +774,21 @@ def BuildRequest( args ) -> APIRequest:
             
             return APIRequest( 'POST', '/manage_media_viewers/set_ab_repeat_ping_pong', params )
             
+        elif sub == 'screens':
+            
+            return APIRequest( 'GET', '/manage_media_viewers/get_screens' )
+            
+        elif sub == 'screen-zoom':
+            
+            params = { 'screen_name' : args.screen }
+            
+            if args.viewer is not None:
+                
+                params[ 'canvas_key' ] = args.viewer.lower()
+                
+            
+            return APIRequest( 'POST', '/manage_media_viewers/apply_screen_zoom', params )
+            
         
     
     raise CLIError( f'Please say what to do with "{command}"! Try --help.' )
@@ -923,6 +945,7 @@ def GetArgumentParser() -> argparse.ArgumentParser:
     p.add_argument( 'files', nargs = '+', help = files_help )
     p.add_argument( '--zoom', type = float, help = 'like 2.0 for twice the size' )
     p.add_argument( '--center', type = float, nargs = 2, metavar = ( 'X', 'Y' ), help = 'the point in the middle of the window, as fractions of the file\'s width and height' )
+    p.add_argument( '--screen', metavar = 'SCREEN_NAME', help = 'just on this screen, by its name from "viewers screens". default is for every screen without one of its own' )
     p = viewer.add_parser( 'ignore-positions', help = 'have the media viewer open every file at the default zoom, whatever zoom, pan, and position timestamps it has saved. with no state, says whether it is on' )
     p.add_argument( 'state', nargs = '?', choices = [ 'on', 'off' ] )
     p = viewer.add_parser( 'reset-zooms', help = 'clear saved zooms and/or position timestamps for every file' )
@@ -1006,6 +1029,10 @@ def GetArgumentParser() -> argparse.ArgumentParser:
     viewers.add_parser( 'ab-repeat', help = 'the A-B repeat points of the open media viewers, and whether ping-pong is on' )
     p = viewers.add_parser( 'ping-pong', help = 'make A-B repeat play backwards and forwards, rather than jumping from B back to A' )
     p.add_argument( 'state', choices = [ 'on', 'off' ] )
+    p.add_argument( '--viewer', metavar = 'CANVAS_KEY', help = 'just this media viewer, by its canvas_key from "viewers list". Default is all that are open' )
+    viewers.add_parser( 'screens', help = 'the screens, and which one each open media viewer is on' )
+    p = viewers.add_parser( 'screen-zoom', help = 'zoom and pan the files in media viewers how they are on another screen, and keep them like that on the screen they are on' )
+    p.add_argument( 'screen', help = 'the screen\'s name, from "viewers screens"' )
     p.add_argument( '--viewer', metavar = 'CANVAS_KEY', help = 'just this media viewer, by its canvas_key from "viewers list". Default is all that are open' )
     
     return parser

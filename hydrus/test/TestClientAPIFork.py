@@ -679,6 +679,7 @@ class TestClientAPIFork( unittest.TestCase ):
         
         TG.test_controller.SetRead( 'file_viewer_rotation', 450.0 )
         TG.test_controller.SetRead( 'file_viewer_zoom', ( 2.0, ( 0.25, 0.75 ) ) )
+        TG.test_controller.SetRead( 'file_viewer_screen_zooms', { '' : ( 2.0, ( 0.25, 0.75 ) ), 'DISPLAY2' : ( None, None ), 'DISPLAY1' : ( 0.5, ( 0.1, 0.2 ) ) } )
         TG.test_controller.SetRead( 'file_zoom_timestamps', [ ( 1000, 1.5, True, None, None, 90 ), ( 2000, 3.0, False, 0.5, 0.5, None ) ] )
         TG.test_controller.SetRead( 'file_playback_skips', [ ( 0, 500 ) ] )
         TG.test_controller.SetRead( 'file_playback_freezes', [ ( 3000, 2000 ), ( 100, 500 ) ] )
@@ -693,6 +694,11 @@ class TestClientAPIFork( unittest.TestCase ):
             'hash' : hash_1.hex(),
             'rotation' : 90,
             'zoom' : { 'zoom' : 2.0, 'center' : [ 0.25, 0.75 ] },
+            # each screen's own. the one for any screen is 'zoom'
+            'screen_zooms' : [
+                { 'screen_name' : 'DISPLAY1', 'zoom' : 0.5, 'center' : [ 0.1, 0.2 ] },
+                { 'screen_name' : 'DISPLAY2', 'zoom' : None, 'center' : None }
+            ],
             'position_timestamps' : [
                 { 'timestamp_ms' : 1000, 'zoom' : 1.5, 'zoom_is_relative' : True, 'center' : None, 'rotation' : 90 },
                 { 'timestamp_ms' : 2000, 'zoom' : 3.0, 'zoom_is_relative' : False, 'center' : [ 0.5, 0.5 ], 'rotation' : None }
@@ -729,7 +735,13 @@ class TestClientAPIFork( unittest.TestCase ):
         ( status, body ) = api_call( 'POST', '/manage_file_viewer_data/set_zoom', self.everything, { 'hash' : hash_1.hex(), 'zoom' : 2, 'center' : [ 0.1, 0.9 ] } )
         ( status, body ) = api_call( 'POST', '/manage_file_viewer_data/set_zoom', self.everything, { 'hash' : hash_1.hex() } )
         
-        self.assertEqual( TG.test_controller.GetWrite( 'file_viewer_zoom' ), [ ( ( hash_1, 2.0, ( 0.1, 0.9 ) ), {} ), ( ( hash_1, None, None ), {} ) ] )
+        self.assertEqual( TG.test_controller.GetWrite( 'file_viewer_zoom' ), [ ( ( hash_1, 2.0, ( 0.1, 0.9 ), '' ), {} ), ( ( hash_1, None, None, '' ), {} ) ] )
+        
+        # just one screen's
+        ( status, body ) = api_call( 'POST', '/manage_file_viewer_data/set_zoom', self.everything, { 'hashes' : [ hash_1.hex(), hash_2.hex() ], 'zoom' : 0.5, 'screen_name' : 'DISPLAY2' } )
+        
+        self.assertEqual( status, 200 )
+        self.assertEqual( TG.test_controller.GetWrite( 'file_viewer_zoom' ), [ ( ( hash_1, 0.5, None, 'DISPLAY2' ), {} ), ( ( hash_2, 0.5, None, 'DISPLAY2' ), {} ) ] )
         
         for bad_params in ( { 'zoom' : 0 }, { 'center' : [ 0.5 ] }, { 'center' : [ 'a', 'b' ] } ):
             
@@ -1077,6 +1089,56 @@ class TestClientAPIFork( unittest.TestCase ):
         
         self.assertEqual( status, 403 )
         
+        # screens, and showing files how they are on another one
+        
+        from hydrus.client.gui import ClientGUIMediaViewerScreens
+        
+        screens_info = {
+            'screens' : [ { 'screen_name' : 'DISPLAY1', 'x' : 0, 'y' : 0, 'width' : 1920, 'height' : 1080, 'primary' : True } ],
+            'media_viewers' : [ { 'canvas_key' : canvas_key.hex(), 'screen_name' : 'DISPLAY1', 'hash' : None } ]
+        }
+        
+        with mock.patch.object( ClientGUIMediaViewerScreens, 'GetScreensAPIInfo', return_value = screens_info ):
+            
+            ( status, body ) = api_call( 'GET', '/manage_media_viewers/get_screens', self.pages_only )
+            
+        
+        self.assertEqual( status, 200 )
+        self.assertEqual( body, screens_info )
+        
+        with mock.patch.object( ClientGUIMediaViewerScreens, 'ApplyOpenMediaViewersScreenZoom', return_value = 2 ) as apply_screen_zoom:
+            
+            ( status, body ) = api_call( 'POST', '/manage_media_viewers/apply_screen_zoom', self.pages_only, { 'screen_name' : 'DISPLAY2' } )
+            
+        
+        self.assertEqual( status, 200 )
+        self.assertEqual( body, { 'num_media_viewers' : 2 } )
+        apply_screen_zoom.assert_called_once_with( 'DISPLAY2', canvas_key = None )
+        
+        with mock.patch.object( ClientGUIMediaViewerScreens, 'ApplyOpenMediaViewersScreenZoom', return_value = 1 ) as apply_screen_zoom:
+            
+            ( status, body ) = api_call( 'POST', '/manage_media_viewers/apply_screen_zoom', self.pages_only, { 'screen_name' : 'DISPLAY2', 'canvas_key' : canvas_key.hex() } )
+            
+        
+        self.assertEqual( status, 200 )
+        apply_screen_zoom.assert_called_once_with( 'DISPLAY2', canvas_key = canvas_key )
+        
+        # a media viewer that is not open
+        with mock.patch.object( ClientGUIMediaViewerScreens, 'ApplyOpenMediaViewersScreenZoom', return_value = 0 ):
+            
+            ( status, body ) = api_call( 'POST', '/manage_media_viewers/apply_screen_zoom', self.pages_only, { 'screen_name' : 'DISPLAY2', 'canvas_key' : canvas_key.hex() } )
+            
+        
+        self.assertEqual( status, 404 )
+        
+        ( status, body ) = api_call( 'POST', '/manage_media_viewers/apply_screen_zoom', self.pages_only, {} )
+        
+        self.assertEqual( status, 400 )
+        
+        ( status, body ) = api_call( 'GET', '/manage_media_viewers/get_screens', self.counters_only )
+        
+        self.assertEqual( status, 403 )
+        
     
     
     def test_command_line( self ):
@@ -1157,6 +1219,10 @@ class TestClientAPIForkCommandLine( unittest.TestCase ):
         self.assertEqual( self._GetRequest( [ 'viewers', 'ab-repeat' ] ), hydrus_cli.APIRequest( 'GET', '/manage_media_viewers/get_ab_repeat' ) )
         self.assertEqual( self._GetRequest( [ 'viewers', 'ping-pong', 'on' ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/set_ab_repeat_ping_pong', { 'ping_pong' : True } ) )
         self.assertEqual( self._GetRequest( [ 'viewers', 'ping-pong', 'off', '--viewer', hash_hex.upper() ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/set_ab_repeat_ping_pong', { 'ping_pong' : False, 'canvas_key' : hash_hex } ) )
+        self.assertEqual( self._GetRequest( [ 'viewers', 'screens' ] ), hydrus_cli.APIRequest( 'GET', '/manage_media_viewers/get_screens' ) )
+        self.assertEqual( self._GetRequest( [ 'viewers', 'screen-zoom', '\\\\.\\DISPLAY2' ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/apply_screen_zoom', { 'screen_name' : '\\\\.\\DISPLAY2' } ) )
+        self.assertEqual( self._GetRequest( [ 'viewers', 'screen-zoom', 'DISPLAY2', '--viewer', hash_hex.upper() ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/apply_screen_zoom', { 'screen_name' : 'DISPLAY2', 'canvas_key' : hash_hex } ) )
+        self.assertEqual( self._GetRequest( [ 'viewer', 'zoom', '12', '--zoom', '2', '--screen', 'DISPLAY2' ] ), hydrus_cli.APIRequest( 'POST', '/manage_file_viewer_data/set_zoom', { 'zoom' : 2.0, 'center' : None, 'file_ids' : [ 12 ], 'screen_name' : 'DISPLAY2' } ) )
         self.assertEqual( self._GetRequest( [ 'playlists', 'add', 'chill', '12', '--start-ms', '0', '--end-ms', '500' ] ), hydrus_cli.APIRequest( 'POST', '/manage_playlists/add_files', { 'playlist_name' : 'chill', 'file_ids' : [ 12 ], 'start_ms' : 0, 'end_ms' : 500 } ) )
         self.assertEqual( self._GetRequest( [ 'playlists', 'set', 'chill', '[ { "blank_ms" : 100 } ]' ] ), hydrus_cli.APIRequest( 'POST', '/manage_playlists/set_items', { 'playlist_name' : 'chill', 'items' : [ { 'blank_ms' : 100 } ] } ) )
         self.assertEqual( self._GetRequest( [ 'paths', 'remove', '12', '--path', 'a/b', '--path', 'c' ] ), hydrus_cli.APIRequest( 'POST', '/manage_virtual_paths/remove_paths', { 'paths' : [ 'a/b', 'c' ], 'file_ids' : [ 12 ] } ) )

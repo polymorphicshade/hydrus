@@ -93,6 +93,11 @@ python hydrus_cli.py viewer freezes 1234 "[ { \"timestamp_ms\" : 3000, \"duratio
 python hydrus_cli.py viewer reset-positions 1234 1235 --position-timestamps
 python hydrus_cli.py viewer reset-positions --page <page_key>
 
+# saved zooms are per screen. see the screens, set a file's zoom on one, and show files in media viewers how they are on another
+python hydrus_cli.py viewers screens
+python hydrus_cli.py viewer zoom 1234 --zoom 2 --screen "<screen_name>"
+python hydrus_cli.py viewers screen-zoom "<screen_name>" --viewer <canvas_key>
+
 # open every file at the default zoom, whatever it has saved. nothing is deleted
 python hydrus_cli.py viewer ignore-positions on
 python hydrus_cli.py viewer ignore-positions

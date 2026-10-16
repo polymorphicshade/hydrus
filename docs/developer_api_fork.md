@@ -6,7 +6,7 @@ title: This Fork's Client API
 
 These endpoints are for the features this fork adds: counters, playlists, virtual paths, snapshots, what the media viewer remembers for each file, tag presets, screen locations, media viewer layouts, and exporting video, audio, and playlists. They work just like hydrus's own [Client API](developer_api.md): the same access keys and session keys, json in and out, and the same errors. The [command line tool](command_line.md) can use all of them.
 
-`/api_version` has a `fork_api_version`, which goes up when these change. It is `2` now.
+`/api_version` has a `fork_api_version`, which goes up when these change. It is `3` now.
 
 ## permissions
 
@@ -184,6 +184,8 @@ Arguments: one file (the one it was taken from), `path` (the image, on the clien
 
 What the media viewer remembers for each file. Rotation and saved zoom are picked up the next time a media viewer shows the file. Position timestamps, playback skips, freezes, scripted events, and the image overlay are picked up straight away by media viewers that are showing it.
 
+A file's saved zoom and pan are kept for each screen it is shown on, so a media viewer moved to another monitor puts the file back how it was left there. Screens go by the name your system gives them, like `\\.\DISPLAY1` or a monitor's model name, which `/manage_media_viewers/get_screens` lists. A file can also have a zoom for any screen, which is what every saved zoom was before they were per screen: a screen without one of its own uses that, or else the default zoom.
+
 ### **GET `/manage_file_viewer_data/get_data`**
 
 Arguments: one file.
@@ -193,6 +195,7 @@ Arguments: one file.
   "hash" : "6c37...",
   "rotation" : 90,
   "zoom" : { "zoom" : 2.0, "center" : [ 0.25, 0.75 ] },
+  "screen_zooms" : [ { "screen_name" : "\\\\.\\DISPLAY2", "zoom" : 0.5, "center" : null } ],
   "position_timestamps" : [ { "timestamp_ms" : 1000, "zoom" : 1.5, "zoom_is_relative" : true, "center" : null, "rotation" : 90 } ],
   "playback_skips" : [ { "start_ms" : 0, "end_ms" : 500 } ],
   "playback_freezes" : [ { "timestamp_ms" : 3000, "duration_ms" : 2000 } ],
@@ -202,7 +205,7 @@ Arguments: one file.
 }
 ```
 
-A null `zoom` is the normal default zoom. A position timestamp's zoom is relative to the zoom that fits the file in the window, so 1.0 is 'fit'. Old ones from before that have `zoom_is_relative` false. Its `rotation` is null when it leaves the file turned however it is. `image_overlay` is null when there is not one.
+`zoom` is the one for any screen, and `screen_zooms` are each screen's own. A null `zoom` is the normal default zoom. A screen's with a null `zoom` and `center` is the default zoom on that screen, whatever there is for any screen. A position timestamp's zoom is relative to the zoom that fits the file in the window, so 1.0 is 'fit'. Old ones from before that have `zoom_is_relative` false. Its `rotation` is null when it leaves the file turned however it is. `image_overlay` is null when there is not one.
 
 ### **GET `/manage_file_viewer_data/get_saved_zoom_counts`**
 
@@ -214,7 +217,7 @@ Arguments: files, `rotation`, in degrees clockwise. It is rounded to whole degre
 
 ### **POST `/manage_file_viewer_data/set_zoom`**
 
-Arguments: files, `zoom` (optional, more than 0), `center` (optional). With neither, the files go back to normal.
+Arguments: files, `zoom` (optional, more than 0), `center` (optional), `screen_name` (optional). Without a `screen_name`, it is the zoom for any screen without one of its own, and with neither `zoom` nor `center`, the files go back to normal. With one, it is just that screen's, and with neither, the files open at the default zoom on that screen.
 
 ### **POST `/manage_file_viewer_data/set_position_timestamps`**
 
@@ -338,6 +341,21 @@ Arguments: `layout`. Opens its media viewers. One whose files can all no longer 
 ### **POST `/manage_media_viewers/open_playlist`**
 
 Needs 'manage playlists' too. Arguments: a playlist. Plays it in a new media viewer. If it is empty, or none of its files can be shown, nothing opens and you get a 409 saying why.
+
+### **GET `/manage_media_viewers/get_screens`**
+
+The screens connected now, the main one first, with where they are on the desktop, and the screen each media viewer that is open now is on, with the `hash` of the file it is showing (null for none).
+
+```json
+{
+  "screens" : [ { "screen_name" : "\\\\.\\DISPLAY1", "x" : 0, "y" : 0, "width" : 1920, "height" : 1080, "primary" : true } ],
+  "media_viewers" : [ { "canvas_key" : "a1b2...", "screen_name" : "\\\\.\\DISPLAY1", "hash" : "6c37..." } ]
+}
+```
+
+### **POST `/manage_media_viewers/apply_screen_zoom`**
+
+Arguments: `screen_name`, and `canvas_key` (optional, default every media viewer that is open). Like the media viewer's _screen->zoom and pan as on_: the file goes how it is zoomed and panned on that screen, and that is saved for the screen the media viewer is on. A screen it has nothing for is the default zoom, centered. Media viewers that do not remember zooms, like the duplicate filter, and ones set to ignore saved zooms leave their files alone. Returns `num_media_viewers`. A canvas_key for a media viewer that is not open gives a 404.
 
 ### **GET `/manage_media_viewers/get_ab_repeat`**
 

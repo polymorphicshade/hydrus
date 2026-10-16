@@ -1315,6 +1315,90 @@ class TestClientDB( unittest.TestCase ):
         self.assertEqual( self._read( 'file_viewer_zoom', hash_a ), ( None, None ) )
         
     
+    def test_file_viewer_screen_zooms( self ):
+        
+        hash_a = os.urandom( 32 )
+        hash_b = os.urandom( 32 )
+        
+        self.assertEqual( self._read( 'file_viewer_screen_zooms', hash_a ), {} )
+        
+        # one for any screen, which is what they all were before they were per screen
+        self._write( 'file_viewer_zoom', hash_a, 1.5, ( 0.25, 0.75 ) )
+        
+        # and some screens' own
+        self._write( 'file_viewer_zoom', hash_a, 3.0, None, 'DISPLAY1' )
+        self._write( 'file_viewer_zoom', hash_a, None, ( 0.1, 0.9 ), 'DISPLAY2' )
+        self._write( 'file_viewer_zoom', hash_b, 0.5, None, 'DISPLAY1' )
+        
+        self.assertEqual( self._read( 'file_viewer_screen_zooms', hash_a ), { '' : ( 1.5, ( 0.25, 0.75 ) ), 'DISPLAY1' : ( 3.0, None ), 'DISPLAY2' : ( None, ( 0.1, 0.9 ) ) } )
+        self.assertEqual( self._read( 'file_viewer_screen_zooms', hash_b ), { 'DISPLAY1' : ( 0.5, None ) } )
+        
+        # a screen's own, or the one for any screen
+        self.assertEqual( self._read( 'file_viewer_zoom', hash_a, 'DISPLAY1' ), ( 3.0, None ) )
+        self.assertEqual( self._read( 'file_viewer_zoom', hash_a, 'DISPLAY3' ), ( 1.5, ( 0.25, 0.75 ) ) )
+        self.assertEqual( self._read( 'file_viewer_zoom', hash_a ), ( 1.5, ( 0.25, 0.75 ) ) )
+        self.assertEqual( self._read( 'file_viewer_zoom', hash_b, 'DISPLAY3' ), ( None, None ) )
+        
+        # a screen at the default zoom stays at it, whatever there is for any screen
+        self._write( 'file_viewer_zoom', hash_a, None, None, 'DISPLAY1' )
+        
+        self.assertEqual( self._read( 'file_viewer_zoom', hash_a, 'DISPLAY1' ), ( None, None ) )
+        self.assertEqual( self._read( 'file_viewer_screen_zooms', hash_a )[ 'DISPLAY1' ], ( None, None ) )
+        
+        # the file still counts once, for its zoom on some screen
+        self.assertEqual( self._read( 'num_file_viewer_zooms', [ hash_a, hash_b ] ), 2 )
+        
+        # forgetting the one for any screen leaves the screens' own
+        self._write( 'file_viewer_zoom', hash_a, None, None )
+        
+        self.assertEqual( self._read( 'file_viewer_screen_zooms', hash_a ), { 'DISPLAY1' : ( None, None ), 'DISPLAY2' : ( None, ( 0.1, 0.9 ) ) } )
+        self.assertEqual( self._read( 'file_viewer_zoom', hash_a, 'DISPLAY3' ), ( None, None ) )
+        
+        # a file with only default zooms saved does not count
+        self._write( 'file_viewer_zoom', hash_a, None, None, 'DISPLAY2' )
+        
+        self.assertEqual( self._read( 'num_file_viewer_zooms', [ hash_a, hash_b ] ), 1 )
+        
+        # resetting a file's positions forgets every screen's
+        self._write( 'reset_file_viewer_positions', [ hash_a, hash_b ], True, False, False )
+        
+        self.assertEqual( self._read( 'file_viewer_screen_zooms', hash_a ), {} )
+        self.assertEqual( self._read( 'file_viewer_screen_zooms', hash_b ), {} )
+        
+    
+    def test_file_viewer_zooms_from_before_screens( self ):
+        
+        import sqlite3
+        
+        from hydrus.client.db import ClientDBFilesViewerZooms
+        
+        db = sqlite3.connect( ':memory:' )
+        
+        c = db.cursor()
+        
+        # the table from before zooms were per screen, and from before they were panned
+        c.execute( 'CREATE TABLE file_viewer_zooms ( hash_id INTEGER PRIMARY KEY, zoom REAL );' )
+        c.executemany( 'INSERT INTO file_viewer_zooms ( hash_id, zoom ) VALUES ( ?, ? );', [ ( 1, 2.0 ), ( 2, None ) ] )
+        
+        module = ClientDBFilesViewerZooms.ClientDBFilesViewerZooms( c, mock.Mock() )
+        
+        module._MigrateToScreenZooms()
+        
+        # what was there becomes the zoom for any screen
+        self.assertEqual( sorted( c.execute( 'SELECT hash_id, screen_name, zoom, center_x, center_y FROM file_viewer_zooms;' ).fetchall() ), [ ( 1, '', 2.0, None, None ), ( 2, '', None, None, None ) ] )
+        self.assertEqual( c.execute( 'SELECT COUNT( * ) FROM sqlite_master WHERE name = ?;', ( 'file_viewer_zooms_old', ) ).fetchone(), ( 0, ) )
+        
+        # and a file can have one for a screen too now
+        c.execute( 'INSERT INTO file_viewer_zooms ( hash_id, screen_name, zoom, center_x, center_y ) VALUES ( ?, ?, ?, ?, ? );', ( 1, 'DISPLAY1', 0.5, None, None ) )
+        
+        # a table that is up to date is left alone
+        module._MigrateToScreenZooms()
+        
+        self.assertEqual( c.execute( 'SELECT COUNT( * ) FROM file_viewer_zooms;' ).fetchone(), ( 3, ) )
+        
+        db.close()
+        
+    
     def test_file_playback_freezes( self ):
         
         hash_a = os.urandom( 32 )

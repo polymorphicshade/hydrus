@@ -7,6 +7,7 @@ from hydrus.core.networking import HydrusServerRequest
 from hydrus.client import ClientAPI
 from hydrus.client import ClientGlobals as CG
 from hydrus.client.media import ClientMediaPlaybackFreezes
+from hydrus.client.media import ClientMediaScreenZooms
 from hydrus.client.networking.api import ClientLocalServerCore
 from hydrus.client.networking.api import ClientLocalServerResources
 
@@ -82,7 +83,10 @@ class HydrusResourceClientAPIRestrictedManageFileViewerDataGetData( HydrusResour
         
         rotation = CG.client_controller.Read( 'file_viewer_rotation', hash )
         
+        # the zoom for any screen without one of its own, and then each screen's own
         ( zoom, center ) = CG.client_controller.Read( 'file_viewer_zoom', hash )
+        
+        screen_zooms = CG.client_controller.Read( 'file_viewer_screen_zooms', hash )
         
         zoom_timestamp_rows = CG.client_controller.Read( 'file_zoom_timestamps', hash )
         
@@ -114,6 +118,7 @@ class HydrusResourceClientAPIRestrictedManageFileViewerDataGetData( HydrusResour
                 'zoom' : zoom,
                 'center' : None if center is None else list( center )
             },
+            'screen_zooms' : [ { 'screen_name' : screen_name, 'zoom' : screen_zoom, 'center' : None if screen_center is None else list( screen_center ) } for ( screen_name, ( screen_zoom, screen_center ) ) in sorted( screen_zooms.items() ) if screen_name != ClientMediaScreenZooms.ANY_SCREEN ],
             # an old one, from before they were relative to the zoom that fits the file in the window, has zoom_is_relative false
             'position_timestamps' : [ { 'timestamp_ms' : timestamp_ms, 'zoom' : zoom, 'zoom_is_relative' : zoom_is_relative, 'center' : ConvertCenterToJSON( center_x, center_y ), 'rotation' : rotation } for ( timestamp_ms, zoom, zoom_is_relative, center_x, center_y, rotation ) in zoom_timestamp_rows ],
             'playback_skips' : [ { 'start_ms' : start_ms, 'end_ms' : end_ms } for ( start_ms, end_ms ) in playback_skips ],
@@ -533,10 +538,18 @@ class HydrusResourceClientAPIRestrictedManageFileViewerDataSetZoom( HydrusResour
         
         center = CheckCenter( 'center', request.parsed_request_args.GetValueOrNone( 'center', list ) )
         
+        # just for this screen, or for any screen without one of its own. for a screen, both null is the default zoom there, whatever the file has for any screen
+        screen_name = request.parsed_request_args.GetValueOrNone( 'screen_name', str )
+        
+        if screen_name is None:
+            
+            screen_name = ClientMediaScreenZooms.ANY_SCREEN
+            
+        
         # a media viewer picks it up the next time it shows the file
         for hash in hashes:
             
-            CG.client_controller.WriteSynchronous( 'file_viewer_zoom', hash, zoom, center )
+            CG.client_controller.WriteSynchronous( 'file_viewer_zoom', hash, zoom, center, screen_name )
             
         
         return ClientLocalServerCore.GenerateJSONResponse( request, {} )
