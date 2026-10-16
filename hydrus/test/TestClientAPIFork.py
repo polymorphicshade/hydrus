@@ -683,6 +683,7 @@ class TestClientAPIFork( unittest.TestCase ):
         TG.test_controller.SetRead( 'file_zoom_timestamps', [ ( 1000, 1.5, True, None, None, 90 ), ( 2000, 3.0, False, 0.5, 0.5, None ) ] )
         TG.test_controller.SetRead( 'file_playback_skips', [ ( 0, 500 ) ] )
         TG.test_controller.SetRead( 'file_playback_freezes', [ ( 3000, 2000 ), ( 100, 500 ) ] )
+        TG.test_controller.SetRead( 'file_ab_loops', [ ( 9000, 12000 ), ( 0, 4500 ) ] )
         TG.test_controller.SetRead( 'file_segments', [ ( 9000, 'chorus' ), ( 100, 'intro' ) ] )
         TG.test_controller.SetRead( 'file_scripted_events', [ ( 50, 'echo hi' ) ] )
         TG.test_controller.SetRead( 'file_image_overlay', ( image_path, 0.5, ( 0.1, 0.2, 0.3, 0.4 ), True, False ) )
@@ -705,6 +706,7 @@ class TestClientAPIFork( unittest.TestCase ):
             ],
             'playback_skips' : [ { 'start_ms' : 0, 'end_ms' : 500 } ],
             'playback_freezes' : [ { 'timestamp_ms' : 100, 'duration_ms' : 500 }, { 'timestamp_ms' : 3000, 'duration_ms' : 2000 } ],
+            'ab_loops' : [ { 'a_ms' : 0, 'b_ms' : 4500 }, { 'a_ms' : 9000, 'b_ms' : 12000 } ],
             'segments' : [ { 'timestamp_ms' : 100, 'name' : 'intro' }, { 'timestamp_ms' : 9000, 'name' : 'chorus' } ],
             'scripted_events' : [ { 'timestamp_ms' : 50, 'command' : 'echo hi' } ],
             'image_overlay' : { 'path' : image_path, 'opacity' : 0.5, 'x' : 0.1, 'y' : 0.2, 'width' : 0.3, 'height' : 0.4, 'locked' : True, 'stretch' : False }
@@ -801,6 +803,27 @@ class TestClientAPIFork( unittest.TestCase ):
             
             self.assertEqual( body, { 'playback_freezes' : [] } )
             pub.assert_called_with( 'new_file_playback_freezes', hash_1, [] )
+            
+            TG.test_controller.ClearWrites( 'file_ab_loops' )
+            
+            # in order, and the same one once
+            ( status, body ) = api_call( 'POST', '/manage_file_viewer_data/set_ab_loops', self.everything, { 'hash' : hash_1.hex(), 'ab_loops' : [ { 'a_ms' : 9000, 'b_ms' : 12000 }, { 'a_ms' : 0, 'b_ms' : 4500 }, { 'a_ms' : 9000, 'b_ms' : 12000 } ] } )
+            
+            self.assertEqual( status, 200 )
+            self.assertEqual( body, { 'ab_loops' : [ { 'a_ms' : 0, 'b_ms' : 4500 }, { 'a_ms' : 9000, 'b_ms' : 12000 } ] } )
+            self.assertEqual( TG.test_controller.GetWrite( 'file_ab_loops' ), [ ( ( hash_1, [ ( 0, 4500 ), ( 9000, 12000 ) ] ), {} ) ] )
+            
+            for bad_ab_loop in ( { 'a_ms' : 1000, 'b_ms' : 1050 }, { 'a_ms' : 5000, 'b_ms' : 1000 }, { 'a_ms' : -1, 'b_ms' : 1000 }, { 'b_ms' : 1000 }, { 'a_ms' : 0, 'b_ms' : 1.5 } ):
+                
+                ( status, body ) = api_call( 'POST', '/manage_file_viewer_data/set_ab_loops', self.everything, { 'hash' : hash_1.hex(), 'ab_loops' : [ bad_ab_loop ] } )
+                
+                self.assertEqual( status, 400, bad_ab_loop )
+                
+            
+            # clearing them
+            ( status, body ) = api_call( 'POST', '/manage_file_viewer_data/set_ab_loops', self.everything, { 'hash' : hash_1.hex(), 'ab_loops' : [] } )
+            
+            self.assertEqual( body, { 'ab_loops' : [] } )
             
             TG.test_controller.ClearWrites( 'file_image_overlay' )
             
@@ -1056,6 +1079,48 @@ class TestClientAPIFork( unittest.TestCase ):
         self.assertEqual( status, 200 )
         self.assertEqual( body, { 'media_viewers' : ab_repeat } )
         
+        # putting a loop on, like a saved A-B loop
+        with mock.patch.object( ClientGUIMediaViewerABRepeat, 'SetOpenMediaViewersABRepeat', return_value = 2 ) as set_ab_repeat:
+            
+            ( status, body ) = api_call( 'POST', '/manage_media_viewers/set_ab_repeat', self.pages_only, { 'a_ms' : 5250, 'b_ms' : 12000 } )
+            
+        
+        self.assertEqual( status, 200 )
+        self.assertEqual( body, { 'num_media_viewers' : 2 } )
+        set_ab_repeat.assert_called_once_with( 5250, 12000, canvas_key = None )
+        
+        with mock.patch.object( ClientGUIMediaViewerABRepeat, 'SetOpenMediaViewersABRepeat', return_value = 1 ) as set_ab_repeat:
+            
+            # from the start, just an A, and clearing
+            for ( params, expected ) in ( ( { 'b_ms' : 4500 }, ( None, 4500 ) ), ( { 'a_ms' : 1000 }, ( 1000, None ) ), ( {}, ( None, None ) ) ):
+                
+                ( status, body ) = api_call( 'POST', '/manage_media_viewers/set_ab_repeat', self.pages_only, { **params, 'canvas_key' : canvas_key.hex() } )
+                
+                self.assertEqual( status, 200, params )
+                set_ab_repeat.assert_called_with( *expected, canvas_key = canvas_key )
+                
+            
+            for bad_params in ( { 'a_ms' : 1000, 'b_ms' : 1050 }, { 'b_ms' : 50 }, { 'a_ms' : -1 }, { 'a_ms' : 5000, 'b_ms' : 1000 } ):
+                
+                ( status, body ) = api_call( 'POST', '/manage_media_viewers/set_ab_repeat', self.pages_only, bad_params )
+                
+                self.assertEqual( status, 400, bad_params )
+                
+            
+            self.assertEqual( set_ab_repeat.call_count, 3 )
+            
+        
+        with mock.patch.object( ClientGUIMediaViewerABRepeat, 'SetOpenMediaViewersABRepeat', return_value = 0 ):
+            
+            ( status, body ) = api_call( 'POST', '/manage_media_viewers/set_ab_repeat', self.pages_only, { 'b_ms' : 4500, 'canvas_key' : canvas_key.hex() } )
+            
+        
+        self.assertEqual( status, 404 )
+        
+        ( status, body ) = api_call( 'POST', '/manage_media_viewers/set_ab_repeat', self.counters_only, { 'b_ms' : 4500 } )
+        
+        self.assertEqual( status, 403 )
+        
         with mock.patch.object( ClientGUIMediaViewerABRepeat, 'SetOpenMediaViewersABRepeatPingPong', return_value = 3 ) as set_ping_pong:
             
             ( status, body ) = api_call( 'POST', '/manage_media_viewers/set_ab_repeat_ping_pong', self.pages_only, { 'ping_pong' : True } )
@@ -1290,6 +1355,9 @@ class TestClientAPIForkCommandLine( unittest.TestCase ):
         # a-b repeat
         self.assertEqual( self._GetRequest( [ 'viewers', 'ab-repeat' ] ), hydrus_cli.APIRequest( 'GET', '/manage_media_viewers/get_ab_repeat' ) )
         self.assertEqual( self._GetRequest( [ 'viewers', 'ping-pong', 'on' ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/set_ab_repeat_ping_pong', { 'ping_pong' : True } ) )
+        self.assertEqual( self._GetRequest( [ 'viewers', 'set-ab-repeat', '--a-ms', '5250', '--b-ms', '12000' ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/set_ab_repeat', { 'a_ms' : 5250, 'b_ms' : 12000 } ) )
+        self.assertEqual( self._GetRequest( [ 'viewers', 'set-ab-repeat', '--viewer', hash_hex.upper() ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/set_ab_repeat', { 'a_ms' : None, 'b_ms' : None, 'canvas_key' : hash_hex } ) )
+        self.assertEqual( self._GetRequest( [ 'viewer', 'ab-loops', '12', '[ { "a_ms" : 0, "b_ms" : 4500 } ]' ] ), hydrus_cli.APIRequest( 'POST', '/manage_file_viewer_data/set_ab_loops', { 'file_ids' : [ 12 ], 'ab_loops' : [ { 'a_ms' : 0, 'b_ms' : 4500 } ] } ) )
         self.assertEqual( self._GetRequest( [ 'viewers', 'ping-pong', 'off', '--viewer', hash_hex.upper() ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/set_ab_repeat_ping_pong', { 'ping_pong' : False, 'canvas_key' : hash_hex } ) )
         self.assertEqual( self._GetRequest( [ 'viewers', 'slideshows' ] ), hydrus_cli.APIRequest( 'GET', '/manage_media_viewers/get_slideshows' ) )
         self.assertEqual( self._GetRequest( [ 'viewers', 'slideshow', 'start', '0' ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/start_slideshow', { 'period' : 0.0 } ) )

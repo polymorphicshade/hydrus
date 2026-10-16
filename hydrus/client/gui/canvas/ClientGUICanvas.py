@@ -59,6 +59,7 @@ from hydrus.client.gui.panels import ClientGUIScrolledPanelsCommitFiltering
 from hydrus.client.gui.panels import ClientGUIScrolledPanelsEdit
 from hydrus.client.gui.widgets import ClientGUIPainterShapes
 from hydrus.client.media import ClientMedia
+from hydrus.client.media import ClientMediaABLoops
 from hydrus.client.media import ClientMediaList
 from hydrus.client.media import ClientMediaPlaybackFreezes
 from hydrus.client.media import ClientMediaPlaylists
@@ -1679,6 +1680,11 @@ class Canvas( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         self._media_container.SetABLoopPingPong( ping_pong )
         
     
+    def SetABRepeat( self, a_ms: int | None, b_ms: int | None ):
+        
+        self._media_container.SetABLoopPoints( a_ms, b_ms )
+        
+    
     def SetLocationContext( self, location_context: ClientLocation.LocationContext ):
         
         self._location_context = location_context
@@ -2693,6 +2699,102 @@ class CanvasWithHovers( Canvas ):
     def _ClearPlaybackSkips( self ):
         
         self._media_container.ClearPlaybackSkips()
+        
+    
+    def _AppendABLoopsMenu( self, menu: QW.QMenu ):
+        
+        # A-B repeat loops saved on this file, to put back on with a click
+        hash = self._current_media.GetHash()
+        
+        ab_loops = CG.client_controller.Read( 'file_ab_loops', hash )
+        
+        current_ab_loop = ClientMediaABLoops.ConvertABRepeatToABLoop( *self._media_container.GetABLoop() )
+        
+        ab_loops_menu = ClientGUIMenus.GenerateMenu( menu )
+        
+        ClientGUIMenus.AppendMenuItem( ab_loops_menu, 'save current A-B', 'Save the A-B repeat points as they are now on this file, so you can put them back on with a click later.', self._SaveCurrentABLoop )
+        
+        if len( ab_loops ) > 0:
+            
+            ClientGUIMenus.AppendSeparator( ab_loops_menu )
+            
+            for ab_loop in ab_loops:
+                
+                ClientGUIMenus.AppendMenuCheckItem( ab_loops_menu, ClientGUICanvasMedia.ConvertABLoopToPrettyString( ab_loop ), 'Put the A-B repeat points on at this loop, and play it.', tuple( ab_loop ) == current_ab_loop, self._ApplyABLoop, hash, tuple( ab_loop ) )
+                
+            
+            ClientGUIMenus.AppendSeparator( ab_loops_menu )
+            
+            remove_menu = ClientGUIMenus.GenerateMenu( ab_loops_menu )
+            
+            for ab_loop in ab_loops:
+                
+                ClientGUIMenus.AppendMenuItem( remove_menu, ClientGUICanvasMedia.ConvertABLoopToPrettyString( ab_loop ), 'Forget this saved A-B loop. The A-B repeat points stay as they are.', self._RemoveABLoop, hash, tuple( ab_loop ) )
+                
+            
+            ClientGUIMenus.AppendMenu( ab_loops_menu, remove_menu, 'remove' )
+            
+            ClientGUIMenus.AppendMenuItem( ab_loops_menu, 'clear', 'Forget all of this file\'s saved A-B loops. The A-B repeat points stay as they are.', self._SaveABLoops, hash, [] )
+            
+        
+        ClientGUIMenus.AppendMenu( menu, ab_loops_menu, f'A-B ({len( ab_loops )})' if len( ab_loops ) > 0 else 'A-B' )
+        
+    
+    def _ApplyABLoop( self, hash: bytes, ab_loop: ClientMediaABLoops.ABLoop ):
+        
+        # the menu was for this file, and a slideshow can move us on while it is open
+        if self._current_media is None or self._current_media.GetHash() != hash:
+            
+            return
+            
+        
+        ( a_ms, b_ms ) = ab_loop
+        
+        self._media_container.SetABLoopPoints( a_ms, b_ms )
+        
+    
+    def _RemoveABLoop( self, hash: bytes, ab_loop: ClientMediaABLoops.ABLoop ):
+        
+        ab_loops = CG.client_controller.Read( 'file_ab_loops', hash )
+        
+        self._SaveABLoops( hash, ClientMediaABLoops.RemoveABLoop( ab_loops, ab_loop ) )
+        
+    
+    def _SaveABLoops( self, hash: bytes, ab_loops: list[ ClientMediaABLoops.ABLoop ] ):
+        
+        # the menu reads them from the db each time, so there is nothing to tell
+        CG.client_controller.Write( 'file_ab_loops', hash, ab_loops )
+        
+    
+    def _SaveCurrentABLoop( self ):
+        
+        if self._current_media is None:
+            
+            return
+            
+        
+        ab_loop = ClientMediaABLoops.ConvertABRepeatToABLoop( *self._media_container.GetABLoop() )
+        
+        if ab_loop is None:
+            
+            message = 'An A-B loop is saved from the A-B repeat points, and B is not set yet. To save one:'
+            message += '\n' * 2
+            message += '1. Go to where the loop should start and hit the A button at the top of the media viewer (or its shortcut). Without an A, it loops from the start.'
+            message += '\n'
+            message += '2. Go to where it should end and hit B.'
+            message += '\n'
+            message += '3. Hit A-B->save current A-B again.'
+            
+            ClientGUIDialogsMessage.ShowWarning( self, message )
+            
+            return
+            
+        
+        hash = self._current_media.GetHash()
+        
+        ab_loops = CG.client_controller.Read( 'file_ab_loops', hash )
+        
+        self._SaveABLoops( hash, ClientMediaABLoops.AddABLoop( ab_loops, ab_loop ) )
         
     
     def _AppendPositionTimestampsMenu( self, menu: QW.QMenu ):
@@ -6003,6 +6105,8 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
                     
                 
                 ClientGUIMenus.AppendMenu( menu, skips_menu, f'skips ({len( playback_skips )})' if len( playback_skips ) > 0 else 'skips' )
+                
+                self._AppendABLoopsMenu( menu )
                 
             
             if self._media_container.SupportsPlaybackFreezes():

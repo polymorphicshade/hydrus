@@ -90,6 +90,7 @@ python hydrus_cli.py viewer rotate 90 1234
 python hydrus_cli.py viewer segments 1234 "[ { \"timestamp_ms\" : 0, \"name\" : \"intro\" } ]"
 python hydrus_cli.py viewer skips 1234 @skips.json
 python hydrus_cli.py viewer freezes 1234 "[ { \"timestamp_ms\" : 3000, \"duration_ms\" : 2000 } ]"
+python hydrus_cli.py viewer ab-loops 1234 "[ { \"a_ms\" : 5250, \"b_ms\" : 12000 } ]"
 python hydrus_cli.py viewer reset-positions 1234 1235 --position-timestamps
 python hydrus_cli.py viewer reset-positions --page <page_key>
 
@@ -111,8 +112,10 @@ python hydrus_cli.py export playlist "morning run" "C:\exports\morning run"
 python hydrus_cli.py viewers layout > viewers.json
 python hydrus_cli.py viewers open-layout @viewers.json
 
-# A-B repeat: see each media viewer's loop, and have them play it backwards and forwards
+# A-B repeat: see each media viewer's loop, put one on (or clear it), and have them play it backwards and forwards
 python hydrus_cli.py viewers ab-repeat
+python hydrus_cli.py viewers set-ab-repeat --a-ms 5250 --b-ms 12000 --viewer <canvas_key>
+python hydrus_cli.py viewers set-ab-repeat
 python hydrus_cli.py viewers ping-pong on
 python hydrus_cli.py viewers ping-pong off --viewer <canvas_key>
 

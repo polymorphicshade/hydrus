@@ -31,6 +31,24 @@ def GetOpenMediaViewersABRepeat() -> list[ dict ]:
     return [ canvas_window.GetABRepeatAPIInfo() for canvas_window in GetOpenMediaViewerCanvases() ]
     
 
+def SetOpenMediaViewersABRepeat( a_ms: int | None, b_ms: int | None, canvas_key: bytes | None = None ) -> int:
+    
+    # puts the A-B repeat points on, like a saved A-B loop does, for one media viewer, or all of them with no canvas_key. returns how many it was set for
+    canvas_windows = GetOpenMediaViewerCanvases()
+    
+    if canvas_key is not None:
+        
+        canvas_windows = [ canvas_window for canvas_window in canvas_windows if canvas_window.GetCanvasKey() == canvas_key ]
+        
+    
+    for canvas_window in canvas_windows:
+        
+        canvas_window.SetABRepeat( a_ms, b_ms )
+        
+    
+    return len( canvas_windows )
+    
+
 def SetOpenMediaViewersABRepeatPingPong( ping_pong: bool, canvas_key: bytes | None = None ) -> int:
     
     # turns ping-pong on or off for one media viewer, or all of them with no canvas_key. returns how many it was set for

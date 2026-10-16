@@ -1399,6 +1399,30 @@ class TestClientDB( unittest.TestCase ):
         db.close()
         
     
+    def test_file_ab_loops( self ):
+        
+        hash_a = os.urandom( 32 )
+        hash_b = os.urandom( 32 )
+        
+        self.assertEqual( self._read( 'file_ab_loops', hash_a ), [] )
+        
+        self._write( 'file_ab_loops', hash_a, [ ( 9000, 12000 ), ( 0, 4500 ) ] )
+        self._write( 'file_ab_loops', hash_b, [ ( 250, 1000 ) ] )
+        
+        self.assertEqual( self._read( 'file_ab_loops', hash_a ), [ ( 0, 4500 ), ( 9000, 12000 ) ] )
+        self.assertEqual( self._read( 'file_ab_loops', hash_b ), [ ( 250, 1000 ) ] )
+        
+        # setting them replaces them, and the same one twice is one
+        self._write( 'file_ab_loops', hash_a, [ ( 5000, 8000 ), ( 5000, 8000 ) ] )
+        
+        self.assertEqual( self._read( 'file_ab_loops', hash_a ), [ ( 5000, 8000 ) ] )
+        
+        self._write( 'file_ab_loops', hash_a, [] )
+        
+        self.assertEqual( self._read( 'file_ab_loops', hash_a ), [] )
+        self.assertEqual( self._read( 'file_ab_loops', hash_b ), [ ( 250, 1000 ) ] )
+        
+    
     def test_file_playback_freezes( self ):
         
         hash_a = os.urandom( 32 )

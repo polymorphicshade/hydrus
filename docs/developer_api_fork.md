@@ -6,7 +6,7 @@ title: This Fork's Client API
 
 These endpoints are for the features this fork adds: counters, playlists, virtual paths, snapshots, what the media viewer remembers for each file, tag presets, screen locations, media viewer layouts, and exporting video, audio, and playlists. They work just like hydrus's own [Client API](developer_api.md): the same access keys and session keys, json in and out, and the same errors. The [command line tool](command_line.md) can use all of them.
 
-`/api_version` has a `fork_api_version`, which goes up when these change. It is `4` now.
+`/api_version` has a `fork_api_version`, which goes up when these change. It is `5` now.
 
 ## permissions
 
@@ -182,7 +182,7 @@ Arguments: one file (the one it was taken from), `path` (the image, on the clien
 
 ## media viewer data
 
-What the media viewer remembers for each file. Rotation and saved zoom are picked up the next time a media viewer shows the file. Position timestamps, playback skips, freezes, scripted events, and the image overlay are picked up straight away by media viewers that are showing it.
+What the media viewer remembers for each file. Rotation and saved zoom are picked up the next time a media viewer shows the file. Position timestamps, playback skips, freezes, scripted events, and the image overlay are picked up straight away by media viewers that are showing it. Saved A-B loops are read each time the media viewer's _A-B_ menu opens.
 
 A file's saved zoom and pan are kept for each screen it is shown on, so a media viewer moved to another monitor puts the file back how it was left there. Screens go by the name your system gives them, like `\\.\DISPLAY1` or a monitor's model name, which `/manage_media_viewers/get_screens` lists. A file can also have a zoom for any screen, which is what every saved zoom was before they were per screen: a screen without one of its own uses that, or else the default zoom.
 
@@ -199,6 +199,7 @@ Arguments: one file.
   "position_timestamps" : [ { "timestamp_ms" : 1000, "zoom" : 1.5, "zoom_is_relative" : true, "center" : null, "rotation" : 90 } ],
   "playback_skips" : [ { "start_ms" : 0, "end_ms" : 500 } ],
   "playback_freezes" : [ { "timestamp_ms" : 3000, "duration_ms" : 2000 } ],
+  "ab_loops" : [ { "a_ms" : 5250, "b_ms" : 12000 } ],
   "segments" : [ { "timestamp_ms" : 100, "name" : "intro" } ],
   "scripted_events" : [ { "timestamp_ms" : 50, "command" : "echo hi" } ],
   "image_overlay" : { "path" : "C:\\overlays\\frame.png", "opacity" : 0.5, "x" : 0.1, "y" : 0.2, "width" : 0.3, "height" : 0.4, "locked" : true, "stretch" : false }
@@ -230,6 +231,10 @@ Arguments: one file, `playback_skips`: a list of `{ "start_ms", "end_ms" }`. The
 ### **POST `/manage_file_viewer_data/set_playback_freezes`**
 
 Arguments: one file, `playback_freezes`: a list of `{ "timestamp_ms", "duration_ms" }`. When normal playback gets to `timestamp_ms`, the media viewer holds that frame for `duration_ms`, which is 100 to 3,600,000 (an hour), and then plays on. They replace what the file had. A point has one freeze, and a later one for the same point wins. Returns the `playback_freezes` as saved.
+
+### **POST `/manage_file_viewer_data/set_ab_loops`**
+
+Arguments: one file, `ab_loops`: a list of `{ "a_ms", "b_ms" }`. These are the A-B repeat loops saved on the file, which the media viewer's _A-B_ menu lists, to put back on with a click. `b_ms` has to be at least 100ms after `a_ms`, and a loop from the start of the file has an `a_ms` of 0. They replace what the file had, and the same loop is only saved once. Returns the `ab_loops` as saved. `/manage_media_viewers/set_ab_repeat` puts one on in a media viewer.
 
 ### **POST `/manage_file_viewer_data/set_segments`**
 
@@ -380,6 +385,10 @@ The A-B repeat of each media viewer that is open now. `canvas_key` is the same o
 ```json
 { "media_viewers" : [ { "canvas_key" : "a1b2...", "a_ms" : 1000, "b_ms" : 4500, "ping_pong" : false } ] }
 ```
+
+### **POST `/manage_media_viewers/set_ab_repeat`**
+
+Arguments: `a_ms` and `b_ms` (both optional), and `canvas_key` (optional, default every media viewer that is open). Like the A and B buttons, or clicking a saved A-B loop: with a `b_ms`, the media viewer loops from `a_ms` (or the start, with none) to `b_ms`, and playback goes to the start of the loop so it plays straight away. `b_ms` has to be at least 100ms after that. With just an `a_ms`, it is marked and not looping yet, and with neither, the points are cleared. Media viewers showing a file with no playback leave it alone. Returns `num_media_viewers`, how many it was set for. A canvas_key for a media viewer that is not open gives a 404.
 
 ### **POST `/manage_media_viewers/set_ab_repeat_ping_pong`**
 

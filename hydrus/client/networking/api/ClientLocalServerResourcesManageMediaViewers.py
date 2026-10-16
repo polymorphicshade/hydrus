@@ -6,6 +6,7 @@ from hydrus.core.networking import HydrusServerRequest
 from hydrus.client import ClientAPI
 from hydrus.client import ClientGlobals as CG
 from hydrus.client import ClientMediaViewerLayouts
+from hydrus.client.media import ClientMediaABLoops
 from hydrus.client.media import ClientMediaSlideshows
 from hydrus.client.networking.api import ClientLocalServerCore
 from hydrus.client.networking.api import ClientLocalServerResources
@@ -35,6 +36,50 @@ class HydrusResourceClientAPIRestrictedManageMediaViewersGetABRepeat( HydrusReso
         media_viewers = CG.client_controller.CallBlockingToQtTLW( do_it )
         
         return ClientLocalServerCore.GenerateJSONResponse( request, { 'media_viewers' : media_viewers } )
+        
+    
+
+class HydrusResourceClientAPIRestrictedManageMediaViewersSetABRepeat( HydrusResourceClientAPIRestrictedManageMediaViewers ):
+    
+    def _threadDoPOSTJob( self, request: HydrusServerRequest.HydrusRequest ):
+        
+        # like the A and B buttons. a null a_ms loops from the start, a null b_ms is not looping, and both null clears them
+        a_ms = request.parsed_request_args.GetValueOrNone( 'a_ms', int )
+        b_ms = request.parsed_request_args.GetValueOrNone( 'b_ms', int )
+        
+        if a_ms is not None:
+            
+            a_ms = ClientLocalServerCore.CheckNonNegativeInt( 'a_ms', a_ms )
+            
+        
+        if b_ms is not None:
+            
+            b_ms = ClientLocalServerCore.CheckNonNegativeInt( 'b_ms', b_ms )
+            
+            if not ClientMediaABLoops.ABLoopIsValid( ( 0 if a_ms is None else a_ms, b_ms ) ):
+                
+                raise HydrusExceptions.BadRequestException( f'b_ms has to be at least {ClientMediaABLoops.MIN_AB_LOOP_DURATION_MS}ms after a_ms, or after the start with no a_ms!' )
+                
+            
+        
+        # with no canvas_key, it is every media viewer that is open
+        canvas_key = request.parsed_request_args.GetValueOrNone( 'canvas_key', bytes )
+        
+        def do_it():
+            
+            from hydrus.client.gui import ClientGUIMediaViewerABRepeat
+            
+            return ClientGUIMediaViewerABRepeat.SetOpenMediaViewersABRepeat( a_ms, b_ms, canvas_key = canvas_key )
+            
+        
+        num_media_viewers = CG.client_controller.CallBlockingToQtTLW( do_it )
+        
+        if canvas_key is not None and num_media_viewers == 0:
+            
+            raise HydrusExceptions.NotFoundException( f'Did not find a media viewer for "{canvas_key.hex()}"!' )
+            
+        
+        return ClientLocalServerCore.GenerateJSONResponse( request, { 'num_media_viewers' : num_media_viewers } )
         
     
 

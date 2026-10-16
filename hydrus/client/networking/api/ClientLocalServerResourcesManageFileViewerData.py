@@ -6,6 +6,7 @@ from hydrus.core.networking import HydrusServerRequest
 
 from hydrus.client import ClientAPI
 from hydrus.client import ClientGlobals as CG
+from hydrus.client.media import ClientMediaABLoops
 from hydrus.client.media import ClientMediaPlaybackFreezes
 from hydrus.client.media import ClientMediaScreenZooms
 from hydrus.client.networking.api import ClientLocalServerCore
@@ -94,6 +95,8 @@ class HydrusResourceClientAPIRestrictedManageFileViewerDataGetData( HydrusResour
         
         playback_freezes = CG.client_controller.Read( 'file_playback_freezes', hash )
         
+        ab_loops = CG.client_controller.Read( 'file_ab_loops', hash )
+        
         segments = CG.client_controller.Read( 'file_segments', hash )
         
         scripted_events = CG.client_controller.Read( 'file_scripted_events', hash )
@@ -123,6 +126,7 @@ class HydrusResourceClientAPIRestrictedManageFileViewerDataGetData( HydrusResour
             'position_timestamps' : [ { 'timestamp_ms' : timestamp_ms, 'zoom' : zoom, 'zoom_is_relative' : zoom_is_relative, 'center' : ConvertCenterToJSON( center_x, center_y ), 'rotation' : rotation } for ( timestamp_ms, zoom, zoom_is_relative, center_x, center_y, rotation ) in zoom_timestamp_rows ],
             'playback_skips' : [ { 'start_ms' : start_ms, 'end_ms' : end_ms } for ( start_ms, end_ms ) in playback_skips ],
             'playback_freezes' : [ { 'timestamp_ms' : timestamp_ms, 'duration_ms' : duration_ms } for ( timestamp_ms, duration_ms ) in sorted( playback_freezes ) ],
+            'ab_loops' : [ { 'a_ms' : a_ms, 'b_ms' : b_ms } for ( a_ms, b_ms ) in ClientMediaABLoops.NormaliseABLoops( ab_loops ) ],
             'segments' : [ { 'timestamp_ms' : timestamp_ms, 'name' : name } for ( timestamp_ms, name ) in sorted( segments ) ],
             'scripted_events' : [ { 'timestamp_ms' : timestamp_ms, 'command' : command } for ( timestamp_ms, command ) in sorted( scripted_events ) ],
             'image_overlay' : image_overlay_dict
@@ -316,6 +320,39 @@ class HydrusResourceClientAPIRestrictedManageFileViewerDataSetImageOverlay( Hydr
         CG.client_controller.pub( 'new_file_image_overlay', hash, image_overlay, None )
         
         return ClientLocalServerCore.GenerateJSONResponse( request, {} )
+        
+    
+
+class HydrusResourceClientAPIRestrictedManageFileViewerDataSetABLoops( HydrusResourceClientAPIRestrictedManageFileViewerData ):
+    
+    def _threadDoPOSTJob( self, request: HydrusServerRequest.HydrusRequest ):
+        
+        hash = ClientLocalServerCore.ParseSingleHash( request )
+        
+        ab_loop_dicts = CheckListOfObjects( 'ab_loops', request.parsed_request_args.GetValue( 'ab_loops', list ) )
+        
+        ab_loops = []
+        
+        for ab_loop_dict in ab_loop_dicts:
+            
+            a_ms = ClientLocalServerCore.CheckNonNegativeInt( 'a_ms', ab_loop_dict.get( 'a_ms', None ) )
+            b_ms = ClientLocalServerCore.CheckNonNegativeInt( 'b_ms', ab_loop_dict.get( 'b_ms', None ) )
+            
+            if not ClientMediaABLoops.ABLoopIsValid( ( a_ms, b_ms ) ):
+                
+                raise HydrusExceptions.BadRequestException( f'An A-B loop\'s b_ms has to be at least {ClientMediaABLoops.MIN_AB_LOOP_DURATION_MS}ms after its a_ms, but it was {a_ms}ms to {b_ms}ms!' )
+                
+            
+            ab_loops.append( ( a_ms, b_ms ) )
+            
+        
+        # in order, and the same one only once
+        ab_loops = ClientMediaABLoops.NormaliseABLoops( ab_loops )
+        
+        # the media viewer's menu reads them each time it opens
+        CG.client_controller.WriteSynchronous( 'file_ab_loops', hash, ab_loops )
+        
+        return ClientLocalServerCore.GenerateJSONResponse( request, { 'ab_loops' : [ { 'a_ms' : a_ms, 'b_ms' : b_ms } for ( a_ms, b_ms ) in ab_loops ] } )
         
     
 

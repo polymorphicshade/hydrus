@@ -628,12 +628,13 @@ def BuildRequest( args ) -> APIRequest:
             
             return APIRequest( 'POST', '/manage_file_viewer_data/reset_positions', params )
             
-        elif sub in ( 'position-timestamps', 'skips', 'freezes', 'segments', 'scripted-events' ):
+        elif sub in ( 'position-timestamps', 'skips', 'freezes', 'ab-loops', 'segments', 'scripted-events' ):
             
             ( path, key ) = {
                 'position-timestamps' : ( 'set_position_timestamps', 'position_timestamps' ),
                 'skips' : ( 'set_playback_skips', 'playback_skips' ),
                 'freezes' : ( 'set_playback_freezes', 'playback_freezes' ),
+                'ab-loops' : ( 'set_ab_loops', 'ab_loops' ),
                 'segments' : ( 'set_segments', 'segments' ),
                 'scripted-events' : ( 'set_scripted_events', 'scripted_events' )
             }[ sub ]
@@ -762,6 +763,17 @@ def BuildRequest( args ) -> APIRequest:
         elif sub == 'ab-repeat':
             
             return APIRequest( 'GET', '/manage_media_viewers/get_ab_repeat' )
+            
+        elif sub == 'set-ab-repeat':
+            
+            params = { 'a_ms' : args.a_ms, 'b_ms' : args.b_ms }
+            
+            if args.viewer is not None:
+                
+                params[ 'canvas_key' ] = args.viewer.lower()
+                
+            
+            return APIRequest( 'POST', '/manage_media_viewers/set_ab_repeat', params )
             
         elif sub == 'ping-pong':
             
@@ -985,7 +997,7 @@ def GetArgumentParser() -> argparse.ArgumentParser:
     p.add_argument( '--keep-rotations', action = 'store_true', help = 'leave how they are turned as it is' )
     p.add_argument( '--position-timestamps', action = 'store_true', help = 'reset their position timestamps too' )
     
-    for ( sub, sub_help ) in ( ( 'position-timestamps', 'set a file\'s position timestamps' ), ( 'skips', 'set a file\'s playback skips' ), ( 'freezes', 'set a file\'s freezes, the points where playback holds a frame for a while' ), ( 'segments', 'set a file\'s segments' ), ( 'scripted-events', 'set a file\'s scripted events. needs the "edit_scripted_events" permission' ) ):
+    for ( sub, sub_help ) in ( ( 'position-timestamps', 'set a file\'s position timestamps' ), ( 'skips', 'set a file\'s playback skips' ), ( 'freezes', 'set a file\'s freezes, the points where playback holds a frame for a while' ), ( 'ab-loops', 'set a file\'s saved A-B loops, which the media viewer\'s A-B menu puts back on' ), ( 'segments', 'set a file\'s segments' ), ( 'scripted-events', 'set a file\'s scripted events. needs the "edit_scripted_events" permission' ) ):
         
         p = viewer.add_parser( sub, help = sub_help )
         p.add_argument( 'file' )
@@ -1054,6 +1066,10 @@ def GetArgumentParser() -> argparse.ArgumentParser:
     p = viewers.add_parser( 'open-layout', help = 'open a layout\'s media viewers' )
     p.add_argument( 'json', help = 'a layout, which is ' + json_help )
     viewers.add_parser( 'ab-repeat', help = 'the A-B repeat points of the open media viewers, and whether ping-pong is on' )
+    p = viewers.add_parser( 'set-ab-repeat', help = 'put the A-B repeat points on, like a saved A-B loop. with neither, they are cleared' )
+    p.add_argument( '--a-ms', type = int, help = 'where the loop starts. default is the start of the file' )
+    p.add_argument( '--b-ms', type = int, help = 'where the loop ends. without it, it is not looping' )
+    p.add_argument( '--viewer', metavar = 'CANVAS_KEY', help = 'just this media viewer, by its canvas_key from "viewers list". Default is all that are open' )
     p = viewers.add_parser( 'ping-pong', help = 'make A-B repeat play backwards and forwards, rather than jumping from B back to A' )
     p.add_argument( 'state', choices = [ 'on', 'off' ] )
     p.add_argument( '--viewer', metavar = 'CANVAS_KEY', help = 'just this media viewer, by its canvas_key from "viewers list". Default is all that are open' )

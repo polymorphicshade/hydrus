@@ -44,6 +44,7 @@ from hydrus.client.db import ClientDBFilesDuplicatesUpdates
 from hydrus.client.db import ClientDBFilesInbox
 from hydrus.client.db import ClientDBFilesMaintenance
 from hydrus.client.db import ClientDBFilesImageOverlays
+from hydrus.client.db import ClientDBFilesABLoops
 from hydrus.client.db import ClientDBFilesMaintenanceQueue
 from hydrus.client.db import ClientDBFilesMetadataBasic
 from hydrus.client.db import ClientDBFilesMetadataRich
@@ -4094,6 +4095,7 @@ class DB( HydrusDB.HydrusDB ):
                 'file_info_managers_from_ids' : self.modules_media_results.GetFileInfoManagers,
                 'file_maintenance_get_job_counts' : self.modules_files_maintenance_queue.GetJobCounts,
                 'file_maintenance_get_jobs' : self.modules_files_maintenance_queue.GetJobs,
+                'file_ab_loops' : self.modules_files_ab_loops.GetABLoops,
                 'file_playback_freezes' : self.modules_files_playback_freezes.GetPlaybackFreezes,
                 'file_playback_skips' : self.modules_files_playback_skips.GetPlaybackSkips,
                 'file_scripted_events' : self.modules_files_scripted_events.GetScriptedEvents,
@@ -4259,6 +4261,7 @@ class DB( HydrusDB.HydrusDB ):
                 'file_maintenance_add_jobs_hashes' : self.modules_files_maintenance_queue.AddJobsHashes,
                 'file_maintenance_cancel_jobs' : self.modules_files_maintenance_queue.CancelJobs,
                 'file_maintenance_clear_jobs' : self.modules_files_maintenance.ClearJobs,
+                'file_ab_loops' : self.modules_files_ab_loops.SetABLoops,
                 'file_playback_freezes' : self.modules_files_playback_freezes.SetPlaybackFreezes,
                 'file_playback_skips' : self.modules_files_playback_skips.SetPlaybackSkips,
                 'file_scripted_events' : self.modules_files_scripted_events.SetScriptedEvents,
@@ -4441,6 +4444,10 @@ class DB( HydrusDB.HydrusDB ):
         self.modules_files_playback_freezes = ClientDBFilesPlaybackFreezes.ClientDBFilesPlaybackFreezes( self._c, self.modules_hashes_local_cache )
         
         self._modules.append( self.modules_files_playback_freezes )
+        
+        self.modules_files_ab_loops = ClientDBFilesABLoops.ClientDBFilesABLoops( self._c, self.modules_hashes_local_cache )
+        
+        self._modules.append( self.modules_files_ab_loops )
         
         self.modules_files_scripted_events = ClientDBFilesScriptedEvents.ClientDBFilesScriptedEvents( self._c, self.modules_hashes_local_cache )
         

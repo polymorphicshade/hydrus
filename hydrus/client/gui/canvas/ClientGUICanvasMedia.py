@@ -37,6 +37,7 @@ from hydrus.client.gui.media import ClientGUIMediaAudioEffects
 from hydrus.client.gui.media import ClientGUIMediaControls
 from hydrus.client.gui.media import ClientGUIMediaVolume
 from hydrus.client.media import ClientMedia
+from hydrus.client.media import ClientMediaABLoops
 from hydrus.client.media import ClientMediaPlaybackFreezes
 from hydrus.client.media import ClientMediaResult
 from hydrus.client.media import ClientMediaScreenZooms
@@ -97,13 +98,20 @@ OPEN_EXTERNALLY_BUTTON_SIZE = ( 200, 45 )
 OPEN_EXTERNALLY_MAX_THUMBNAIL_SIZE = ( 200, 200 )
 
 # anything shorter than this is not a useful loop, and mpv's 'rewind loop' damaged-file detection gets twitchy if we restart near 0 many times a second
-MIN_AB_LOOP_DURATION_MS = 100
+MIN_AB_LOOP_DURATION_MS = ClientMediaABLoops.MIN_AB_LOOP_DURATION_MS
 
 # for ping-pong. a bigger step than this in playback time is a seek, or the player going round from one end of the file to the other
 AB_LOOP_PING_PONG_MAX_STEP_MS = 1000
 
 # players take a moment to land a seek, so after we jump over a skip we give them this long before trying again
 PLAYBACK_SKIP_SEEK_GRACE_PERIOD_S = 0.5
+
+def ConvertABLoopToPrettyString( ab_loop: ClientMediaABLoops.ABLoop ) -> str:
+    
+    ( a_ms, b_ms ) = ab_loop
+    
+    return f'{ConvertPlaybackTimestampToString( a_ms )} - {ConvertPlaybackTimestampToString( b_ms )}'
+    
 
 def ConvertPlaybackTimestampToString( timestamp_ms: int ) -> str:
     
@@ -5378,6 +5386,22 @@ class MediaContainer( QW.QWidget ):
         self._UpdateMediaWindowABLoop()
         
         self.abLoopPingPongChanged.emit( ping_pong )
+        
+    
+    def SetABLoopPoints( self, a_ms: int | None, b_ms: int | None ):
+        
+        # a saved loop, or the Client API, putting the A-B repeat points on. with B set, playback goes to A, so the loop plays straight away
+        if self._media is None or not self.CurrentlyPresentingMediaWithDuration():
+            
+            return
+            
+        
+        self._SetABLoop( a_ms, b_ms )
+        
+        if b_ms is not None:
+            
+            self.SeekTo( 0 if a_ms is None else a_ms )
+            
         
     
     def SetABLoopPointA( self ):

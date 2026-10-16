@@ -57,6 +57,7 @@ from hydrus.client.networking import ClientNetworkingURLClass
 from hydrus.server import ServerGlobals as SG
 
 from hydrus.test import TestClientAPI
+from hydrus.test import TestClientABLoops
 from hydrus.test import TestClientABRepeatPingPong
 from hydrus.test import TestClientAPIFork
 from hydrus.test import TestClientAudioExport
@@ -972,6 +973,7 @@ class Controller( object ):
             TestClientImageOverlays,
             TestClientMediaViewerLayouts,
             TestClientMediaViewerLayoutFiles,
+            TestClientABLoops,
             TestClientABRepeatPingPong,
             TestClientPlaybackFreezes,
             TestClientPlaybackGaps,
