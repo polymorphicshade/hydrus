@@ -27,6 +27,12 @@ class ClientDBFilesViewerRotations( ClientDBModule.ClientDBModule ):
         }
         
     
+    def ClearAllViewerRotations( self ):
+        
+        # every file goes back to how it is, not turned
+        self._Execute( 'DELETE FROM file_viewer_rotations;' )
+        
+    
     def ClearViewerRotations( self, hashes ):
         
         # just these files go back to how they are, not turned

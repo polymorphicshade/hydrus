@@ -168,23 +168,41 @@ class TestZoomTimestamps( unittest.TestCase ):
     
     def test_reset_saved_zooms_question( self ):
         
-        # with both, you can reset either or both
-        ( message, yes_tuples ) = ClientGUIMediaZooms.GetResetSavedZoomsQuestion( 1234, 5 )
-        
+        # with positions and position timestamps, you can reset either or both. zooms, pans, and turns go together, like a page's reset
+        ( message, yes_tuples ) = ClientGUIMediaZooms.GetResetSavedZoomsQuestion( 1234, 7, 5 )
+
         self.assertIn( '1,234 files open at a zoom', message )
+        self.assertIn( '7 files are turned', message )
         self.assertIn( '5 files have position timestamps', message )
-        
-        self.assertEqual( [ value for ( label, value ) in yes_tuples ], [ ( True, True ), ( True, False ), ( False, True ) ] )
-        
+
+        self.assertEqual( [ value for ( label, value ) in yes_tuples ], [ ( True, True, True ), ( True, True, False ), ( False, False, True ) ] )
+
         # with just one kind, that is all that is offered
-        ( message, yes_tuples ) = ClientGUIMediaZooms.GetResetSavedZoomsQuestion( 3, 0 )
-        
+        ( message, yes_tuples ) = ClientGUIMediaZooms.GetResetSavedZoomsQuestion( 3, 0, 0 )
+
+        self.assertNotIn( 'are turned', message )
         self.assertNotIn( 'position timestamps,', message )
-        self.assertEqual( [ value for ( label, value ) in yes_tuples ], [ ( True, False ) ] )
-        
-        ( message, yes_tuples ) = ClientGUIMediaZooms.GetResetSavedZoomsQuestion( 0, 3 )
-        
+        self.assertEqual( [ value for ( label, value ) in yes_tuples ], [ ( True, True, False ) ] )
+
+        # just turns are positions too
+        ( message, yes_tuples ) = ClientGUIMediaZooms.GetResetSavedZoomsQuestion( 0, 2, 0 )
+
+        self.assertIn( '2 files are turned', message )
+        self.assertEqual( [ value for ( label, value ) in yes_tuples ], [ ( True, True, False ) ] )
+
+        ( message, yes_tuples ) = ClientGUIMediaZooms.GetResetSavedZoomsQuestion( 0, 0, 3 )
+
         self.assertNotIn( 'open at a zoom', message )
-        self.assertEqual( [ value for ( label, value ) in yes_tuples ], [ ( False, True ) ] )
+        self.assertEqual( [ value for ( label, value ) in yes_tuples ], [ ( False, False, True ) ] )
+
+
+    def test_reset_all_saved_zooms_writes( self ):
+
+        with mock.patch( 'hydrus.client.ClientGlobals.client_controller' ) as controller:
+
+            ClientGUIMediaZooms.ResetAllSavedZooms( True, False, clear_rotations = True )
+
+            self.assertEqual( [ call.args for call in controller.WriteSynchronous.call_args_list ], [ ( 'clear_all_file_viewer_zooms', ), ( 'clear_all_file_viewer_rotations', ) ] )
+            controller.pub.assert_called_once_with( 'reset_all_file_zooms', True, False, clear_rotations = True )
         
     

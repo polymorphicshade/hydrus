@@ -91,10 +91,10 @@ class MediaViewerPanel( ClientGUIOptionsPanelBase.OptionsPagePanel ):
         
         #
         
-        saved_zooms_panel = ClientGUICommon.StaticBox( self, 'saved zooms' )
+        saved_zooms_panel = ClientGUICommon.StaticBox( self, 'saved positions' )
         
-        self._reset_all_saved_zooms = ClientGUICommon.BetterButton( saved_zooms_panel, 'reset all saved zooms' + HC.UNICODE_ELLIPSIS, ClientGUIMediaZooms.AskToResetAllSavedZooms, self )
-        self._reset_all_saved_zooms.setToolTip( ClientGUIFunctions.WrapToolTip( 'Forget the zoom every file was left at in the media viewer, and/or every file\'s position timestamps (the zooms, pans, and orientations saved at points in playback). You will be told how many there are, and asked to confirm. This happens as soon as you confirm, not when you hit apply here.' ) )
+        self._reset_all_saved_zooms = ClientGUICommon.BetterButton( saved_zooms_panel, 'reset all positions' + HC.UNICODE_ELLIPSIS, ClientGUIMediaZooms.AskToResetAllSavedZooms, self )
+        self._reset_all_saved_zooms.setToolTip( ClientGUIFunctions.WrapToolTip( 'Forget the zoom, pan, and turn the media viewer remembers for every file, so they open at your normal default zoom, centered, and not turned. You can choose to reset their position timestamps (the zooms, pans, and orientations saved at points in playback) too. You will be told how many there are, and asked to confirm. This happens as soon as you confirm, not when you hit apply here.' ) )
         
         #
         
@@ -176,7 +176,7 @@ class MediaViewerPanel( ClientGUIOptionsPanelBase.OptionsPagePanel ):
         
         slideshow_panel.Add( slideshow_gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
         
-        label = 'The media viewer remembers the zoom you leave each file at, and you can save position timestamps on files with playback. This resets them for every file at once, so every file opens at your normal default zoom, centered.'
+        label = 'The media viewer remembers the zoom and pan you leave each file at and how you turned it, and you can save position timestamps on files with playback. This resets them for every file at once, so every file opens at your normal default zoom, centered, and not turned.'
         
         st = ClientGUICommon.BetterStaticText( saved_zooms_panel, label = label )
         st.setWordWrap( True )

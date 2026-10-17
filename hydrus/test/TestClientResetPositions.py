@@ -2,6 +2,8 @@ import unittest
 
 from unittest import mock
 
+from qtpy import QtCore as QC
+
 from hydrus.client.gui.canvas import ClientGUICanvasMedia
 from hydrus.client.gui.media import ClientGUIMediaZooms
 
@@ -140,8 +142,60 @@ class TestResetPositions( unittest.TestCase ):
             calls.clear()
             
             container.NotifyFileViewerPositionsReset( { hash_a }, True, True, False )
-            
+
             self.assertEqual( calls, [] )
+
+
+
+    def test_recenter_is_remembered( self ):
+
+        container = self._GetContainer( b'a' * 32 )
+
+        parent = mock.Mock()
+        parent.size.return_value = QC.QSize( 1000, 800 )
+
+        with mock.patch.object( container, 'parentWidget', return_value = parent ), mock.patch.object( container, 'sizeHint', return_value = QC.QSize( 400, 200 ) ), mock.patch.object( container, 'pos', return_value = QC.QPoint( 0, 0 ) ), mock.patch.object( container, 'move' ) as move, mock.patch.object( container, '_SavePanSoon' ) as save_pan_soon:
+
+            # when we center it ourselves, like after a zoom, nothing is saved
+            container.ResetCenterPosition()
+
+            move.assert_called_once_with( QC.QPoint( 300, 300 ) )
+            save_pan_soon.assert_not_called()
+
+            # when the user recenters it, it is saved like a drag
+            container.ResetCenterPosition( user_pan = True )
+
+            save_pan_soon.assert_called_once_with()
+
+
+
+    def test_media_viewer_forgets_all( self ):
+
+        container = self._GetContainer( b'a' * 32 )
+
+        calls = []
+
+        def set_rotation( rotation ):
+
+            calls.append( ( 'rotate', rotation ) )
+
+            container._rotation = rotation
+
+
+        with mock.patch.object( container, '_SetRotation', side_effect = set_rotation ), mock.patch.object( container, 'CanRotate', return_value = True ), mock.patch.object( container, 'IsZoomable', return_value = True ), mock.patch.object( container, 'ZoomReinit', side_effect = lambda: calls.append( ( 'reinit', ) ) ), mock.patch.object( container, 'ResetCenterPosition', side_effect = lambda: calls.append( ( 'center', ) ) ):
+
+            # the old way, from the Client API, leaves the turn alone
+            container.NotifyAllSavedZoomsReset( False, False )
+
+            self.assertEqual( calls, [] )
+            self.assertEqual( container._file_rotation, 90 )
+
+            # resetting every file's positions turns it back too
+            container.NotifyAllSavedZoomsReset( True, False, clear_rotations = True )
+
+            self.assertEqual( calls, [ ( 'rotate', 0 ), ( 'reinit', ), ( 'center', ) ] )
+            self.assertEqual( container._file_rotation, 0 )
+            self.assertIsNone( container._saved_zoom )
 
 
 

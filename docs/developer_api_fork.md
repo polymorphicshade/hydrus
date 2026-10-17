@@ -258,7 +258,7 @@ Arguments: `ignore_saved_positions`. Like the media viewer's _zoom->ignore saved
 
 ### **POST `/manage_file_viewer_data/reset_all_zooms`**
 
-For every file at once, like _reset all saved zooms_. Arguments: `saved_zooms` and/or `position_timestamps`, set to true for what to clear.
+For every file at once, like _reset all positions_, except that this leaves how files are turned alone. Arguments: `saved_zooms` and/or `position_timestamps`, set to true for what to clear.
 
 ### **POST `/manage_file_viewer_data/reset_positions`**
 
@@ -360,7 +360,7 @@ The screens connected now, the main one first, with where they are on the deskto
 
 ### **POST `/manage_media_viewers/apply_screen_zoom`**
 
-Arguments: `screen_name`, and `canvas_key` (optional, default every media viewer that is open). Like the media viewer's _screen->zoom and pan as on_: the file goes how it is zoomed and panned on that screen, and that is saved for the screen the media viewer is on. A screen it has nothing for is the default zoom, centered. Media viewers that do not remember zooms, like the duplicate filter, and ones set to ignore saved zooms leave their files alone. Returns `num_media_viewers`. A canvas_key for a media viewer that is not open gives a 404.
+Arguments: `screen_name`, and `canvas_key` (optional, default every media viewer that is open). Like the media viewer's _position->zoom and pan as on_: the file goes how it is zoomed and panned on that screen, and that is saved for the screen the media viewer is on. A screen it has nothing for is the default zoom, centered. Media viewers that do not remember zooms, like the duplicate filter, and ones set to ignore saved zooms leave their files alone. Returns `num_media_viewers`. A canvas_key for a media viewer that is not open gives a 404.
 
 ### **GET `/manage_media_viewers/get_slideshows`**
 

@@ -9,14 +9,19 @@ from hydrus.client import ClientGlobals as CG
 from hydrus.client.gui import ClientGUIDialogsMessage
 from hydrus.client.gui import ClientGUIDialogsQuick
 
-def GetResetSavedZoomsQuestion( num_file_viewer_zooms: int, num_files_with_zoom_timestamps: int ) -> tuple[ str, list[ tuple[ str, tuple[ bool, bool ] ] ] ]:
+def GetResetSavedZoomsQuestion( num_file_viewer_zooms: int, num_file_viewer_rotations: int, num_files_with_zoom_timestamps: int ) -> tuple[ str, list[ tuple[ str, tuple[ bool, bool, bool ] ] ] ]:
     
-    # the question to ask, and the buttons for it. each button's value is ( clear the saved zooms, clear the zoom timestamps )
+    # the question to ask, and the buttons for it. each button's value is ( clear the saved zooms and pans, clear the rotations, clear the zoom timestamps ), like a page's reset
     lines = []
     
     if num_file_viewer_zooms > 0:
         
-        lines.append( f'{HydrusNumbers.ToHumanInt( num_file_viewer_zooms )} files open at a zoom you set on them.' )
+        lines.append( f'{HydrusNumbers.ToHumanInt( num_file_viewer_zooms )} files open at a zoom and pan you set on them.' )
+        
+    
+    if num_file_viewer_rotations > 0:
+        
+        lines.append( f'{HydrusNumbers.ToHumanInt( num_file_viewer_rotations )} files are turned.' )
         
     
     if num_files_with_zoom_timestamps > 0:
@@ -26,23 +31,25 @@ def GetResetSavedZoomsQuestion( num_file_viewer_zooms: int, num_files_with_zoom_
     
     message = '\n'.join( lines )
     message += '\n' * 2
-    message += 'Resetting forgets them for every file, and those files go back to your normal default zoom, centered. This cannot be undone.'
+    message += 'Resetting forgets them for every file, and those files go back to your normal default zoom, centered, and not turned. This cannot be undone.'
+    
+    has_positions = num_file_viewer_zooms > 0 or num_file_viewer_rotations > 0
     
     yes_tuples = []
     
-    if num_file_viewer_zooms > 0 and num_files_with_zoom_timestamps > 0:
+    if has_positions and num_files_with_zoom_timestamps > 0:
         
-        yes_tuples.append( ( 'reset both', ( True, True ) ) )
-        yes_tuples.append( ( 'just the saved zooms', ( True, False ) ) )
-        yes_tuples.append( ( 'just the position timestamps', ( False, True ) ) )
+        yes_tuples.append( ( 'reset everything', ( True, True, True ) ) )
+        yes_tuples.append( ( 'keep the position timestamps', ( True, True, False ) ) )
+        yes_tuples.append( ( 'just the position timestamps', ( False, False, True ) ) )
         
-    elif num_file_viewer_zooms > 0:
+    elif has_positions:
         
-        yes_tuples.append( ( 'reset the saved zooms', ( True, False ) ) )
+        yes_tuples.append( ( 'reset them', ( True, True, False ) ) )
         
     else:
         
-        yes_tuples.append( ( 'reset the position timestamps', ( False, True ) ) )
+        yes_tuples.append( ( 'reset the position timestamps', ( False, False, True ) ) )
         
     
     return ( message, yes_tuples )
@@ -51,27 +58,28 @@ def GetResetSavedZoomsQuestion( num_file_viewer_zooms: int, num_files_with_zoom_
 def AskToResetAllSavedZooms( win: QW.QWidget ):
     
     num_file_viewer_zooms = CG.client_controller.Read( 'num_file_viewer_zooms' )
+    num_file_viewer_rotations = CG.client_controller.Read( 'num_file_viewer_rotations' )
     num_files_with_zoom_timestamps = CG.client_controller.Read( 'num_files_with_zoom_timestamps' )
     
-    if num_file_viewer_zooms == 0 and num_files_with_zoom_timestamps == 0:
+    if num_file_viewer_zooms == 0 and num_file_viewer_rotations == 0 and num_files_with_zoom_timestamps == 0:
         
-        ClientGUIDialogsMessage.ShowInformation( win, 'No files have a saved zoom or position timestamps, so there is nothing to reset.' )
+        ClientGUIDialogsMessage.ShowInformation( win, 'No files have a saved zoom, pan, turn, or position timestamps, so there is nothing to reset.' )
         
         return
         
     
-    ( message, yes_tuples ) = GetResetSavedZoomsQuestion( num_file_viewer_zooms, num_files_with_zoom_timestamps )
+    ( message, yes_tuples ) = GetResetSavedZoomsQuestion( num_file_viewer_zooms, num_file_viewer_rotations, num_files_with_zoom_timestamps )
     
     try:
         
-        ( clear_file_viewer_zooms, clear_zoom_timestamps ) = ClientGUIDialogsQuick.GetYesYesNo( win, message, title = 'reset all saved zooms?', yes_tuples = yes_tuples, no_label = 'forget it' )
+        ( clear_file_viewer_zooms, clear_rotations, clear_zoom_timestamps ) = ClientGUIDialogsQuick.GetYesYesNo( win, message, title = 'reset all positions?', yes_tuples = yes_tuples, no_label = 'forget it' )
         
     except HydrusExceptions.CancelledException:
         
         return
         
     
-    ResetAllSavedZooms( clear_file_viewer_zooms, clear_zoom_timestamps )
+    ResetAllSavedZooms( clear_file_viewer_zooms, clear_zoom_timestamps, clear_rotations = clear_rotations )
     
 
 def GetResetFileViewerPositionsQuestion( num_files: int, num_file_viewer_zooms: int, num_file_viewer_rotations: int, num_files_with_zoom_timestamps: int ) -> tuple[ str, list[ tuple[ str, tuple[ bool, bool, bool ] ] ] ]:
@@ -176,11 +184,16 @@ def SetIgnoreSavedPositions( ignore_saved_positions: bool ):
     CG.client_controller.pub( 'media_viewer_ignore_saved_positions' )
     
 
-def ResetAllSavedZooms( clear_file_viewer_zooms: bool, clear_zoom_timestamps: bool ):
+def ResetAllSavedZooms( clear_file_viewer_zooms: bool, clear_zoom_timestamps: bool, clear_rotations: bool = False ):
     
     if clear_file_viewer_zooms:
         
         CG.client_controller.WriteSynchronous( 'clear_all_file_viewer_zooms' )
+        
+    
+    if clear_rotations:
+        
+        CG.client_controller.WriteSynchronous( 'clear_all_file_viewer_rotations' )
         
     
     if clear_zoom_timestamps:
@@ -189,5 +202,5 @@ def ResetAllSavedZooms( clear_file_viewer_zooms: bool, clear_zoom_timestamps: bo
         
     
     # open media viewers hold on to what they loaded for their current file
-    CG.client_controller.pub( 'reset_all_file_zooms', clear_file_viewer_zooms, clear_zoom_timestamps )
+    CG.client_controller.pub( 'reset_all_file_zooms', clear_file_viewer_zooms, clear_zoom_timestamps, clear_rotations = clear_rotations )
     

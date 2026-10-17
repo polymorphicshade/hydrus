@@ -4214,6 +4214,7 @@ class DB( HydrusDB.HydrusDB ):
                 'associate_repository_update_hashes' : self.modules_repositories.AssociateRepositoryUpdateHashes,
                 'clear_deferred_physical_delete' : self.modules_files_storage.ClearDeferredPhysicalDelete,
                 'clear_all_false_positive_relations' : self.modules_files_duplicates_updates.ClearAllFalsePositivesHashes,
+                'clear_all_file_viewer_rotations' : self.modules_files_viewer_rotations.ClearAllViewerRotations,
                 'clear_all_file_viewer_zooms' : self.modules_files_viewer_zooms.ClearAllViewerZooms,
                 'clear_all_file_zoom_timestamps' : self.modules_files_zoom_timestamps.ClearAllZoomTimestamps,
                 'clear_internal_false_positive_relations' : self.modules_files_duplicates_updates.ClearInternalFalsePositivesHashes,

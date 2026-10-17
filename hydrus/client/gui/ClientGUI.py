@@ -3454,7 +3454,7 @@ ATTACH "client.mappings.db" as external_mappings;'''
         
         ClientGUIMenus.AppendMenuItem( clear_submenu, 'clear all file viewing statistics' + HC.UNICODE_ELLIPSIS, 'Delete all file viewing records from the database.', self._ClearFileViewingStats )
         ClientGUIMenus.AppendMenuItem( clear_submenu, 'cull file viewing statistics based on current min/max values' + HC.UNICODE_ELLIPSIS, 'Cull your file viewing statistics based on minimum and maximum permitted time deltas.', self._CullFileViewingStats )
-        ClientGUIMenus.AppendMenuItem( clear_submenu, 'reset all saved zooms' + HC.UNICODE_ELLIPSIS, 'Forget the zoom every file was left at in the media viewer, and/or every file\'s position timestamps (the zooms, pans, and orientations saved at points in playback). You will be told how many there are, and asked to confirm.', ClientGUIMediaZooms.AskToResetAllSavedZooms, self )
+        ClientGUIMenus.AppendMenuItem( clear_submenu, 'reset all positions' + HC.UNICODE_ELLIPSIS, 'Forget the zoom, pan, and turn the media viewer remembers for every file, so they open at your normal default zoom, centered, and not turned. You can choose to reset their position timestamps (the zooms, pans, and orientations saved at points in playback) too. You will be told how many there are, and asked to confirm.', ClientGUIMediaZooms.AskToResetAllSavedZooms, self )
         
         ClientGUIMenus.AppendMenu( menu, clear_submenu, 'clear' )
         

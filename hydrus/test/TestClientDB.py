@@ -1663,7 +1663,18 @@ class TestClientDB( unittest.TestCase ):
         self.assertEqual( self._read( 'num_files_with_zoom_timestamps' ), 0 )
         self.assertEqual( self._read( 'file_zoom_timestamps', hash_a ), [] )
         self.assertEqual( self._read( 'file_zoom_timestamps', hash_c ), [] )
-        
+
+        # and every file's turn
+        self._write( 'file_viewer_rotation', hash_a, 90 )
+        self._write( 'file_viewer_rotation', hash_c, 270 )
+
+        self.assertGreaterEqual( self._read( 'num_file_viewer_rotations' ), 2 )
+
+        self._write( 'clear_all_file_viewer_rotations' )
+
+        self.assertEqual( self._read( 'num_file_viewer_rotations' ), 0 )
+        self.assertEqual( self._read( 'file_viewer_rotation', hash_a ), 0 )
+
         # and saving new ones afterwards works as normal
         self._write( 'file_viewer_zoom', hash_b, 3.0 )
         

@@ -4973,12 +4973,12 @@ class MediaContainer( QW.QWidget ):
             
         
     
-    def NotifyAllSavedZoomsReset( self, clear_file_viewer_zooms: bool, clear_zoom_timestamps: bool ):
+    def NotifyAllSavedZoomsReset( self, clear_file_viewer_zooms: bool, clear_zoom_timestamps: bool, clear_rotations: bool = False ):
         
         # what we looked up ahead of time for the next file is out of date
         self._ClearStandbyZoomData()
         
-        self._ForgetLoadedPositions( clear_file_viewer_zooms, False, clear_zoom_timestamps )
+        self._ForgetLoadedPositions( clear_file_viewer_zooms, clear_rotations, clear_zoom_timestamps )
         
     
     def NotifyFileViewerPositionsReset( self, hashes: set[ bytes ], clear_file_viewer_zooms: bool, clear_rotations: bool, clear_zoom_timestamps: bool ):
@@ -5271,28 +5271,34 @@ class MediaContainer( QW.QWidget ):
             
         
     
-    def ResetCenterPosition( self ):
-        
+    def ResetCenterPosition( self, user_pan: bool = False ):
+
         if self._media is None:
-            
+
             return
-            
-        
+
+
         canvas_size = self.parentWidget().size()
-        
+
         ideal_size = self.sizeHint()
-        
+
         x = ( canvas_size.width() - ideal_size.width() ) // 2
         y = ( canvas_size.height() - ideal_size.height() ) // 2
-        
+
         ideal_pos =  QC.QPoint( x, y )
-        
+
         if ideal_pos != self.pos():
-            
+
             self.move( ideal_pos )
-            
-        
-    
+
+
+        if user_pan:
+
+            # the user recentered it, so it is remembered like a drag. centered is saved as no pan at all
+            self._SavePanSoon()
+
+
+
     def ResetZoomToDefault( self ):
         
         if self._media is None:

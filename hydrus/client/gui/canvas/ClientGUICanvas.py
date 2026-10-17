@@ -1481,8 +1481,8 @@ class Canvas( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
                 self._media_container.ZoomByPixels( -1 )
                 
             elif action == CAC.SIMPLE_RESET_PAN_TO_CENTER:
-                
-                self._media_container.ResetCenterPosition()
+
+                self._media_container.ResetCenterPosition( user_pan = True )
                 
             elif action == CAC.SIMPLE_RESIZE_WINDOW_TO_MEDIA:
                 
@@ -2795,6 +2795,138 @@ class CanvasWithHovers( Canvas ):
         ab_loops = CG.client_controller.Read( 'file_ab_loops', hash )
         
         self._SaveABLoops( hash, ClientMediaABLoops.AddABLoop( ab_loops, ab_loop ) )
+        
+    
+    def _AppendPositionMenu( self, menu: QW.QMenu ):
+        
+        # a file's position is its zoom, where it is panned to, and how it is turned. all three, and what is saved of them, are managed here
+        can_zoom = self._media_container.IsZoomable()
+        can_rotate = self._media_container.CanRotate()
+        
+        if not ( can_zoom or can_rotate ):
+            
+            return
+            
+        
+        position_menu = ClientGUIMenus.GenerateMenu( menu )
+        
+        label_parts = []
+        
+        # how it is shown now
+        
+        if can_zoom:
+            
+            zoom_menu = ClientGUIMenus.GenerateMenu( position_menu )
+            
+            ClientGUIMenus.AppendMenuItem( zoom_menu, 'zoom in', 'Zoom the media in.', self._media_container.ZoomIn )
+            ClientGUIMenus.AppendMenuItem( zoom_menu, 'zoom out', 'Zoom the media out.', self._media_container.ZoomOut )
+            
+            current_zoom = self._media_container.GetCurrentZoom()
+            
+            if current_zoom != 1.0:
+                
+                ClientGUIMenus.AppendMenuItem( zoom_menu, 'zoom to 100%', 'Set the zoom to 100%.', self._media_container.ZoomSwitch )
+                
+            elif current_zoom != self._media_container.GetCanvasZoom():
+                
+                ClientGUIMenus.AppendMenuItem( zoom_menu, 'zoom fit', 'Set the zoom so the media fits the canvas.', self._media_container.ZoomSwitch )
+                
+            
+            if not self._media_container.IsAtMaxZoom():
+                
+                ClientGUIMenus.AppendMenuItem( zoom_menu, 'zoom to max', 'Set the zoom to the maximum possible.', self._media_container.ZoomMax )
+                
+            
+            current_zoom_string = ClientData.ConvertZoomToPercentage( current_zoom )
+            
+            ClientGUIMenus.AppendMenu( position_menu, zoom_menu, f'zoom: {current_zoom_string}' )
+            
+            label_parts.append( current_zoom_string )
+            
+            ClientGUIMenus.AppendMenuItem( position_menu, 'recenter', 'Pan the media back to the middle of the window.', self.ProcessApplicationCommand, CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_RESET_PAN_TO_CENTER ) )
+            
+        
+        if can_rotate:
+            
+            orientation_menu = ClientGUIMenus.GenerateMenu( position_menu )
+            
+            current_rotation = self._media_container.GetRotation()
+            
+            for rotation in ClientGUICanvasMedia.ORIENTATION_MENU_ROTATIONS:
+                
+                ClientGUIMenus.AppendMenuCheckItem( orientation_menu, ClientGUICanvasMedia.ConvertRotationToPrettyString( rotation ), f'Turn this file {rotation} degrees clockwise. It stays like this every time it is shown, until you change it.', current_rotation == rotation, self._media_container.SetRotation, rotation )
+                
+            
+            ClientGUIMenus.AppendSeparator( orientation_menu )
+            
+            is_custom = current_rotation not in ClientGUICanvasMedia.ORIENTATION_MENU_ROTATIONS
+            
+            custom_label = f'custom ({ClientGUICanvasMedia.ConvertRotationToPrettyString( current_rotation )})' if is_custom else 'custom'
+            
+            ClientGUIMenus.AppendMenuCheckItem( orientation_menu, custom_label + HC.UNICODE_ELLIPSIS, 'Turn this file clockwise by any number of degrees. It stays like this every time it is shown, until you change it.', is_custom, self._SetCustomRotation )
+            
+            ClientGUIMenus.AppendMenu( position_menu, orientation_menu, f'orientation: {ClientGUICanvasMedia.ConvertRotationToPrettyString( current_rotation )}' )
+            
+            if current_rotation != 0:
+                
+                label_parts.append( ClientGUICanvasMedia.ConvertRotationToPrettyString( current_rotation ) )
+                
+            
+        
+        # what is saved for this file
+        
+        if can_zoom:
+            
+            remembers_file_zooms = self._media_container.RemembersFileZooms()
+            ignore_saved_positions = CG.client_controller.new_options.GetBoolean( 'media_viewer_ignore_saved_positions' )
+            
+            can_use_screen_zooms = remembers_file_zooms and not ignore_saved_positions
+            supports_zoom_timestamps = self._media_container.SupportsZoomTimestamps()
+            has_saved_zoom = self._media_container.HasSavedZoom()
+            
+            if supports_zoom_timestamps or can_use_screen_zooms or has_saved_zoom:
+                
+                ClientGUIMenus.AppendSeparator( position_menu )
+                
+            
+            if supports_zoom_timestamps:
+                
+                self._AppendPositionTimestampsMenu( position_menu )
+                
+            
+            if can_use_screen_zooms:
+                
+                # each file has its own zoom and pan on each screen. this shows it how it is on another one
+                screen_zoom_menu = ClientGUIMenus.GenerateMenu( position_menu )
+                
+                connected_screen_names = [ screen_name for ( screen_name, x, y, width, height ) in ClientGUIScreenLocations.GetCurrentScreenGeometries() ]
+                
+                for ( label, screen_name ) in ClientMediaScreenZooms.GetScreenZoomChoices( connected_screen_names, self._media_container.GetScreenName(), self._media_container.GetScreenZooms() ):
+                    
+                    ClientGUIMenus.AppendMenuItem( screen_zoom_menu, label, 'Zoom and pan this file how it is on that screen, and keep it like that on this one.', self._media_container.ApplyScreenZoom, screen_name )
+                    
+                
+                ClientGUIMenus.AppendMenu( position_menu, screen_zoom_menu, 'zoom and pan as on' )
+                
+            
+            if has_saved_zoom:
+                
+                ClientGUIMenus.AppendMenuItem( position_menu, "forget this file's zoom and pan", 'This file opens at the zoom and pan you last left it at on this screen. Go back to the normal default zoom, centered, and open like that on this screen from now on. Other screens keep theirs. How it is turned is kept: set its orientation to 0\u00b0 for that.', self._media_container.ForgetSavedZoom )
+                
+            
+            # and for every file
+            
+            if remembers_file_zooms:
+                
+                ClientGUIMenus.AppendSeparator( position_menu )
+                
+                ClientGUIMenus.AppendMenuCheckItem( position_menu, 'ignore saved zooms and pans', 'Open every file at the normal default zoom, fit to the window and centered, whatever zoom, pan, and position timestamps it has saved. While this is on, nothing new is saved either. Nothing is deleted: turn it off, and files open how they were left again. This is for all media viewers.', ignore_saved_positions, ClientGUIMediaZooms.SetIgnoreSavedPositions, not ignore_saved_positions )
+                
+            
+        
+        label = 'position: {}'.format( ', '.join( label_parts ) ) if len( label_parts ) > 0 else 'position'
+        
+        ClientGUIMenus.AppendMenu( menu, position_menu, label )
         
     
     def _AppendPositionTimestampsMenu( self, menu: QW.QMenu ):
@@ -5950,74 +6082,7 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
             
             ClientGUIMenus.AppendSeparator( menu )
             
-            if self._media_container.IsZoomable():
-                
-                zoom_menu = ClientGUIMenus.GenerateMenu( menu )
-                
-                ClientGUIMenus.AppendMenuItem( zoom_menu, 'zoom in', 'Zoom the media in.', self._media_container.ZoomIn )
-                ClientGUIMenus.AppendMenuItem( zoom_menu, 'zoom out', 'Zoom the media out.', self._media_container.ZoomOut )
-                
-                current_zoom = self._media_container.GetCurrentZoom()
-                
-                if current_zoom != 1.0:
-                    
-                    ClientGUIMenus.AppendMenuItem( zoom_menu, 'zoom to 100%', 'Set the zoom to 100%.', self._media_container.ZoomSwitch )
-                    
-                elif current_zoom != self._media_container.GetCanvasZoom():
-                    
-                    ClientGUIMenus.AppendMenuItem( zoom_menu, 'zoom fit', 'Set the zoom so the media fits the canvas.', self._media_container.ZoomSwitch )
-                    
-                
-                if not self._media_container.IsAtMaxZoom():
-                    
-                    ClientGUIMenus.AppendMenuItem( zoom_menu, 'zoom to max', 'Set the zoom to the maximum possible.', self._media_container.ZoomMax )
-                    
-                
-                if self._media_container.HasSavedZoom():
-                    
-                    ClientGUIMenus.AppendSeparator( zoom_menu )
-                    
-                    ClientGUIMenus.AppendMenuItem( zoom_menu, "forget this file's zoom and pan", 'This file opens at the zoom and pan you last left it at on this screen. Go back to the normal default zoom, centered, and open like that on this screen from now on. Other screens keep theirs.', self._media_container.ForgetSavedZoom )
-                    
-                
-                if self._media_container.RemembersFileZooms():
-                    
-                    ignore_saved_positions = CG.client_controller.new_options.GetBoolean( 'media_viewer_ignore_saved_positions' )
-                    
-                    ClientGUIMenus.AppendSeparator( zoom_menu )
-                    
-                    ClientGUIMenus.AppendMenuCheckItem( zoom_menu, 'ignore saved zooms and pans', 'Open every file at the normal default zoom, fit to the window and centered, whatever zoom, pan, and position timestamps it has saved. While this is on, nothing new is saved either. Nothing is deleted: turn it off, and files open how they were left again. This is for all media viewers.', ignore_saved_positions, ClientGUIMediaZooms.SetIgnoreSavedPositions, not ignore_saved_positions )
-                    
-                
-                ClientGUIMenus.AppendMenu( menu, zoom_menu, 'zoom: {}'.format( ClientData.ConvertZoomToPercentage( self._media_container.GetCurrentZoom() ) ) )
-                
-            
-            if self._media_container.CanRotate():
-                
-                orientation_menu = ClientGUIMenus.GenerateMenu( menu )
-                
-                current_rotation = self._media_container.GetRotation()
-                
-                for rotation in ClientGUICanvasMedia.ORIENTATION_MENU_ROTATIONS:
-                    
-                    ClientGUIMenus.AppendMenuCheckItem( orientation_menu, ClientGUICanvasMedia.ConvertRotationToPrettyString( rotation ), f'Turn this file {rotation} degrees clockwise. It stays like this every time it is shown, until you change it.', current_rotation == rotation, self._media_container.SetRotation, rotation )
-                    
-                
-                ClientGUIMenus.AppendSeparator( orientation_menu )
-                
-                is_custom = current_rotation not in ClientGUICanvasMedia.ORIENTATION_MENU_ROTATIONS
-                
-                custom_label = f'custom ({ClientGUICanvasMedia.ConvertRotationToPrettyString( current_rotation )})' if is_custom else 'custom'
-                
-                ClientGUIMenus.AppendMenuCheckItem( orientation_menu, custom_label + HC.UNICODE_ELLIPSIS, 'Turn this file clockwise by any number of degrees. It stays like this every time it is shown, until you change it.', is_custom, self._SetCustomRotation )
-                
-                ClientGUIMenus.AppendMenu( menu, orientation_menu, f'orientation: {ClientGUICanvasMedia.ConvertRotationToPrettyString( current_rotation )}' )
-                
-            
-            if self._media_container.IsZoomable() and self._media_container.SupportsZoomTimestamps():
-                
-                self._AppendPositionTimestampsMenu( menu )
-                
+            self._AppendPositionMenu( menu )
             
             if self.parentWidget().isFullScreen():
                 
@@ -6032,21 +6097,6 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
             
             ClientGUIMenus.AppendMenuItem( screen_menu, 'save location' + HC.UNICODE_ELLIPSIS, 'Give where this media viewer is on your screens, and its size, a name, so you can snap back to it later.', ClientGUIScreenLocations.SaveScreenLocationForWindow, self, self.window() )
             ClientGUIMenus.AppendMenuItem( screen_menu, 'move to location' + HC.UNICODE_ELLIPSIS, 'Snap this media viewer to one of your saved screen locations, size and all.', self._MoveToScreenLocation )
-            
-            if self._media_container.RemembersFileZooms() and self._media_container.IsZoomable() and not CG.client_controller.new_options.GetBoolean( 'media_viewer_ignore_saved_positions' ):
-                
-                # each file has its own zoom and pan on each screen. this shows it how it is on another one
-                screen_zoom_menu = ClientGUIMenus.GenerateMenu( screen_menu )
-                
-                connected_screen_names = [ screen_name for ( screen_name, x, y, width, height ) in ClientGUIScreenLocations.GetCurrentScreenGeometries() ]
-                
-                for ( label, screen_name ) in ClientMediaScreenZooms.GetScreenZoomChoices( connected_screen_names, self._media_container.GetScreenName(), self._media_container.GetScreenZooms() ):
-                    
-                    ClientGUIMenus.AppendMenuItem( screen_zoom_menu, label, 'Zoom and pan this file how it is on that screen, and keep it like that on this one.', self._media_container.ApplyScreenZoom, screen_name )
-                    
-                
-                ClientGUIMenus.AppendMenu( screen_menu, screen_zoom_menu, 'zoom and pan as on' )
-                
             
             ClientGUIMenus.AppendSeparator( screen_menu )
             
