@@ -5,7 +5,7 @@ Name each branch in the form `#-branch-title` where `#` is a number from 1-N whe
 Any new features added should have an accompanying API access point (if applicable).
 
 # TODO
-
+1. Highlight last opened window with a magenta (#FF00FF) background, but only when enabled in options (pick where to do it, including customizing the background color).
 
 # Future TODO
 (ignore this list for now)
