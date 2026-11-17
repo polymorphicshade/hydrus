@@ -1677,6 +1677,8 @@ class MediaResultsPanelThumbnails( ClientGUIMediaResultsPanel.MediaResultsPanel 
             
             ClientGUIMediaMenus.AddSnapshotsMenuItem( menu, self._focused_media, self._GetSelectedMediaOrdered() )
             
+            ClientGUIMediaMenus.AddCropsMenuItem( menu, self._focused_media, self._GetSelectedMediaOrdered() )
+            
             ClientGUIMediaMenus.AddShareMenu( self, self, menu, self._focused_media, self._selected_media )
             
         
@@ -4006,6 +4008,8 @@ class MediaResultsPanelThumbnailsGraphicsViewTest( ClientGUIMediaResultsPanel.Me
             ClientGUIMediaMenus.AddOpenMenu( self, self, menu, self._focused_media, self._selected_media )
             
             ClientGUIMediaMenus.AddSnapshotsMenuItem( menu, self._focused_media, self._GetSelectedMediaOrdered() )
+            
+            ClientGUIMediaMenus.AddCropsMenuItem( menu, self._focused_media, self._GetSelectedMediaOrdered() )
             
             ClientGUIMediaMenus.AddShareMenu( self, self, menu, self._focused_media, self._selected_media )
             

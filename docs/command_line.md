@@ -89,6 +89,9 @@ python hydrus_cli.py paths all
 python hydrus_cli.py viewer get 1234
 python hydrus_cli.py viewer rotate 90 1234
 python hydrus_cli.py viewer mirror 1234 --horizontal on
+python hydrus_cli.py crops get 1234
+python hydrus_cli.py crops add 1234 --rect 100 50 640 360
+python hydrus_cli.py crops add 1234 "C:\pictures\face.png" --timestamp-ms 5000
 python hydrus_cli.py viewer segments 1234 "[ { \"timestamp_ms\" : 0, \"name\" : \"intro\" } ]"
 python hydrus_cli.py viewer skips 1234 @skips.json
 python hydrus_cli.py viewer freezes 1234 "[ { \"timestamp_ms\" : 3000, \"duration_ms\" : 2000 } ]"

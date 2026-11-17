@@ -14,6 +14,7 @@ from hydrus.client import ClientConstants as CC
 from hydrus.client import ClientGlobals as CG
 from hydrus.client import ClientLocation
 from hydrus.client import ClientPaths
+from hydrus.client import ClientCrops
 from hydrus.client import ClientSnapshots
 from hydrus.client import ClientThreading
 from hydrus.client.media import ClientMedia
@@ -477,6 +478,21 @@ def ShowSnapshotsInNewPage( hashes: collections.abc.Sequence[ bytes ] ):
     snapshot_hashes = ClientSnapshots.GetSnapshotHashesForFiles( hashes )
     
     CG.client_controller.pub( 'new_page_query', location_context, initial_hashes = snapshot_hashes, page_name = 'snapshots' )
+    
+
+def ShowCropsInNewPage( hashes: collections.abc.Sequence[ bytes ] ):
+    
+    # one page with all of these files' crops, file by file
+    location_context = ClientCrops.GetCropsLocationContext()
+    
+    if location_context is None:
+        
+        return
+        
+    
+    crop_hashes = ClientCrops.GetCropHashesForFiles( hashes )
+    
+    CG.client_controller.pub( 'new_page_query', location_context, initial_hashes = crop_hashes, page_name = 'crops' )
     
 
 def UndeleteFiles( hashes ):

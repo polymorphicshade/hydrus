@@ -483,6 +483,38 @@ class TestClientDB( unittest.TestCase ):
         self.assertEqual( self._read( 'file_playback_skips', hash_b ), [ ( 0, 500 ) ] )
         
     
+    def test_file_crops( self ):
+        
+        all_known_files_location_context = ClientLocation.LocationContext.STATICCreateSimple( CC.COMBINED_FILE_SERVICE_KEY )
+        
+        source_hash = os.urandom( 32 )
+        other_source_hash = os.urandom( 32 )
+        
+        ( image_crop_hash, early_hash, late_hash ) = ( os.urandom( 32 ), os.urandom( 32 ), os.urandom( 32 ) )
+        
+        self.assertEqual( self._read( 'file_crops_for_files', [ source_hash ], all_known_files_location_context ), [] )
+        
+        # in the order they come in the file, a crop of an image, with no timestamp, first
+        self._write( 'file_crop_add', source_hash, late_hash, 9000 )
+        self._write( 'file_crop_add', source_hash, early_hash, 1000 )
+        self._write( 'file_crop_add', source_hash, image_crop_hash, None )
+        
+        self.assertEqual( self._read( 'file_crops_for_files', [ source_hash ], all_known_files_location_context ), [ image_crop_hash, early_hash, late_hash ] )
+        
+        # the same crop again just moves
+        self._write( 'file_crop_add', source_hash, early_hash, 10000 )
+        
+        self.assertEqual( self._read( 'file_crops_for_files', [ source_hash ], all_known_files_location_context ), [ image_crop_hash, late_hash, early_hash ] )
+        
+        # file by file, and one cut out of both is listed once, under the first
+        self._write( 'file_crop_add', other_source_hash, late_hash, 500 )
+        
+        self.assertEqual( self._read( 'file_crops_for_files', [ other_source_hash, source_hash ], all_known_files_location_context ), [ late_hash, image_crop_hash, early_hash ] )
+        
+        # they are not snapshots
+        self.assertEqual( self._read( 'file_snapshots_for_files', [ source_hash ], all_known_files_location_context ), [] )
+        
+    
     def test_file_snapshots( self ):
         
         TestClientDB._clear_db()
@@ -1450,10 +1482,19 @@ class TestClientDB( unittest.TestCase ):
         
         self._write( 'file_snapshot_add', old_hash, other_hash, 500 )
         
+        crop_hash = os.urandom( 32 )
+        
+        self._write( 'file_crop_add', old_hash, crop_hash, None )
+        
         num_moved = self._write( 'file_replace_move_data', old_hash, new_hash )
         
-        # a loop, a skip, a count, a path, a mirror, two playlist places, and a snapshot
-        self.assertEqual( num_moved, 8 )
+        # a loop, a skip, a count, a path, a mirror, two playlist places, a snapshot, and a crop
+        self.assertEqual( num_moved, 9 )
+        
+        all_known_files_location_context = ClientLocation.LocationContext.STATICCreateSimple( CC.COMBINED_FILE_SERVICE_KEY )
+        
+        self.assertEqual( self._read( 'file_crops_for_files', [ new_hash ], all_known_files_location_context ), [ crop_hash ] )
+        self.assertEqual( self._read( 'file_crops_for_files', [ old_hash ], all_known_files_location_context ), [] )
         
         self.assertEqual( self._read( 'file_viewer_mirror', new_hash ), ( True, False ) )
         self.assertEqual( self._read( 'file_viewer_mirror', old_hash ), ( False, False ) )

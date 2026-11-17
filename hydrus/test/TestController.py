@@ -63,6 +63,7 @@ from hydrus.test import TestClientAPIFork
 from hydrus.test import TestClientAudioExport
 from hydrus.test import TestClientFileReplace
 from hydrus.test import TestClientCanvasOverlays
+from hydrus.test import TestClientCrops
 from hydrus.test import TestClientConstants
 from hydrus.test import TestClientDaemons
 from hydrus.test import TestClientDB
@@ -972,6 +973,7 @@ class Controller( object ):
             TestClientListBoxes,
             TestClientAudioExport,
             TestClientCanvasOverlays,
+            TestClientCrops,
             TestClientFileCounters,
             TestClientFileReplace,
             TestClientIgnoreSavedPositions,

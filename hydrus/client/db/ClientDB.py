@@ -55,6 +55,7 @@ from hydrus.client.db import ClientDBFilesPlaybackSkips
 from hydrus.client.db import ClientDBFilesScriptedEvents
 from hydrus.client.db import ClientDBFilesSearch
 from hydrus.client.db import ClientDBFilesSegments
+from hydrus.client.db import ClientDBFilesCrops
 from hydrus.client.db import ClientDBFilesSnapshots
 from hydrus.client.db import ClientDBFilesStorage
 from hydrus.client.db import ClientDBFilesTimestamps
@@ -4085,6 +4086,7 @@ class DB( HydrusDB.HydrusDB ):
                 'file_counters' : self.modules_files_counters.GetCounts,
                 'file_snapshots' : self.modules_files_snapshots.GetSnapshotHashes,
                 'file_snapshots_for_files' : self.modules_files_snapshots.GetSnapshotHashesForFiles,
+                'file_crops_for_files' : self.modules_files_crops.GetCropHashesForFiles,
                 'file_virtual_paths' : self.modules_files_virtual_paths.GetPaths,
                 'all_file_virtual_paths' : self.modules_files_virtual_paths.GetAllPaths,
                 'playlist_items' : self.modules_playlists.GetPlaylistItems,
@@ -4252,6 +4254,7 @@ class DB( HydrusDB.HydrusDB ):
                 'file_counter_increment' : self.modules_files_counters.IncrementCount,
                 'file_counter_set' : self.modules_files_counters.SetCount,
                 'file_snapshot_add' : self.modules_files_snapshots.AddSnapshot,
+                'file_crop_add' : self.modules_files_crops.AddCrop,
                 'file_virtual_paths' : self.modules_files_virtual_paths.SetPaths,
                 'playlist_add_blank' : self.modules_playlists.AddPlaylistBlank,
                 'playlist_add_item' : self.modules_playlists.AddPlaylistItem,
@@ -4503,6 +4506,10 @@ class DB( HydrusDB.HydrusDB ):
         self.modules_files_snapshots = ClientDBFilesSnapshots.ClientDBFilesSnapshots( self._c, self.modules_hashes_local_cache, self.modules_files_storage, self.modules_services )
         
         self._modules.append( self.modules_files_snapshots )
+        
+        self.modules_files_crops = ClientDBFilesCrops.ClientDBFilesCrops( self._c, self.modules_hashes_local_cache, self.modules_files_storage, self.modules_services )
+        
+        self._modules.append( self.modules_files_crops )
         
         #
         

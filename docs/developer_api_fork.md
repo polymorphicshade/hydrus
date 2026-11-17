@@ -6,7 +6,7 @@ title: This Fork's Client API
 
 These endpoints are for the features this fork adds: counters, playlists, virtual paths, snapshots, what the media viewer remembers for each file, tag presets, screen locations, media viewer layouts, and exporting video, audio, and playlists. They work just like hydrus's own [Client API](developer_api.md): the same access keys and session keys, json in and out, and the same errors. The [command line tool](command_line.md) can use all of them.
 
-`/api_version` has a `fork_api_version`, which goes up when these change. It is `9` now.
+`/api_version` has a `fork_api_version`, which goes up when these change. It is `10` now.
 
 ## permissions
 
@@ -17,7 +17,7 @@ Each group of endpoints has its own permission. The numbers start at 100, so the
 | 100 | edit file counters | `/manage_counters/...` |
 | 101 | manage playlists | `/manage_playlists/...`, and `/manage_media_viewers/open_playlist` with 'manage pages' |
 | 102 | edit file virtual paths | `/manage_virtual_paths/...` |
-| 103 | manage snapshots | `/manage_snapshots/...`. `add_snapshot` needs 'import and delete files' too |
+| 103 | manage snapshots and crops | `/manage_snapshots/...` and `/manage_crops/...`. `add_snapshot` and `add_crop` need 'import and delete files' too |
 | 104 | edit media viewer file data | `/manage_file_viewer_data/...`, apart from `set_scripted_events` |
 | 105 | manage tag presets | `/manage_tag_presets/...` |
 | 106 | manage screen locations | `/manage_screen_locations/...` |
@@ -191,6 +191,27 @@ Arguments: one file (the one to replace), `path` (the new file, on the client's 
 ```json
 { "hash" : "0b7a...", "num_moved" : 5 }
 ```
+
+## crops
+
+Crops are parts of a file cut out with an overlay's box, from the media viewer's _crops_ menu. Like snapshots, each one is a png file of its own, in a crops file domain, and remembers the file it was cut out of. They use the snapshots permission.
+
+### **GET `/manage_crops/get_crops`**
+
+Arguments: files. The crops cut out of each, in the order they come in the file. `crops_file_service_key` is the crops file domain, which is `null` until the first crop is taken.
+
+```json
+{
+  "crops_file_service_key" : "4e2a...",
+  "crops" : { "6c37..." : [ "a90b...", "17fe..." ] }
+}
+```
+
+### **POST `/manage_crops/add_crop`**
+
+Imports a crop of a file. Needs 'import and delete files' too, since it imports a file.
+
+Arguments: one file (the one it was cut out of), and `path` (an image, on the client's computer) and/or `rect`, `[ x, y, width, height ]` in the image's own pixels. With a `path` and no `rect`, that image is the crop. With a `rect` and no `path`, the rect is cut out of the file itself, which has to be an image. With both, the rect is cut out of the image at `path`. `timestamp_ms` (optional) is where in the file it was cut out of. Returns the `crop_hash`. A rect that does not fit in the image gives a 422.
 
 ## media viewer data
 

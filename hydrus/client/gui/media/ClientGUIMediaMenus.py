@@ -16,6 +16,7 @@ from hydrus.client import ClientConstants as CC
 from hydrus.client import ClientGlobals as CG
 from hydrus.client import ClientLocation
 from hydrus.client import ClientPaths
+from hydrus.client import ClientCrops
 from hydrus.client import ClientSnapshots
 from hydrus.client.exporting import ClientExportingSpans
 from hydrus.client.gui import ClientGUIAsync
@@ -1241,6 +1242,49 @@ def AddShareMenu( win: QW.QWidget, command_processor: CAC.ApplicationCommandProc
     #
     
     ClientGUIMenus.AppendMenu( menu, share_menu, 'share' )
+    
+
+def AddCropsMenuItem( menu: QW.QMenu, focused_media: ClientMedia.Media | None, ordered_selected_media: collections.abc.Sequence[ ClientMedia.Media ] = () ):
+    
+    # the parts cut out with an overlay in the media viewer, from the focused file, or all of them together when more than one file is selected
+    # files with none get no item, so the menu does not fill up with them
+    flat_selected_media = ClientMediaList.FlattenMedia( ordered_selected_media )
+    
+    if len( flat_selected_media ) > 1:
+        
+        hashes = [ media.GetHash() for media in flat_selected_media ]
+        
+        label = 'crops of selected'
+        description = 'Open a new page with the crops cut out of all the selected files, file by file.'
+        
+    else:
+        
+        if focused_media is None:
+            
+            return
+            
+        
+        focused_singleton = focused_media.GetDisplayMedia()
+        
+        if focused_singleton is None:
+            
+            return
+            
+        
+        hashes = [ focused_singleton.GetHash() ]
+        
+        label = 'crops'
+        description = 'Open a new page with the crops cut out of this file.'
+        
+    
+    num_crops = len( ClientCrops.GetCropHashesForFiles( hashes ) )
+    
+    if num_crops == 0:
+        
+        return
+        
+    
+    ClientGUIMenus.AppendMenuItem( menu, f'{label} ({HydrusNumbers.ToHumanInt( num_crops )})', description, ClientGUIMediaSimpleActions.ShowCropsInNewPage, hashes )
     
 
 def AddSnapshotsMenuItem( menu: QW.QMenu, focused_media: ClientMedia.Media | None, ordered_selected_media: collections.abc.Sequence[ ClientMedia.Media ] = () ):

@@ -19,6 +19,7 @@ from hydrus.client.networking.api import ClientLocalServerResourcesManagePopups
 from hydrus.client.networking.api import ClientLocalServerResourcesManageServices
 from hydrus.client.networking.api import ClientLocalServerResourcesManageFavouriteTags
 from hydrus.client.networking.api import ClientLocalServerResourcesManageCounters
+from hydrus.client.networking.api import ClientLocalServerResourcesManageCrops
 from hydrus.client.networking.api import ClientLocalServerResourcesManageExports
 from hydrus.client.networking.api import ClientLocalServerResourcesManageFileViewerData
 from hydrus.client.networking.api import ClientLocalServerResourcesManageMediaViewers
@@ -244,6 +245,13 @@ class HydrusServiceClientAPI( HydrusClientService ):
         
         manage_snapshots.putChild( b'get_snapshots', ClientLocalServerResourcesManageSnapshots.HydrusResourceClientAPIRestrictedManageSnapshotsGetSnapshots( self._service, self._client_requests_domain ) )
         manage_snapshots.putChild( b'add_snapshot', ClientLocalServerResourcesManageSnapshots.HydrusResourceClientAPIRestrictedManageSnapshotsAddSnapshot( self._service, self._client_requests_domain ) )
+        
+        manage_crops = notFound()
+        
+        root.putChild( b'manage_crops', manage_crops )
+        
+        manage_crops.putChild( b'get_crops', ClientLocalServerResourcesManageCrops.HydrusResourceClientAPIRestrictedManageCropsGetCrops( self._service, self._client_requests_domain ) )
+        manage_crops.putChild( b'add_crop', ClientLocalServerResourcesManageCrops.HydrusResourceClientAPIRestrictedManageCropsAddCrop( self._service, self._client_requests_domain ) )
         
         manage_file_viewer_data = notFound()
         

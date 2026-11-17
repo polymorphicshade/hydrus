@@ -599,6 +599,85 @@ class TestClientAPIFork( unittest.TestCase ):
         self.assertEqual( status, 404 )
         
     
+    def test_crops( self ):
+        
+        from hydrus.client import ClientCrops
+        
+        hash_1 = os.urandom( 32 )
+        crop_hash = os.urandom( 32 )
+        
+        crops_service_key = os.urandom( 32 )
+        
+        location_context = ClientLocation.LocationContext.STATICCreateSimple( crops_service_key )
+        
+        # no crops domain yet
+        with mock.patch.object( ClientCrops, 'GetCropsLocationContext', return_value = None ):
+            
+            ( status, body ) = api_call( 'GET', '/manage_crops/get_crops', self.snapshots_only, { 'hash' : hash_1.hex() } )
+            
+        
+        self.assertEqual( status, 200 )
+        self.assertEqual( body, { 'crops_file_service_key' : None, 'crops' : { hash_1.hex() : [] } } )
+        
+        TG.test_controller.SetRead( 'file_crops_for_files', [ crop_hash ] )
+        
+        with mock.patch.object( ClientCrops, 'GetCropsLocationContext', return_value = location_context ), mock.patch.object( ClientCrops, 'GetCropsServiceKey', return_value = crops_service_key ):
+            
+            ( status, body ) = api_call( 'GET', '/manage_crops/get_crops', self.snapshots_only, { 'hash' : hash_1.hex() } )
+            
+        
+        self.assertEqual( body, { 'crops_file_service_key' : crops_service_key.hex(), 'crops' : { hash_1.hex() : [ crop_hash.hex() ] } } )
+        
+        ( status, body ) = api_call( 'GET', '/manage_crops/get_crops', self.pages_only, { 'hash' : hash_1.hex() } )
+        
+        self.assertEqual( status, 403 )
+        
+        # importing one needs add files too
+        image_path = HydrusStaticDir.GetStaticPath( 'hydrus.png' )
+        
+        ( status, body ) = api_call( 'POST', '/manage_crops/add_crop', self.snapshots_only, { 'hash' : hash_1.hex(), 'path' : image_path } )
+        
+        self.assertEqual( status, 403 )
+        
+        for bad_params in ( {}, { 'path' : image_path + '_missing' }, { 'rect' : [ 0, 0, 10 ] }, { 'rect' : [ 0, 0, 10, 'ten' ] } ):
+            
+            ( status, body ) = api_call( 'POST', '/manage_crops/add_crop', self.everything, { 'hash' : hash_1.hex(), **bad_params } )
+            
+            self.assertEqual( status, 400, bad_params )
+            
+        
+        with mock.patch.object( ClientCrops, 'ImportCrop', return_value = crop_hash ) as import_crop:
+            
+            ( status, body ) = api_call( 'POST', '/manage_crops/add_crop', self.everything, { 'hash' : hash_1.hex(), 'path' : image_path, 'timestamp_ms' : 2500 } )
+            
+            self.assertEqual( status, 200 )
+            self.assertEqual( body, { 'crop_hash' : crop_hash.hex() } )
+            
+            # it imports a copy
+            ( ( imported_path, imported_hash, imported_timestamp_ms ), kwargs ) = import_crop.call_args
+            
+            self.assertNotEqual( imported_path, image_path )
+            self.assertEqual( ( imported_hash, imported_timestamp_ms ), ( hash_1, 2500 ) )
+            
+            # a part of an image
+            with mock.patch.object( ClientCrops, 'CropRectFromImageFile' ) as crop_rect_from_image_file:
+                
+                ( status, body ) = api_call( 'POST', '/manage_crops/add_crop', self.everything, { 'hash' : hash_1.hex(), 'path' : image_path, 'rect' : [ 1, 2, 3, 4 ] } )
+                
+                self.assertEqual( status, 200 )
+                
+                ( ( source_path, rect, dest_path ), kwargs ) = crop_rect_from_image_file.call_args
+                
+                self.assertEqual( ( source_path, rect ), ( image_path, ( 1, 2, 3, 4 ) ) )
+                
+            
+        
+        # a rect that does not fit
+        ( status, body ) = api_call( 'POST', '/manage_crops/add_crop', self.everything, { 'hash' : hash_1.hex(), 'path' : image_path, 'rect' : [ 0, 0, 100000, 10 ] } )
+        
+        self.assertEqual( status, 422 )
+        
+    
     def test_exports( self ):
         
         from hydrus.client import ClientThreading
@@ -1551,6 +1630,18 @@ class TestClientAPIForkCommandLine( unittest.TestCase ):
         with self.assertRaises( hydrus_cli.CLIError ):
             
             self._GetRequest( [ 'viewer', 'mirror', '12' ] )
+            
+        
+        # crops
+        image_path = os.path.abspath( 'face.png' )
+        
+        self.assertEqual( self._GetRequest( [ 'crops', 'get', '12' ] ), hydrus_cli.APIRequest( 'GET', '/manage_crops/get_crops', { 'file_ids' : [ 12 ] } ) )
+        self.assertEqual( self._GetRequest( [ 'crops', 'add', '12', '--rect', '1', '2', '3', '4' ] ), hydrus_cli.APIRequest( 'POST', '/manage_crops/add_crop', { 'file_ids' : [ 12 ], 'rect' : [ 1, 2, 3, 4 ] } ) )
+        self.assertEqual( self._GetRequest( [ 'crops', 'add', '12', 'face.png', '--timestamp-ms', '5000' ] ), hydrus_cli.APIRequest( 'POST', '/manage_crops/add_crop', { 'file_ids' : [ 12 ], 'path' : image_path, 'timestamp_ms' : 5000 } ) )
+        
+        with self.assertRaises( hydrus_cli.CLIError ):
+            
+            self._GetRequest( [ 'crops', 'add', '12' ] )
             
         
         # a-b repeat

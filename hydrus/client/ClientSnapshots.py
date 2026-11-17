@@ -43,13 +43,18 @@ def GetUnusedServiceName( name: str, existing_names: set[ str ] ) -> str:
 
 def GetSnapshotsServiceKey( create_if_missing = True ) -> bytes | None:
     
-    # the user can rename the domain, so we remember it by key. if they deleted it, we make a new one
-    with snapshots_service_lock:
+    return GetOwnLocalFileDomainServiceKey( SNAPSHOTS_SERVICE_KEY_OPTION, SNAPSHOTS_SERVICE_NAME, snapshots_service_lock, create_if_missing = create_if_missing )
+    
+
+def GetOwnLocalFileDomainServiceKey( service_key_option: str, service_name: str, service_lock: threading.Lock, create_if_missing = True ) -> bytes | None:
+    
+    # a local file domain of our own, like the snapshots one. the user can rename the domain, so we remember it by key. if they deleted it, we make a new one
+    with service_lock:
         
         services_manager = CG.client_controller.services_manager
         new_options = CG.client_controller.new_options
         
-        service_key = new_options.GetKey( SNAPSHOTS_SERVICE_KEY_OPTION )
+        service_key = new_options.GetKey( service_key_option )
         
         if len( service_key ) > 0 and services_manager.ServiceExists( service_key ) and services_manager.GetServiceType( service_key ) == HC.LOCAL_FILE_DOMAIN:
             
@@ -63,7 +68,7 @@ def GetSnapshotsServiceKey( create_if_missing = True ) -> bytes | None:
         
         services = services_manager.GetServices()
         
-        name = GetUnusedServiceName( SNAPSHOTS_SERVICE_NAME, { service.GetName() for service in services } )
+        name = GetUnusedServiceName( service_name, { service.GetName() for service in services } )
         
         service_key = HydrusData.GenerateKey()
         
@@ -77,7 +82,7 @@ def GetSnapshotsServiceKey( create_if_missing = True ) -> bytes | None:
             services_manager.RefreshServices()
             
         
-        new_options.SetKey( SNAPSHOTS_SERVICE_KEY_OPTION, service_key )
+        new_options.SetKey( service_key_option, service_key )
         
         CG.client_controller.Write( 'serialisable', new_options )
         
@@ -121,6 +126,16 @@ def ImportSnapshot( path: str, hash: bytes, timestamp_ms: int | None ) -> bytes:
     # quietly, with no popups. this does db work, so it wants to be in a worker thread
     service_key = GetSnapshotsServiceKey()
     
+    snapshot_hash = ImportFileToOwnLocalFileDomain( path, service_key, 'snapshot' )
+    
+    CG.client_controller.WriteSynchronous( 'file_snapshot_add', hash, snapshot_hash, timestamp_ms )
+    
+    return snapshot_hash
+    
+
+def ImportFileToOwnLocalFileDomain( path: str, service_key: bytes, human_file_description: str ) -> bytes:
+    
+    # quietly, with no popups, into a local file domain of our own, like the snapshots one. this does db work, so it wants to be in a worker thread
     location_import_options = LocationImportOptions.LocationImportOptions()
     
     location_import_options.SetDestinationLocationContext( ClientLocation.LocationContext.STATICCreateSimple( service_key ) )
@@ -143,18 +158,14 @@ def ImportSnapshot( path: str, hash: bytes, timestamp_ms: int | None ) -> bytes:
     
     full_import_options_container = CG.client_controller.import_options_manager.GenerateFullImportOptionsContainer( import_options_container, IOC.IMPORT_OPTIONS_CALLER_TYPE_LOCAL_IMPORT )
     
-    file_import_job = ClientImportFiles.FileImportJob( path, full_import_options_container, human_file_description = 'snapshot' )
+    file_import_job = ClientImportFiles.FileImportJob( path, full_import_options_container, human_file_description = human_file_description )
     
     file_import_status = file_import_job.DoWork()
     
     if file_import_status.status not in CC.SUCCESSFUL_IMPORT_STATES:
         
-        raise Exception( f'The snapshot did not import: {file_import_status.ToString()}' )
+        raise Exception( f'The {human_file_description} did not import: {file_import_status.ToString()}' )
         
     
-    snapshot_hash = file_import_status.hash
-    
-    CG.client_controller.WriteSynchronous( 'file_snapshot_add', hash, snapshot_hash, timestamp_ms )
-    
-    return snapshot_hash
+    return file_import_status.hash
     

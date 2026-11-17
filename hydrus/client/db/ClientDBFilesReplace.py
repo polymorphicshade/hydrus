@@ -74,6 +74,15 @@ class ClientDBFilesReplace( ClientDBModule.ClientDBModule ):
         
         num_moved += self._GetRowCount()
         
+        # and the same for crops cut out of it, or a crop it was
+        self._Execute( 'UPDATE OR IGNORE file_crops SET hash_id = ? WHERE hash_id = ?;', ( new_hash_id, old_hash_id ) )
+        
+        num_moved += self._GetRowCount()
+        
+        self._Execute( 'UPDATE OR IGNORE file_crops SET crop_hash_id = ? WHERE crop_hash_id = ?;', ( new_hash_id, old_hash_id ) )
+        
+        num_moved += self._GetRowCount()
+        
         # the new file takes the old one's place in every playlist, with its span and direction
         self._Execute( 'UPDATE playlist_items SET hash_id = ? WHERE hash_id = ?;', ( new_hash_id, old_hash_id ) )
         

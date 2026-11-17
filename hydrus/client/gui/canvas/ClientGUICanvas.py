@@ -24,6 +24,7 @@ from hydrus.client import ClientData
 from hydrus.client import ClientGlobals as CG
 from hydrus.client import ClientLocation
 from hydrus.client import ClientServices
+from hydrus.client import ClientCrops
 from hydrus.client import ClientSnapshots
 from hydrus.client import ClientThreading
 from hydrus.client.gui import ClientGUICore as CGC
@@ -3947,6 +3948,161 @@ class CanvasWithHovers( Canvas ):
         ClientGUIMediaSimpleActions.ShowSnapshotsInNewPage( [ self._current_media.GetHash() ] )
         
     
+    def _CropToOverlay( self, overlay: ClientGUICanvasOverlays.CanvasOverlay ):
+        
+        # cut out the part of the file under the overlay's box, as it is shown, and import it as a crop
+        if self._current_media is None or not self._media_container.CanCrop():
+            
+            return
+            
+        
+        media_rect = self._media_container.GetMediaRectIn( self )
+        
+        if media_rect is None:
+            
+            return
+            
+        
+        overlay_rect = ClientGUICanvasOverlays.ConvertFractionsToRect( overlay.GetFractions(), ( self.width(), self.height() ) )
+        
+        ( media_x, media_y, media_width, media_height ) = media_rect
+        
+        if ClientCrops.GetCropRectInImage( overlay_rect, media_rect, ( media_width, media_height ) ) is None:
+            
+            ClientGUIDialogsMessage.ShowWarning( self, 'That overlay is not over the file, so there is nothing to crop! Move it over the part you want first.' )
+            
+            return
+            
+        
+        hash = self._current_media.GetHash()
+        mime = self._current_media.GetMime()
+        rotation = self._media_container.GetRotation()
+        
+        temp_dir = HydrusTemp.GetSubTempDir( prefix = 'crop' )
+        
+        frame_path = os.path.join( temp_dir, 'frame.png' )
+        crop_path = os.path.join( temp_dir, 'crop.png' )
+        
+        def do_crop( source_path: str, timestamp_ms: int | None ):
+            
+            # this is in a worker thread. the crop goes in the db quietly, and it is under right-click->crops from then on
+            ClientCrops.SavePILImageAsPNG( ClientCrops.CropPILImage( ClientCrops.LoadImageForCrop( source_path ), rotation, overlay_rect, media_rect ), crop_path )
+            
+            ClientCrops.ImportCrop( crop_path, hash, timestamp_ms )
+            
+        
+        def report( e: Exception ):
+            
+            if not HG.started_shutdown:
+                
+                HydrusData.ShowText( 'Could not crop the file:' )
+                HydrusData.ShowException( e )
+                
+            
+        
+        if self._media_container.CanTakeSnapshot():
+            
+            # a frame of a video or animation, at its own resolution
+            timestamp_ms = self._media_container.GetCurrentPlaybackTimestampMS()
+            
+            def frame_callback( error: Exception | None ):
+                
+                try:
+                    
+                    if error is not None:
+                        
+                        raise error
+                        
+                    
+                    do_crop( frame_path, timestamp_ms )
+                    
+                except Exception as e:
+                    
+                    report( e )
+                    
+                finally:
+                    
+                    HydrusPaths.DeletePath( temp_dir )
+                    
+                
+            
+            self._media_container.TakeSnapshot( frame_path, frame_callback )
+            
+        else:
+            
+            # an image, from the file itself
+            def image_work():
+                
+                try:
+                    
+                    do_crop( CG.client_controller.client_files_manager.GetFilePath( hash, mime ), None )
+                    
+                except Exception as e:
+                    
+                    report( e )
+                    
+                finally:
+                    
+                    HydrusPaths.DeletePath( temp_dir )
+                    
+                
+            
+            CG.client_controller.CallToThread( image_work )
+            
+        
+    
+    def _AppendCropsMenu( self, menu: QW.QMenu ):
+        
+        # near snapshots. the overlays' boxes say what to cut out
+        num_crops = len( ClientCrops.GetCropHashes( self._current_media.GetHash() ) )
+        
+        can_crop = self._media_container.CanCrop()
+        
+        if not can_crop and num_crops == 0:
+            
+            return
+            
+        
+        crops_menu = ClientGUIMenus.GenerateMenu( menu )
+        
+        show_item = ClientGUIMenus.AppendMenuItem( crops_menu, f'show crops ({HydrusNumbers.ToHumanInt( num_crops )})', 'Open a new page with the crops cut out of this file.', self._ShowCrops )
+        
+        show_item.setEnabled( num_crops > 0 )
+        
+        if can_crop:
+            
+            ClientGUIMenus.AppendSeparator( crops_menu )
+            
+            overlays = ClientGUICanvasOverlays.GetOverlays( self )
+            
+            if len( overlays ) == 0:
+                
+                ClientGUIMenus.AppendMenuLabel( crops_menu, 'add an overlay (overlays->add) to crop with' )
+                
+            else:
+                
+                for ( index, overlay ) in enumerate( overlays ):
+                    
+                    label = 'crop to the overlay' if len( overlays ) == 1 else f'crop to overlay {index + 1}'
+                    
+                    ClientGUIMenus.AppendMenuItem( crops_menu, label, 'Cut out the part of this file under that overlay\'s box, as it is shown here, and import it as a crop, which you can see under \'show crops\' here. For a video, it is the frame up now.', self._CropToOverlay, overlay )
+                    
+                
+            
+        
+        ClientGUIMenus.AppendMenu( menu, crops_menu, f'crops ({HydrusNumbers.ToHumanInt( num_crops )})' if num_crops > 0 else 'crops' )
+        
+    
+    def _ShowCrops( self ):
+        
+        if self._current_media is None:
+            
+            return
+            
+        
+        ClientGUIMediaSimpleActions.ShowCropsInNewPage( [ self._current_media.GetHash() ] )
+        
+    
     def _TakeSnapshot( self ):
         
         if self._current_media is None or not self._media_container.CanTakeSnapshot():
@@ -6368,6 +6524,8 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
                 
                 ClientGUIMenus.AppendMenuItem( menu, 'take snapshot', 'Import the current frame as a png into your snapshots, which you can see under \'snapshots\' here.', self._TakeSnapshot )
                 
+            
+            self._AppendCropsMenu( menu )
             
             counters_menu = ClientGUIMenus.GenerateMenu( menu )
             

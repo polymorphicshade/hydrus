@@ -4597,9 +4597,35 @@ class MediaContainer( QW.QWidget ):
         return isinstance( self._media_window, ( Animation, ClientGUIMPV.MPVWidget, ClientGUIQtMediaPlayer.QtMediaPlayer ) )
         
     
+    def CanCrop( self ) -> bool:
+        
+        # an overlay's box can cut out part of an image, or of the frame up now
+        if self._media is None or self._media.GetMime() in HC.AUDIO or not self._media.HasUsefulResolution():
+            
+            return False
+            
+        
+        return isinstance( self._media_window, ( StaticImage, Animation, ClientGUIMPV.MPVWidget, ClientGUIQtMediaPlayer.QtMediaPlayer ) )
+        
+    
     def CanRotate( self ) -> bool:
         
         return self._media is not None and self.IsZoomable() and self._media.GetMime() not in HC.AUDIO and self._media.HasUsefulResolution()
+        
+    
+    def GetMediaRectIn( self, widget: QW.QWidget ) -> tuple[ int, int, int, int ] | None:
+        
+        # where the file is shown, as ( x, y, width, height ) in the widget's coordinates. the widget is the canvas, or something else we are in
+        if self._media_window is None or not self.CanCrop():
+            
+            return None
+            
+        
+        top_left = self._media_window.mapTo( widget, QC.QPoint( 0, 0 ) )
+        
+        size = self._media_window.size()
+        
+        return ( top_left.x(), top_left.y(), size.width(), size.height() )
         
     
     def ClearPlaybackSkips( self ):

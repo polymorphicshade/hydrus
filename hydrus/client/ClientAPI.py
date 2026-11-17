@@ -89,7 +89,7 @@ basic_permission_to_str_lookup = {
     CLIENT_API_PERMISSION_EDIT_COUNTERS : 'edit file counters',
     CLIENT_API_PERMISSION_MANAGE_PLAYLISTS : 'manage playlists',
     CLIENT_API_PERMISSION_EDIT_VIRTUAL_PATHS : 'edit file virtual paths',
-    CLIENT_API_PERMISSION_MANAGE_SNAPSHOTS : 'manage snapshots',
+    CLIENT_API_PERMISSION_MANAGE_SNAPSHOTS : 'manage snapshots and crops',
     CLIENT_API_PERMISSION_EDIT_MEDIA_VIEWER_DATA : 'edit media viewer file data',
     CLIENT_API_PERMISSION_MANAGE_TAG_PRESETS : 'manage tag presets',
     CLIENT_API_PERMISSION_MANAGE_SCREEN_LOCATIONS : 'manage screen locations',

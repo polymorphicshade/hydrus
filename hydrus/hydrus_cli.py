@@ -575,6 +575,40 @@ def BuildRequest( args ) -> APIRequest:
             
         
     
+    if command == 'crops':
+        
+        if sub == 'get':
+            
+            return APIRequest( 'GET', '/manage_crops/get_crops', ParseFiles( args.files ) )
+            
+        elif sub == 'add':
+            
+            params = ParseFiles( [ args.file ] )
+            
+            if args.image_path is not None:
+                
+                params[ 'path' ] = os.path.abspath( args.image_path )
+                
+            
+            if args.rect is not None:
+                
+                params[ 'rect' ] = args.rect
+                
+            
+            if args.image_path is None and args.rect is None:
+                
+                raise CLIError( 'Please give an image path, and/or --rect x y width height to cut out of the file!' )
+                
+            
+            if args.timestamp_ms is not None:
+                
+                params[ 'timestamp_ms' ] = args.timestamp_ms
+                
+            
+            return APIRequest( 'POST', '/manage_crops/add_crop', params )
+            
+        
+    
     if command == 'viewer':
         
         if sub == 'get':
@@ -1033,6 +1067,17 @@ def GetArgumentParser() -> argparse.ArgumentParser:
     p.add_argument( 'file', help = 'the file it was taken from' )
     p.add_argument( 'image_path', help = 'the image, on the client\'s computer' )
     p.add_argument( '--timestamp-ms', type = int, help = 'where in the file it was taken from' )
+    
+    crops = commands.add_parser( 'crops', help = 'crops, parts cut out of files with an overlay' ).add_subparsers( dest = 'sub', metavar = 'action' )
+    crops.required = True
+    
+    p = crops.add_parser( 'get', help = 'the crops cut out of files' )
+    p.add_argument( 'files', nargs = '+', help = files_help )
+    p = crops.add_parser( 'add', help = 'import an image as a crop of a file, or cut part of the file out with --rect' )
+    p.add_argument( 'file', help = 'the file it was cut out of' )
+    p.add_argument( 'image_path', nargs = '?', help = 'the image, on the client\'s computer. without it, --rect is cut out of the file itself' )
+    p.add_argument( '--rect', type = int, nargs = 4, metavar = ( 'X', 'Y', 'WIDTH', 'HEIGHT' ), help = 'the part to cut out, in the image\'s pixels' )
+    p.add_argument( '--timestamp-ms', type = int, help = 'where in the file it was cut out of' )
     
     viewer = commands.add_parser( 'viewer', help = 'what the media viewer remembers for files' ).add_subparsers( dest = 'sub', metavar = 'action' )
     viewer.required = True
