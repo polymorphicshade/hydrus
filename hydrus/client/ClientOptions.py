@@ -393,6 +393,8 @@ class ClientOptions( HydrusSerialisable.SerialisableBase ):
             'force_enter_on_radio_buttons_to_do_dialog_ok' : True,
             'make_child_frames_qt_tool' : True,
             'copy_notes_quick_click_only_copies_text' : False,
+            'render_notes_as_markdown' : True,
+            'notes_start_on_view_tab' : False,
             'media_viewer_flip_text_shortcut_added' : False,
             'highlight_last_opened_media_viewer' : False,
         }

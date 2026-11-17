@@ -556,6 +556,11 @@ def BuildRequest( args ) -> APIRequest:
             
         
     
+    if command == 'notes-html':
+        
+        return APIRequest( 'GET', '/manage_notes/get_notes_html', ParseFiles( [ args.file ] ) )
+        
+    
     if command == 'snapshots':
         
         if sub == 'get':
@@ -1093,6 +1098,9 @@ def GetArgumentParser() -> argparse.ArgumentParser:
         p.add_argument( 'files', nargs = '+', help = files_help )
         p.add_argument( '--path', action = 'append', default = [], help = 'a path, like "tv shows/action". use it more than once for more' )
         
+    
+    p = commands.add_parser( 'notes-html', help = 'a file\'s notes, which are markdown, rendered as html, like the media viewer shows them' )
+    p.add_argument( 'file' )
     
     snapshots = commands.add_parser( 'snapshots', help = 'snapshots, frames taken from files' ).add_subparsers( dest = 'sub', metavar = 'action' )
     snapshots.required = True

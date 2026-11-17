@@ -24,6 +24,7 @@ from hydrus.client.gui import ClientGUIDragDrop
 from hydrus.client.gui import ClientGUICore as CGC
 from hydrus.client.gui import ClientGUIFunctions
 from hydrus.client.gui import ClientGUIMenus
+from hydrus.client.gui import ClientGUINotesMarkdown
 from hydrus.client.gui import ClientGUIRatings
 from hydrus.client.gui import ClientGUIShortcuts
 from hydrus.client.gui import ClientGUITopLevelWindowsPanels
@@ -2240,7 +2241,19 @@ class NotePanel( QW.QWidget ):
         
         self._note_name.setFont( font )
         
-        self._note_text = ClientGUICommon.BetterStaticText( self, label = note )
+        self._note_text = ClientGUICommon.BetterStaticText( self )
+        
+        if ClientGUINotesMarkdown.RenderNotesAsMarkdown():
+            
+            # notes are markdown, so we show them rendered
+            self._note_text.setTextFormat( QC.Qt.TextFormat.MarkdownText )
+            
+            self._note_text.setText( ClientGUINotesMarkdown.ConvertNoteToMarkdown( note ) )
+            
+        else:
+            
+            self._note_text.setText( note )
+            
         
         self._note_text.setAlignment( QC.Qt.AlignmentFlag.AlignJustify )
         self._note_text.setWordWrap( True )

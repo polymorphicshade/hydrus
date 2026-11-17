@@ -37,6 +37,7 @@ from hydrus.client.gui import ClientGUIFunctions
 from hydrus.client.gui import ClientGUIMediaViewerHighlight
 from hydrus.client.gui import ClientGUIMediaViewerSync
 from hydrus.client.gui import ClientGUIMenus
+from hydrus.client.gui import ClientGUINotesMarkdown
 from hydrus.client.gui import ClientGUIPlaylists
 from hydrus.client.gui import ClientGUIRatings
 from hydrus.client.gui import ClientGUIScreenLocations
@@ -3409,6 +3410,21 @@ class CanvasWithHovers( Canvas ):
                 painter.setFont( notes_font )
                 
                 note = notes_manager.GetNote( name )
+                
+                if ClientGUINotesMarkdown.RenderNotesAsMarkdown():
+                    
+                    # notes are markdown, so we draw them rendered
+                    current_y += ClientGUINotesMarkdown.DrawNoteMarkdown( painter, left_x, current_y, notes_width, note, pen_colour )
+                    
+                    current_y += NOTE_MARGIN
+                    
+                    if current_y >= my_height:
+                        
+                        break
+                        
+                    
+                    continue
+                    
                 
                 text_rect = painter.fontMetrics().boundingRect( left_x, current_y, notes_width, 100, QC.Qt.AlignmentFlag.AlignJustify | QC.Qt.TextFlag.TextWordWrap, note )
                 

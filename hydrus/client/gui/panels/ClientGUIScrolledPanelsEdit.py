@@ -20,6 +20,7 @@ from hydrus.client import ClientGlobals as CG
 from hydrus.client.gui import ClientGUIDialogsMessage
 from hydrus.client.gui import ClientGUIDialogsQuick
 from hydrus.client.gui import ClientGUIFunctions
+from hydrus.client.gui import ClientGUINotesMarkdown
 from hydrus.client.gui import ClientGUIShortcuts
 from hydrus.client.gui import QtPorting as QP
 from hydrus.client.gui.canvas import ClientGUIMPV
@@ -921,6 +922,12 @@ class EditFileNotesPanel( CAC.ApplicationCommandProcessorMixin, ClientGUIScrolle
         
         menu_template_items.append( ClientGUIMenuButton.MenuTemplateItemCheck( 'on middle-click note hover copy, only copy text', tt, check_manager ) )
         
+        check_manager = ClientGUICommon.CheckboxManagerOptions( 'notes_start_on_view_tab' )
+        
+        tt = 'Each note has an \'edit\' tab, where you write it in markdown, and a \'view\' tab, which shows it rendered. Start notes that have something in them on \'view\'.'
+        
+        menu_template_items.append( ClientGUIMenuButton.MenuTemplateItemCheck( 'start notes on the view tab', tt, check_manager ) )
+        
         self._cog_button = ClientGUIMenuButton.CogIconButton( self, menu_template_items )
         
         #
@@ -952,7 +959,7 @@ class EditFileNotesPanel( CAC.ApplicationCommandProcessorMixin, ClientGUIScrolle
         
         self._notebook.setCurrentIndex( index_to_select )
         
-        first_panel = typing.cast( QW.QPlainTextEdit, self._notebook.currentWidget() )
+        first_panel = typing.cast( ClientGUINotesMarkdown.MarkdownNoteEditor, self._notebook.currentWidget() )
         
         ClientGUIFunctions.SetFocusLater( first_panel )
         
@@ -1005,7 +1012,8 @@ class EditFileNotesPanel( CAC.ApplicationCommandProcessorMixin, ClientGUIScrolle
     
     def _AddNotePanel( self, name, note ):
         
-        control = QW.QPlainTextEdit( self._notebook )
+        # an 'edit' tab for the markdown, and a 'view' tab to see it rendered
+        control = ClientGUINotesMarkdown.MarkdownNoteEditor( self._notebook )
         
         try:
             
@@ -1019,6 +1027,11 @@ class EditFileNotesPanel( CAC.ApplicationCommandProcessorMixin, ClientGUIScrolle
         self._notebook.addTab( control, name )
         
         self._notebook.setCurrentWidget( control )
+        
+        if CG.client_controller.new_options.GetBoolean( 'notes_start_on_view_tab' ) and control.toPlainText() != '':
+            
+            control.ShowView()
+            
         
         ClientGUIFunctions.SetFocusLater( control )
         
@@ -1049,7 +1062,7 @@ class EditFileNotesPanel( CAC.ApplicationCommandProcessorMixin, ClientGUIScrolle
                 return
                 
             
-            current_page = typing.cast( QW.QPlainTextEdit, current_page )
+            current_page = typing.cast( ClientGUINotesMarkdown.MarkdownNoteEditor, current_page )
             
             name = self._notebook.tabText( self._notebook.currentIndex() )
             note_text = HydrusText.CleanNoteText( current_page.toPlainText() )
@@ -1094,7 +1107,7 @@ class EditFileNotesPanel( CAC.ApplicationCommandProcessorMixin, ClientGUIScrolle
             return
             
         
-        current_page = typing.cast( QW.QPlainTextEdit, current_page )
+        current_page = typing.cast( ClientGUINotesMarkdown.MarkdownNoteEditor, current_page )
         
         note_text = HydrusText.CleanNoteText( current_page.toPlainText() )
         
@@ -1193,7 +1206,7 @@ class EditFileNotesPanel( CAC.ApplicationCommandProcessorMixin, ClientGUIScrolle
             
             if name in existing_panel_names_to_widgets:
                 
-                control = typing.cast( QW.QPlainTextEdit, existing_panel_names_to_widgets[ name ] )
+                control = typing.cast( ClientGUINotesMarkdown.MarkdownNoteEditor, existing_panel_names_to_widgets[ name ] )
                 
                 try:
                     
@@ -1286,7 +1299,7 @@ class EditFileNotesPanel( CAC.ApplicationCommandProcessorMixin, ClientGUIScrolle
     
     def GetValue( self ) -> tuple[ dict[ str, str ], set[ str ] ]:
         
-        names_to_notes = { self._notebook.tabText( i ) : HydrusText.CleanNoteText( typing.cast( QW.QPlainTextEdit, self._notebook.widget( i ) ).toPlainText() ) for i in range( self._notebook.count() ) }
+        names_to_notes = { self._notebook.tabText( i ) : HydrusText.CleanNoteText( typing.cast( ClientGUINotesMarkdown.MarkdownNoteEditor, self._notebook.widget( i ) ).toPlainText() ) for i in range( self._notebook.count() ) }
         
         names_to_notes = { name : text for ( name, text ) in names_to_notes.items() if text != '' }
         

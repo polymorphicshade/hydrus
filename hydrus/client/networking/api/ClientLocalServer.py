@@ -23,6 +23,7 @@ from hydrus.client.networking.api import ClientLocalServerResourcesManageCrops
 from hydrus.client.networking.api import ClientLocalServerResourcesManageExports
 from hydrus.client.networking.api import ClientLocalServerResourcesManageFileViewerData
 from hydrus.client.networking.api import ClientLocalServerResourcesManageMediaViewers
+from hydrus.client.networking.api import ClientLocalServerResourcesManageNotes
 from hydrus.client.networking.api import ClientLocalServerResourcesManagePlaylists
 from hydrus.client.networking.api import ClientLocalServerResourcesManagePresets
 from hydrus.client.networking.api import ClientLocalServerResourcesManageSnapshots
@@ -252,6 +253,12 @@ class HydrusServiceClientAPI( HydrusClientService ):
         
         manage_crops.putChild( b'get_crops', ClientLocalServerResourcesManageCrops.HydrusResourceClientAPIRestrictedManageCropsGetCrops( self._service, self._client_requests_domain ) )
         manage_crops.putChild( b'add_crop', ClientLocalServerResourcesManageCrops.HydrusResourceClientAPIRestrictedManageCropsAddCrop( self._service, self._client_requests_domain ) )
+        
+        manage_notes = notFound()
+        
+        root.putChild( b'manage_notes', manage_notes )
+        
+        manage_notes.putChild( b'get_notes_html', ClientLocalServerResourcesManageNotes.HydrusResourceClientAPIRestrictedManageNotesGetNotesHTML( self._service, self._client_requests_domain ) )
         
         manage_file_viewer_data = notFound()
         

@@ -678,6 +678,37 @@ class TestClientAPIFork( unittest.TestCase ):
         self.assertEqual( status, 422 )
         
     
+    def test_notes_html( self ):
+        
+        hash_1 = os.urandom( 32 )
+        
+        media_result = mock.Mock()
+        
+        media_result.GetNotesManager.return_value.GetNamesToNotes.return_value = { 'description' : '**big** day\nline two' }
+        
+        TG.test_controller.SetRead( 'media_results', [ media_result ] )
+        
+        ( status, body ) = api_call( 'GET', '/manage_notes/get_notes_html', self.everything, { 'hash' : hash_1.hex() } )
+        
+        self.assertEqual( status, 200 )
+        self.assertEqual( body[ 'notes' ], { 'description' : '**big** day\nline two' } )
+        
+        html = body[ 'notes_html' ][ 'description' ]
+        
+        self.assertIn( 'big', html )
+        self.assertNotIn( '**', html )
+        
+        TG.test_controller.SetRead( 'media_results', [] )
+        
+        ( status, body ) = api_call( 'GET', '/manage_notes/get_notes_html', self.everything, { 'hash' : hash_1.hex() } )
+        
+        self.assertEqual( status, 404 )
+        
+        ( status, body ) = api_call( 'GET', '/manage_notes/get_notes_html', self.pages_only, { 'hash' : hash_1.hex() } )
+        
+        self.assertEqual( status, 403 )
+        
+    
     def test_exports( self ):
         
         from hydrus.client import ClientThreading
@@ -1748,6 +1779,9 @@ class TestClientAPIForkCommandLine( unittest.TestCase ):
         # mpv players that stopped working
         self.assertEqual( self._GetRequest( [ 'viewers', 'mpv' ] ), hydrus_cli.APIRequest( 'GET', '/manage_media_viewers/get_mpv_status' ) )
         self.assertEqual( self._GetRequest( [ 'viewers', 'mpv', 'forget-damaged' ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/forget_mpv_damaged_files' ) )
+        
+        # notes, rendered
+        self.assertEqual( self._GetRequest( [ 'notes-html', '12' ] ), hydrus_cli.APIRequest( 'GET', '/manage_notes/get_notes_html', { 'file_ids' : [ 12 ] } ) )
         
         # a-b repeat
         self.assertEqual( self._GetRequest( [ 'viewers', 'ab-repeat' ] ), hydrus_cli.APIRequest( 'GET', '/manage_media_viewers/get_ab_repeat' ) )

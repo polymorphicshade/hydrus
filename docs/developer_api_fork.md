@@ -6,7 +6,7 @@ title: This Fork's Client API
 
 These endpoints are for the features this fork adds: counters, playlists, virtual paths, snapshots, what the media viewer remembers for each file, tag presets, screen locations, media viewer layouts, and exporting video, audio, and playlists. They work just like hydrus's own [Client API](developer_api.md): the same access keys and session keys, json in and out, and the same errors. The [command line tool](command_line.md) can use all of them.
 
-`/api_version` has a `fork_api_version`, which goes up when these change. It is `13` now.
+`/api_version` has a `fork_api_version`, which goes up when these change. It is `14` now.
 
 ## permissions
 
@@ -212,6 +212,21 @@ Arguments: files. The crops cut out of each, in the order they come in the file.
 Imports a crop of a file. Needs 'import and delete files' too, since it imports a file.
 
 Arguments: one file (the one it was cut out of), and `path` (an image, on the client's computer) and/or `rect`, `[ x, y, width, height ]` in the image's own pixels. With a `path` and no `rect`, that image is the crop. With a `rect` and no `path`, the rect is cut out of the file itself, which has to be an image. With both, the rect is cut out of the image at `path`. `timestamp_ms` (optional) is where in the file it was cut out of. Returns the `crop_hash`. A rect that does not fit in the image gives a 422.
+
+## notes
+
+Notes are markdown. The notes dialog has an _edit_ tab, where you write them, and a _view_ tab, which shows them rendered, and the media viewer shows them rendered too (_options->notes_ can turn that off). A line break is always a line break, rather than markdown's usual joining of lines into one paragraph, so notes written as plain text look the same. Hydrus's own `/add_notes/set_notes` and `/add_notes/delete_notes` set them.
+
+### **GET `/manage_notes/get_notes_html`**
+
+Arguments: one file. Its notes as they are written, and rendered from markdown to html, the way the client renders them. Needs 'search for and fetch files', like `/get_files/file_metadata`.
+
+```json
+{
+  "notes" : { "description" : "**big** day\nline two" },
+  "notes_html" : { "description" : "<!DOCTYPE HTML PUBLIC ... <strong>big</strong> day<br />line two ..." }
+}
+```
 
 ## media viewer data
 
