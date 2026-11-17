@@ -88,6 +88,7 @@ python hydrus_cli.py paths all
 # the media viewer's saved data for a file
 python hydrus_cli.py viewer get 1234
 python hydrus_cli.py viewer rotate 90 1234
+python hydrus_cli.py viewer mirror 1234 --horizontal on
 python hydrus_cli.py viewer segments 1234 "[ { \"timestamp_ms\" : 0, \"name\" : \"intro\" } ]"
 python hydrus_cli.py viewer skips 1234 @skips.json
 python hydrus_cli.py viewer freezes 1234 "[ { \"timestamp_ms\" : 3000, \"duration_ms\" : 2000 } ]"

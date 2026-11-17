@@ -195,6 +195,9 @@ def ResetAllSavedZooms( clear_file_viewer_zooms: bool, clear_zoom_timestamps: bo
         
         CG.client_controller.WriteSynchronous( 'clear_all_file_viewer_rotations' )
         
+        # mirroring goes with how it is turned
+        CG.client_controller.WriteSynchronous( 'clear_all_file_viewer_mirrors' )
+        
     
     if clear_zoom_timestamps:
         

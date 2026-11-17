@@ -61,6 +61,16 @@ class TestResetPositions( unittest.TestCase ):
         container._rotation = 90
         container._file_rotation = 90
         container._rotation_load_id = 0
+        container._mirror_horizontal = True
+        container._mirror_vertical = False
+        container._mirror_load_id = 0
+        container._media_window = None
+        
+        patch = mock.patch.object( container, 'update' )
+        
+        patch.start()
+        
+        self.addCleanup( patch.stop )
         
         container._remembers_file_zooms = True
         container._saved_zoom = 2.0
@@ -128,6 +138,10 @@ class TestResetPositions( unittest.TestCase ):
             self.assertEqual( container._screen_zooms, {} )
             self.assertEqual( container._rotation_load_id, 1 )
             self.assertEqual( container._saved_zoom_load_id, 1 )
+            
+            # mirroring goes with how it is turned
+            self.assertEqual( ( container._mirror_horizontal, container._mirror_vertical ), ( False, False ) )
+            self.assertEqual( container._mirror_load_id, 1 )
             self.assertEqual( container._zoom_timestamps, [ ( 0, 1.0, None, None, None ) ] )
             
             # and then the position timestamps

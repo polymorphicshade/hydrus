@@ -84,6 +84,8 @@ class HydrusResourceClientAPIRestrictedManageFileViewerDataGetData( HydrusResour
         
         rotation = CG.client_controller.Read( 'file_viewer_rotation', hash )
         
+        ( mirror_horizontal, mirror_vertical ) = CG.client_controller.Read( 'file_viewer_mirror', hash )
+        
         # the zoom for any screen without one of its own, and then each screen's own
         ( zoom, center ) = CG.client_controller.Read( 'file_viewer_zoom', hash )
         
@@ -117,6 +119,7 @@ class HydrusResourceClientAPIRestrictedManageFileViewerDataGetData( HydrusResour
         body_dict = {
             'hash' : hash.hex(),
             'rotation' : NormaliseRotation( rotation ),
+            'mirror' : { 'horizontal' : mirror_horizontal, 'vertical' : mirror_vertical },
             'zoom' : {
                 'zoom' : zoom,
                 'center' : None if center is None else list( center )
@@ -484,6 +487,40 @@ class HydrusResourceClientAPIRestrictedManageFileViewerDataSetRotation( HydrusRe
             
         
         return ClientLocalServerCore.GenerateJSONResponse( request, { 'rotation' : rotation } )
+        
+    
+
+class HydrusResourceClientAPIRestrictedManageFileViewerDataSetMirror( HydrusResourceClientAPIRestrictedManageFileViewerData ):
+    
+    def _threadDoPOSTJob( self, request: HydrusServerRequest.HydrusRequest ):
+        
+        hashes = ClientLocalServerCore.ParseHashes( request )
+        
+        # either or both. one that is not given stays how each file has it
+        mirror_horizontal = request.parsed_request_args.GetValueOrNone( 'horizontal', bool )
+        mirror_vertical = request.parsed_request_args.GetValueOrNone( 'vertical', bool )
+        
+        if mirror_horizontal is None and mirror_vertical is None:
+            
+            raise HydrusExceptions.BadRequestException( 'Please give "horizontal" and/or "vertical"!' )
+            
+        
+        mirrors = []
+        
+        # a media viewer picks it up the next time it shows the file
+        for hash in hashes:
+            
+            ( existing_mirror_horizontal, existing_mirror_vertical ) = CG.client_controller.Read( 'file_viewer_mirror', hash )
+            
+            new_mirror_horizontal = existing_mirror_horizontal if mirror_horizontal is None else mirror_horizontal
+            new_mirror_vertical = existing_mirror_vertical if mirror_vertical is None else mirror_vertical
+            
+            CG.client_controller.WriteSynchronous( 'file_viewer_mirror', hash, new_mirror_horizontal, new_mirror_vertical )
+            
+            mirrors.append( { 'hash' : hash.hex(), 'horizontal' : new_mirror_horizontal, 'vertical' : new_mirror_vertical } )
+            
+        
+        return ClientLocalServerCore.GenerateJSONResponse( request, { 'mirrors' : mirrors } )
         
     
 

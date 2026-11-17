@@ -202,7 +202,7 @@ class TestZoomTimestamps( unittest.TestCase ):
 
             ClientGUIMediaZooms.ResetAllSavedZooms( True, False, clear_rotations = True )
 
-            self.assertEqual( [ call.args for call in controller.WriteSynchronous.call_args_list ], [ ( 'clear_all_file_viewer_zooms', ), ( 'clear_all_file_viewer_rotations', ) ] )
+            self.assertEqual( [ call.args for call in controller.WriteSynchronous.call_args_list ], [ ( 'clear_all_file_viewer_zooms', ), ( 'clear_all_file_viewer_rotations', ), ( 'clear_all_file_viewer_mirrors', ) ] )
             controller.pub.assert_called_once_with( 'reset_all_file_zooms', True, False, clear_rotations = True )
         
     

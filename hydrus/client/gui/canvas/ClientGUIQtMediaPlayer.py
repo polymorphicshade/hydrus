@@ -164,6 +164,10 @@ class QtMediaPlayer( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         # degrees clockwise. the video item is turned about its middle, and then the turned box is fitted to the view
         self._rotation = 0
         
+        # flipped left to right, and/or upside down, as you see it, after it is turned
+        self._mirror_horizontal = False
+        self._mirror_vertical = False
+        
         self._my_video_output.nativeSizeChanged.connect( self._RefitVideo )
         
         QP.SetBackgroundColour( self._my_audio_placeholder, QG.QColor( 0, 0, 0 ) )
@@ -323,8 +327,18 @@ class QtMediaPlayer( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
     
     def _RefitVideo( self ):
         
-        self._my_video_output.setTransformOriginPoint( self._my_video_output.boundingRect().center() )
-        self._my_video_output.setRotation( self._rotation )
+        # turned and then mirrored about its middle, all in one transform, so the order is ours
+        centre = self._my_video_output.boundingRect().center()
+        
+        transform = QG.QTransform()
+        
+        transform.translate( centre.x(), centre.y() )
+        transform.scale( -1 if self._mirror_horizontal else 1, -1 if self._mirror_vertical else 1 )
+        transform.rotate( self._rotation )
+        transform.translate( - centre.x(), - centre.y() )
+        
+        self._my_video_output.setRotation( 0 )
+        self._my_video_output.setTransform( transform )
         
         # ok this is megaslop but it works
         # had to edit a bit for KISS since it was going bananas
@@ -747,6 +761,19 @@ class QtMediaPlayer( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
     def resizeEvent( self, event ):
         
         super().resizeEvent( event )
+        
+        self._RefitVideo()
+        
+    
+    def SetMirror( self, mirror_horizontal: bool, mirror_vertical: bool ):
+        
+        if ( mirror_horizontal, mirror_vertical ) == ( self._mirror_horizontal, self._mirror_vertical ):
+            
+            return
+            
+        
+        self._mirror_horizontal = mirror_horizontal
+        self._mirror_vertical = mirror_vertical
         
         self._RefitVideo()
         

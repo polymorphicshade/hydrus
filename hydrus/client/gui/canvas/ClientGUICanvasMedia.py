@@ -387,6 +387,35 @@ def NormaliseRotation( rotation: float ) -> int:
     return int( round( rotation ) ) % 360
     
 
+def ConvertOrientationToPrettyString( rotation: int, mirror_horizontal: bool, mirror_vertical: bool ) -> str:
+    
+    # like '90°, mirrored horizontally'
+    s = ConvertRotationToPrettyString( rotation )
+    
+    if mirror_horizontal and mirror_vertical:
+        
+        s += ', mirrored both ways'
+        
+    elif mirror_horizontal:
+        
+        s += ', mirrored horizontally'
+        
+    elif mirror_vertical:
+        
+        s += ', mirrored vertically'
+        
+    
+    return s
+    
+
+def TransformPainterForOrientation( painter: QG.QPainter, centre_x: float, centre_y: float, rotation: int, mirror_horizontal: bool, mirror_vertical: bool ):
+    
+    # what is drawn after this, about ( 0, 0 ), is turned clockwise and then mirrored as you see it, about our middle
+    painter.translate( centre_x, centre_y )
+    painter.scale( -1 if mirror_horizontal else 1, -1 if mirror_vertical else 1 )
+    painter.rotate( rotation )
+    
+
 def GetRotatedBoundingSize( width: float, height: float, rotation: int ) -> tuple[ float, float ]:
     
     # the size of the box a width x height rectangle fits in once it is turned this many degrees
@@ -731,6 +760,10 @@ class Animation( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         # degrees clockwise. we are the size of the box the turned frames fit in
         self._rotation = 0
         
+        # flipped left to right, and/or upside down, as you see it, after it is turned
+        self._mirror_horizontal = False
+        self._mirror_vertical = False
+        
         if self._canvas_type in CC.CANVAS_MEDIA_VIEWER_TYPES:
             
             shortcut_set = 'media_viewer_media_window'
@@ -935,19 +968,18 @@ class Animation( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         painter.setRenderHint( QG.QPainter.RenderHint.SmoothPixmapTransform, True )
 
         # note we draw to self.rect(), which is in DPR coordinates. the pixmap needs to be DPR'd by here mate, this caught us up before
-        if self._rotation == 0:
+        if self._rotation == 0 and not ( self._mirror_horizontal or self._mirror_vertical ):
             
             painter.drawImage( self.rect(), current_frame_image )
             
         else:
             
-            # turned about our middle
+            # turned and mirrored about our middle
             my_dpr = self.devicePixelRatio()
             
             ( width, height ) = ( render_raw_size.width() / my_dpr, render_raw_size.height() / my_dpr )
             
-            painter.translate( self.width() / 2, self.height() / 2 )
-            painter.rotate( self._rotation )
+            TransformPainterForOrientation( painter, self.width() / 2, self.height() / 2, self._rotation, self._mirror_horizontal, self._mirror_vertical )
             
             painter.drawImage( QC.QRectF( - width / 2, - height / 2, width, height ), current_frame_image )
             
@@ -1192,6 +1224,19 @@ class Animation( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
                 self._ReinitForResizeOrDPRChange()
                 
             
+        
+    
+    def SetMirror( self, mirror_horizontal: bool, mirror_vertical: bool ):
+        
+        if ( mirror_horizontal, mirror_vertical ) == ( self._mirror_horizontal, self._mirror_vertical ):
+            
+            return
+            
+        
+        self._mirror_horizontal = mirror_horizontal
+        self._mirror_vertical = mirror_vertical
+        
+        self._ReinitForResizeOrDPRChange()
         
     
     def SetRotation( self, rotation: int ):
@@ -2102,6 +2147,11 @@ class MediaContainer( QW.QWidget ):
         self._file_rotation = 0
         self._rotation_load_id = 0
         
+        # whether the current file is flipped left to right, and/or upside down, as you see it, after it is turned. each file has its own, saved in the db
+        self._mirror_horizontal = False
+        self._mirror_vertical = False
+        self._mirror_load_id = 0
+        
         # where the next file should start playing, as ( media, start_ms ). a playlist sets this for a part of a file, so the player never shows what comes before it
         self._next_media_start: tuple[ ClientMediaSingle.MediaSingle, int | None ] | None = None
         
@@ -2698,6 +2748,14 @@ class MediaContainer( QW.QWidget ):
                     
                 
             
+            # mirroring goes with how it is turned
+            self._mirror_load_id += 1
+            
+            if self._mirror_horizontal or self._mirror_vertical:
+                
+                self._SetMirror( False, False )
+                
+            
         
         if clear_file_viewer_zooms and self._remembers_file_zooms:
             
@@ -3170,12 +3228,72 @@ class MediaContainer( QW.QWidget ):
         return None
         
     
+    def _ApplyMirrorToMediaWindow( self ):
+        
+        if isinstance( self._media_window, ( StaticImage, Animation, ClientGUIMPV.MPVWidget, ClientGUIQtMediaPlayer.QtMediaPlayer ) ):
+            
+            self._media_window.SetMirror( self._mirror_horizontal, self._mirror_vertical )
+            
+        
+    
     def _ApplyRotationToMediaWindow( self ):
         
         if isinstance( self._media_window, ( StaticImage, Animation, ClientGUIMPV.MPVWidget, ClientGUIQtMediaPlayer.QtMediaPlayer ) ):
             
             self._media_window.SetRotation( self._rotation )
             
+        
+    
+    def _LoadMirror( self ):
+        
+        self._mirror_load_id += 1
+        
+        load_id = self._mirror_load_id
+        
+        self._SetMirror( False, False )
+        
+        if not self.CanRotate():
+            
+            return
+            
+        
+        hash = self._media.GetHash()
+        
+        def work_callable():
+            
+            return CG.client_controller.Read( 'file_viewer_mirror', hash )
+            
+        
+        def publish_callable( mirror ):
+            
+            # the media changed, or the user mirrored it, while we were waiting
+            if load_id != self._mirror_load_id:
+                
+                return
+                
+            
+            ( mirror_horizontal, mirror_vertical ) = mirror
+            
+            if mirror_horizontal or mirror_vertical:
+                
+                self._SetMirror( mirror_horizontal, mirror_vertical )
+                
+            
+        
+        job = ClientGUIAsync.AsyncQtJob( self, work_callable, publish_callable )
+        
+        job.start()
+        
+    
+    def _SetMirror( self, mirror_horizontal: bool, mirror_vertical: bool ):
+        
+        self._mirror_horizontal = bool( mirror_horizontal )
+        self._mirror_vertical = bool( mirror_vertical )
+        
+        # it is the same shape, so the zoom and pan stay as they are
+        self._ApplyMirrorToMediaWindow()
+        
+        self.update()
         
     
     def _GetMediaResolution( self ) -> tuple[ float, float ]:
@@ -4673,6 +4791,12 @@ class MediaContainer( QW.QWidget ):
         return dict( self._screen_zooms )
         
     
+    def GetMirror( self ) -> tuple[ bool, bool ]:
+        
+        # ( mirror_horizontal, mirror_vertical )
+        return ( self._mirror_horizontal, self._mirror_vertical )
+        
+    
     def GetRotation( self ) -> int:
         
         return self._rotation
@@ -5556,6 +5680,9 @@ class MediaContainer( QW.QWidget ):
         # like the zoom, the last file's rotation goes, and the new file's comes in a moment later
         self._LoadRotation()
         
+        # and the same for mirroring
+        self._LoadMirror()
+        
         # this clears the last file's zoom before we set up the new one, and then the new file's zoom comes in a moment later
         self._LoadSavedZoom()
         
@@ -5611,6 +5738,32 @@ class MediaContainer( QW.QWidget ):
         
         # the next time we get this file, start playing it here
         self._next_media_start = ( media, start_ms )
+        
+    
+    def SetMirror( self, mirror_horizontal: bool, mirror_vertical: bool ):
+        
+        # the user mirroring the file. it stays like this every time it is shown
+        if not self.CanRotate():
+            
+            return
+            
+        
+        # anything we are still loading is now out of date
+        self._mirror_load_id += 1
+        
+        self._SetMirror( mirror_horizontal, mirror_vertical )
+        
+        CG.client_controller.Write( 'file_viewer_mirror', self._media.GetHash(), self._mirror_horizontal, self._mirror_vertical )
+        
+    
+    def SetMirrorHorizontal( self, mirror_horizontal: bool ):
+        
+        self.SetMirror( mirror_horizontal, self._mirror_vertical )
+        
+    
+    def SetMirrorVertical( self, mirror_vertical: bool ):
+        
+        self.SetMirror( self._mirror_horizontal, mirror_vertical )
         
     
     def SetRotation( self, rotation: float ):
@@ -6729,6 +6882,10 @@ class StaticImage( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         self._rotated_pixmap = None
         self._rotated_pixmap_size = None
         
+        # flipped left to right, and/or upside down, as you see it, after it is turned. a mirrored image is drawn in one go, like a turned one
+        self._mirror_horizontal = False
+        self._mirror_vertical = False
+        
         if self._canvas_type in CC.CANVAS_MEDIA_VIEWER_TYPES:
             
             shortcut_set = 'media_viewer_media_window'
@@ -7026,8 +7183,7 @@ class StaticImage( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         
         painter.setRenderHint( QG.QPainter.RenderHint.SmoothPixmapTransform, True )
         
-        painter.translate( self.width() / 2, self.height() / 2 )
-        painter.rotate( self._rotation )
+        TransformPainterForOrientation( painter, self.width() / 2, self.height() / 2, self._rotation, self._mirror_horizontal, self._mirror_vertical )
         
         ( width, height ) = ( raw_size.width() / my_dpr, raw_size.height() / my_dpr )
         
@@ -7097,7 +7253,7 @@ class StaticImage( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
                 return
                 
             
-            if self._rotation != 0:
+            if self._rotation != 0 or self._mirror_horizontal or self._mirror_vertical:
                 
                 self._PaintRotated( painter )
                 
@@ -7263,6 +7419,21 @@ class StaticImage( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
     def SetBackgroundColourGenerator( self, background_colour_generator ):
         
         self._background_colour_generator = background_colour_generator
+        
+    
+    def SetMirror( self, mirror_horizontal: bool, mirror_vertical: bool ):
+        
+        if ( mirror_horizontal, mirror_vertical ) == ( self._mirror_horizontal, self._mirror_vertical ):
+            
+            return
+            
+        
+        self._mirror_horizontal = mirror_horizontal
+        self._mirror_vertical = mirror_vertical
+        
+        self._ClearCanvasTileCache()
+        
+        self.update()
         
     
     def SetRotation( self, rotation: int ):

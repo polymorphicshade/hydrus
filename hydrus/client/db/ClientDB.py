@@ -58,6 +58,7 @@ from hydrus.client.db import ClientDBFilesSegments
 from hydrus.client.db import ClientDBFilesSnapshots
 from hydrus.client.db import ClientDBFilesStorage
 from hydrus.client.db import ClientDBFilesTimestamps
+from hydrus.client.db import ClientDBFilesViewerMirrors
 from hydrus.client.db import ClientDBFilesViewerRotations
 from hydrus.client.db import ClientDBFilesViewerZooms
 from hydrus.client.db import ClientDBFilesVirtualPaths
@@ -4103,6 +4104,7 @@ class DB( HydrusDB.HydrusDB ):
                 'file_segments' : self.modules_files_segments.GetSegments,
                 'file_query_ids' : self.modules_files_query.GetHashIdsFromQuery,
                 'file_relationships_for_api' : self.modules_files_duplicates_storage.GetFileRelationshipsForAPI,
+                'file_viewer_mirror' : self.modules_files_viewer_mirrors.GetViewerMirror,
                 'file_viewer_rotation' : self.modules_files_viewer_rotations.GetViewerRotation,
                 'file_viewer_screen_zooms' : self.modules_files_viewer_zooms.GetViewerScreenZooms,
                 'file_viewer_zoom' : self.modules_files_viewer_zooms.GetViewerZoom,
@@ -4215,6 +4217,7 @@ class DB( HydrusDB.HydrusDB ):
                 'associate_repository_update_hashes' : self.modules_repositories.AssociateRepositoryUpdateHashes,
                 'clear_deferred_physical_delete' : self.modules_files_storage.ClearDeferredPhysicalDelete,
                 'clear_all_false_positive_relations' : self.modules_files_duplicates_updates.ClearAllFalsePositivesHashes,
+                'clear_all_file_viewer_mirrors' : self.modules_files_viewer_mirrors.ClearAllViewerMirrors,
                 'clear_all_file_viewer_rotations' : self.modules_files_viewer_rotations.ClearAllViewerRotations,
                 'clear_all_file_viewer_zooms' : self.modules_files_viewer_zooms.ClearAllViewerZooms,
                 'clear_all_file_zoom_timestamps' : self.modules_files_zoom_timestamps.ClearAllZoomTimestamps,
@@ -4270,6 +4273,7 @@ class DB( HydrusDB.HydrusDB ):
                 'file_scripted_events' : self.modules_files_scripted_events.SetScriptedEvents,
                 'file_segments' : self.modules_files_segments.SetSegments,
                 'file_image_overlay' : self.modules_files_image_overlays.SetImageOverlay,
+                'file_viewer_mirror' : self.modules_files_viewer_mirrors.SetViewerMirror,
                 'file_viewer_rotation' : self.modules_files_viewer_rotations.SetViewerRotation,
                 'file_viewer_zoom' : self.modules_files_viewer_zooms.SetViewerZoom,
                 'file_zoom_timestamps' : self.modules_files_zoom_timestamps.SetZoomTimestamps,
@@ -4471,6 +4475,10 @@ class DB( HydrusDB.HydrusDB ):
         self.modules_files_viewer_rotations = ClientDBFilesViewerRotations.ClientDBFilesViewerRotations( self._c, self.modules_hashes_local_cache )
         
         self._modules.append( self.modules_files_viewer_rotations )
+        
+        self.modules_files_viewer_mirrors = ClientDBFilesViewerMirrors.ClientDBFilesViewerMirrors( self._c, self.modules_hashes_local_cache )
+        
+        self._modules.append( self.modules_files_viewer_mirrors )
         
         self.modules_files_image_overlays = ClientDBFilesImageOverlays.ClientDBFilesImageOverlays( self._c, self.modules_hashes_local_cache )
         
@@ -5617,6 +5625,9 @@ class DB( HydrusDB.HydrusDB ):
         if clear_rotations:
             
             self.modules_files_viewer_rotations.ClearViewerRotations( hashes )
+            
+            # mirroring goes with how it is turned
+            self.modules_files_viewer_mirrors.ClearViewerMirrors( hashes )
             
         
         if clear_zoom_timestamps:

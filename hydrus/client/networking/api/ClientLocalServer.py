@@ -251,6 +251,7 @@ class HydrusServiceClientAPI( HydrusClientService ):
         
         manage_file_viewer_data.putChild( b'get_data', ClientLocalServerResourcesManageFileViewerData.HydrusResourceClientAPIRestrictedManageFileViewerDataGetData( self._service, self._client_requests_domain ) )
         manage_file_viewer_data.putChild( b'get_saved_zoom_counts', ClientLocalServerResourcesManageFileViewerData.HydrusResourceClientAPIRestrictedManageFileViewerDataGetSavedZoomCounts( self._service, self._client_requests_domain ) )
+        manage_file_viewer_data.putChild( b'set_mirror', ClientLocalServerResourcesManageFileViewerData.HydrusResourceClientAPIRestrictedManageFileViewerDataSetMirror( self._service, self._client_requests_domain ) )
         manage_file_viewer_data.putChild( b'set_rotation', ClientLocalServerResourcesManageFileViewerData.HydrusResourceClientAPIRestrictedManageFileViewerDataSetRotation( self._service, self._client_requests_domain ) )
         manage_file_viewer_data.putChild( b'set_zoom', ClientLocalServerResourcesManageFileViewerData.HydrusResourceClientAPIRestrictedManageFileViewerDataSetZoom( self._service, self._client_requests_domain ) )
         manage_file_viewer_data.putChild( b'set_position_timestamps', ClientLocalServerResourcesManageFileViewerData.HydrusResourceClientAPIRestrictedManageFileViewerDataSetPositionTimestamps( self._service, self._client_requests_domain ) )

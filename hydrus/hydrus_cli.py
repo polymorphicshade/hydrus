@@ -589,6 +589,27 @@ def BuildRequest( args ) -> APIRequest:
             
             return APIRequest( 'POST', '/manage_file_viewer_data/set_rotation', { 'rotation' : args.degrees, **ParseFiles( args.files ) } )
             
+        elif sub == 'mirror':
+            
+            params = ParseFiles( args.files )
+            
+            if args.horizontal is None and args.vertical is None:
+                
+                raise CLIError( 'Please say --horizontal on/off and/or --vertical on/off!' )
+                
+            
+            if args.horizontal is not None:
+                
+                params[ 'horizontal' ] = args.horizontal == 'on'
+                
+            
+            if args.vertical is not None:
+                
+                params[ 'vertical' ] = args.vertical == 'on'
+                
+            
+            return APIRequest( 'POST', '/manage_file_viewer_data/set_mirror', params )
+            
         elif sub == 'zoom':
             
             params = { 'zoom' : args.zoom, 'center' : args.center, **ParseFiles( args.files ) }
@@ -1022,6 +1043,10 @@ def GetArgumentParser() -> argparse.ArgumentParser:
     p = viewer.add_parser( 'rotate', help = 'turn files' )
     p.add_argument( 'degrees', type = float, help = 'clockwise, like 90' )
     p.add_argument( 'files', nargs = '+', help = files_help )
+    p = viewer.add_parser( 'mirror', help = 'flip files left to right, and/or upside down, as you see them, after they are turned' )
+    p.add_argument( 'files', nargs = '+', help = files_help )
+    p.add_argument( '--horizontal', choices = [ 'on', 'off' ], help = 'flip them left to right, or not. without it, it stays how each file has it' )
+    p.add_argument( '--vertical', choices = [ 'on', 'off' ], help = 'flip them upside down, or not. without it, it stays how each file has it' )
     p = viewer.add_parser( 'zoom', help = 'set files\' saved zoom and pan. with neither, they go back to normal' )
     p.add_argument( 'files', nargs = '+', help = files_help )
     p.add_argument( '--zoom', type = float, help = 'like 2.0 for twice the size' )

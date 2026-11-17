@@ -2950,11 +2950,20 @@ class CanvasWithHovers( Canvas ):
             
             ClientGUIMenus.AppendMenuCheckItem( orientation_menu, custom_label + HC.UNICODE_ELLIPSIS, 'Turn this file clockwise by any number of degrees. It stays like this every time it is shown, until you change it.', is_custom, self._SetCustomRotation )
             
-            ClientGUIMenus.AppendMenu( position_menu, orientation_menu, f'orientation: {ClientGUICanvasMedia.ConvertRotationToPrettyString( current_rotation )}' )
+            ClientGUIMenus.AppendSeparator( orientation_menu )
             
-            if current_rotation != 0:
+            ( mirror_horizontal, mirror_vertical ) = self._media_container.GetMirror()
+            
+            ClientGUIMenus.AppendMenuCheckItem( orientation_menu, 'mirror horizontally', 'Flip this file left to right, as you see it. It stays like this every time it is shown, until you change it.', mirror_horizontal, self._media_container.SetMirrorHorizontal, not mirror_horizontal )
+            ClientGUIMenus.AppendMenuCheckItem( orientation_menu, 'mirror vertically', 'Flip this file upside down, as you see it. It stays like this every time it is shown, until you change it.', mirror_vertical, self._media_container.SetMirrorVertical, not mirror_vertical )
+            
+            orientation_string = ClientGUICanvasMedia.ConvertOrientationToPrettyString( current_rotation, mirror_horizontal, mirror_vertical )
+            
+            ClientGUIMenus.AppendMenu( position_menu, orientation_menu, f'orientation: {orientation_string}' )
+            
+            if current_rotation != 0 or mirror_horizontal or mirror_vertical:
                 
-                label_parts.append( ClientGUICanvasMedia.ConvertRotationToPrettyString( current_rotation ) )
+                label_parts.append( orientation_string )
                 
             
         

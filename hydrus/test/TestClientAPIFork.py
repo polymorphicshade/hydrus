@@ -741,6 +741,7 @@ class TestClientAPIFork( unittest.TestCase ):
         image_path = HydrusStaticDir.GetStaticPath( 'hydrus.png' )
         
         TG.test_controller.SetRead( 'file_viewer_rotation', 450.0 )
+        TG.test_controller.SetRead( 'file_viewer_mirror', ( True, False ) )
         TG.test_controller.SetRead( 'file_viewer_zoom', ( 2.0, ( 0.25, 0.75 ) ) )
         TG.test_controller.SetRead( 'file_viewer_screen_zooms', { '' : ( 2.0, ( 0.25, 0.75 ) ), 'DISPLAY2' : ( None, None ), 'DISPLAY1' : ( 0.5, ( 0.1, 0.2 ) ) } )
         TG.test_controller.SetRead( 'file_zoom_timestamps', [ ( 1000, 1.5, True, None, None, 90 ), ( 2000, 3.0, False, 0.5, 0.5, None ) ] )
@@ -757,6 +758,7 @@ class TestClientAPIFork( unittest.TestCase ):
         self.assertEqual( body, {
             'hash' : hash_1.hex(),
             'rotation' : 90,
+            'mirror' : { 'horizontal' : True, 'vertical' : False },
             'zoom' : { 'zoom' : 2.0, 'center' : [ 0.25, 0.75 ] },
             # each screen's own. the one for any screen is 'zoom'
             'screen_zooms' : [
@@ -794,6 +796,27 @@ class TestClientAPIFork( unittest.TestCase ):
         
         self.assertEqual( body, { 'rotation' : 270 } )
         self.assertEqual( TG.test_controller.GetWrite( 'file_viewer_rotation' ), [ ( ( hash_1, 270 ), {} ), ( ( hash_2, 270 ), {} ) ] )
+        
+        # mirroring. one not given stays how the file has it
+        TG.test_controller.ClearWrites( 'file_viewer_mirror' )
+        
+        ( status, body ) = api_call( 'POST', '/manage_file_viewer_data/set_mirror', self.everything, { 'hashes' : [ hash_1.hex(), hash_2.hex() ], 'vertical' : True } )
+        
+        self.assertEqual( status, 200 )
+        self.assertEqual( body[ 'mirrors' ], [ { 'hash' : hash_1.hex(), 'horizontal' : True, 'vertical' : True }, { 'hash' : hash_2.hex(), 'horizontal' : True, 'vertical' : True } ] )
+        self.assertEqual( TG.test_controller.GetWrite( 'file_viewer_mirror' ), [ ( ( hash_1, True, True ), {} ), ( ( hash_2, True, True ), {} ) ] )
+        
+        ( status, body ) = api_call( 'POST', '/manage_file_viewer_data/set_mirror', self.everything, { 'hash' : hash_1.hex(), 'horizontal' : False, 'vertical' : False } )
+        
+        self.assertEqual( body[ 'mirrors' ], [ { 'hash' : hash_1.hex(), 'horizontal' : False, 'vertical' : False } ] )
+        
+        ( status, body ) = api_call( 'POST', '/manage_file_viewer_data/set_mirror', self.everything, { 'hash' : hash_1.hex() } )
+        
+        self.assertEqual( status, 400 )
+        
+        ( status, body ) = api_call( 'POST', '/manage_file_viewer_data/set_mirror', self.pages_only, { 'hash' : hash_1.hex(), 'horizontal' : True } )
+        
+        self.assertEqual( status, 403 )
         
         TG.test_controller.ClearWrites( 'file_viewer_zoom' )
         
@@ -1520,6 +1543,15 @@ class TestClientAPIForkCommandLine( unittest.TestCase ):
         # syncing playback
         self.assertEqual( self._GetRequest( [ 'viewers', 'sync' ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/sync_playback', {} ) )
         self.assertEqual( self._GetRequest( [ 'viewers', 'sync', '--viewer', hash_hex.upper(), '--viewer', 'cd' * 32 ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/sync_playback', { 'canvas_keys' : [ hash_hex, 'cd' * 32 ] } ) )
+        
+        # mirroring
+        self.assertEqual( self._GetRequest( [ 'viewer', 'mirror', '12', hash_hex, '--horizontal', 'on' ] ), hydrus_cli.APIRequest( 'POST', '/manage_file_viewer_data/set_mirror', { 'file_ids' : [ 12 ], 'hashes' : [ hash_hex ], 'horizontal' : True } ) )
+        self.assertEqual( self._GetRequest( [ 'viewer', 'mirror', '12', '--horizontal', 'off', '--vertical', 'on' ] ), hydrus_cli.APIRequest( 'POST', '/manage_file_viewer_data/set_mirror', { 'file_ids' : [ 12 ], 'horizontal' : False, 'vertical' : True } ) )
+        
+        with self.assertRaises( hydrus_cli.CLIError ):
+            
+            self._GetRequest( [ 'viewer', 'mirror', '12' ] )
+            
         
         # a-b repeat
         self.assertEqual( self._GetRequest( [ 'viewers', 'ab-repeat' ] ), hydrus_cli.APIRequest( 'GET', '/manage_media_viewers/get_ab_repeat' ) )

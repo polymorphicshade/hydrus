@@ -1440,6 +1440,8 @@ class TestClientDB( unittest.TestCase ):
         self._write( 'file_viewer_rotation', old_hash, 90 )
         self._write( 'file_viewer_rotation', new_hash, 180 )
         
+        self._write( 'file_viewer_mirror', old_hash, True, False )
+        
         playlist_id = self._write( 'playlist_new', 'replace test' )
         
         self._write( 'playlist_add_item', playlist_id, other_hash, None, None )
@@ -1450,8 +1452,11 @@ class TestClientDB( unittest.TestCase ):
         
         num_moved = self._write( 'file_replace_move_data', old_hash, new_hash )
         
-        # a loop, a skip, a count, a path, two playlist places, and a snapshot
-        self.assertEqual( num_moved, 7 )
+        # a loop, a skip, a count, a path, a mirror, two playlist places, and a snapshot
+        self.assertEqual( num_moved, 8 )
+        
+        self.assertEqual( self._read( 'file_viewer_mirror', new_hash ), ( True, False ) )
+        self.assertEqual( self._read( 'file_viewer_mirror', old_hash ), ( False, False ) )
         
         self.assertEqual( self._read( 'file_ab_loops', new_hash ), [ ( 0, 4500 ) ] )
         self.assertEqual( self._read( 'file_ab_loops', old_hash ), [] )
@@ -1475,6 +1480,7 @@ class TestClientDB( unittest.TestCase ):
         self._write( 'file_virtual_paths', { new_hash : [] } )
         self._write( 'file_viewer_rotation', old_hash, 0 )
         self._write( 'file_viewer_rotation', new_hash, 0 )
+        self._write( 'file_viewer_mirror', new_hash, False, False )
         
     
     def test_file_playback_freezes( self ):
@@ -1554,6 +1560,45 @@ class TestClientDB( unittest.TestCase ):
         
         self.assertIsNone( self._read( 'file_image_overlay', hash_a ) )
         self.assertEqual( self._read( 'file_image_overlay', hash_b ), image_overlay_b )
+        
+    
+    def test_file_viewer_mirrors( self ):
+        
+        hash_a = os.urandom( 32 )
+        hash_b = os.urandom( 32 )
+        
+        self.assertEqual( self._read( 'file_viewer_mirror', hash_a ), ( False, False ) )
+        
+        self._write( 'file_viewer_mirror', hash_a, True, False )
+        self._write( 'file_viewer_mirror', hash_b, True, True )
+        
+        self.assertEqual( self._read( 'file_viewer_mirror', hash_a ), ( True, False ) )
+        self.assertEqual( self._read( 'file_viewer_mirror', hash_b ), ( True, True ) )
+        
+        self._write( 'file_viewer_mirror', hash_a, False, True )
+        
+        self.assertEqual( self._read( 'file_viewer_mirror', hash_a ), ( False, True ) )
+        
+        # not mirrored is no row
+        self._write( 'file_viewer_mirror', hash_a, False, False )
+        
+        self.assertEqual( self._read( 'file_viewer_mirror', hash_a ), ( False, False ) )
+        
+        # it goes with the rotation when positions are reset
+        self._write( 'file_viewer_mirror', hash_a, True, False )
+        
+        self._write( 'reset_file_viewer_positions', [ hash_a ], True, False, False )
+        
+        self.assertEqual( self._read( 'file_viewer_mirror', hash_a ), ( True, False ) )
+        
+        self._write( 'reset_file_viewer_positions', [ hash_a ], False, True, False )
+        
+        self.assertEqual( self._read( 'file_viewer_mirror', hash_a ), ( False, False ) )
+        self.assertEqual( self._read( 'file_viewer_mirror', hash_b ), ( True, True ) )
+        
+        self._write( 'clear_all_file_viewer_mirrors' )
+        
+        self.assertEqual( self._read( 'file_viewer_mirror', hash_b ), ( False, False ) )
         
     
     def test_reset_file_viewer_positions( self ):

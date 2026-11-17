@@ -14,6 +14,7 @@ FILE_VIEWER_DATA_TABLES = (
     'file_playback_skips',
     'file_scripted_events',
     'file_segments',
+    'file_viewer_mirrors',
     'file_viewer_rotations',
     'file_viewer_zooms',
     'file_virtual_paths',

@@ -418,6 +418,45 @@ def GetPingPongLoopFilterGraph( first_frame_index: int, last_frame_index: int, f
     return graph
     
 
+# the label of the video filter that mirrors the video, so we can take it off again without touching any other
+MPV_MIRROR_FILTER_LABEL = '@hydrusmirror'
+
+def GetPlayerRotationAndFlips( rotation: int, mirror_horizontal: bool, mirror_vertical: bool ) -> tuple[ int, bool, bool ]:
+    
+    # a mirror is how you see it, after the file is turned. mpv flips the frame with its video filter before video-rotate turns it, so this says what to give it for the same look
+    # a flip either way and then a turn is the same as the opposite turn and then that flip, and flipping both ways is just a half turn
+    rotation = int( round( rotation ) ) % 360
+    
+    if mirror_horizontal and mirror_vertical:
+        
+        return ( ( rotation + 180 ) % 360, False, False )
+        
+    
+    if mirror_horizontal or mirror_vertical:
+        
+        return ( ( - rotation ) % 360, bool( mirror_horizontal ), bool( mirror_vertical ) )
+        
+    
+    return ( rotation, False, False )
+    
+
+def ConvertMirrorToMPVVFArgs( flip_horizontal: bool, flip_vertical: bool ) -> tuple[ str, str ]:
+    
+    # one flip at most, since flipping both ways is a half turn
+    if flip_horizontal:
+        
+        return ( 'add', f'{MPV_MIRROR_FILTER_LABEL}:hflip' )
+        
+    elif flip_vertical:
+        
+        return ( 'add', f'{MPV_MIRROR_FILTER_LABEL}:vflip' )
+        
+    else:
+        
+        return ( 'remove', MPV_MIRROR_FILTER_LABEL )
+        
+    
+
 def ConvertStartMSToMPVLoadFileOptions( start_ms: int | None ) -> str:
     
     # the per-file options for loadfile, which mpv applies before the file starts
@@ -562,6 +601,11 @@ class MPVMediator( object ):
         
         # this appears to be adjunct to the normal gubbins, no idea how to do this 'polite'
         self._mpv_player.set_loglevel( value )
+        
+    
+    def SetVideoFlip( self, flip_horizontal: bool, flip_vertical: bool ):
+        
+        raise NotImplementedError()
         
     
     def SetVideoRotation( self, rotation: int ):
@@ -746,6 +790,13 @@ class MPVMediatorRude( MPVMediator ):
         ( operation, value ) = ConvertAudioFilterGraphToMPVAFArgs( graph )
         
         self._mpv_player.command( 'af', operation, value )
+        
+    
+    def SetVideoFlip( self, flip_horizontal: bool, flip_vertical: bool ):
+        
+        ( operation, value ) = ConvertMirrorToMPVVFArgs( flip_horizontal, flip_vertical )
+        
+        self._mpv_player.command( 'vf', operation, value )
         
     
     def SetVideoRotation( self, rotation: int ):
@@ -1020,6 +1071,14 @@ class MPVMediatorPolite( MPVMediator ):
         self._mpv_player.command_async( 'af', operation, value )
         
     
+    def SetVideoFlip( self, flip_horizontal: bool, flip_vertical: bool ):
+        
+        # a labelled video filter, so any other video filters are left alone. adding one with the same label replaces it
+        ( operation, value ) = ConvertMirrorToMPVVFArgs( flip_horizontal, flip_vertical )
+        
+        self._mpv_player.command_async( 'vf', operation, value )
+        
+    
     def SetVideoRotation( self, rotation: int ):
         
         # this is added to any rotation the file says it has. it is clockwise, and any angle works, unless hardware decoding without copy-back is on, which only does right angles
@@ -1154,8 +1213,15 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         self._number_of_restarts_this_second = 0
         self._current_seek_to_start_count = 0
         
-        # degrees clockwise that mpv is turning the video
+        # degrees clockwise that the media container wants the video turned
         self._rotation = 0
+        
+        # and whether it is flipped left to right, and/or upside down, as you see it, after it is turned
+        self._mirror_horizontal = False
+        self._mirror_vertical = False
+        
+        # what mpv is doing for that now, as ( rotation, flip_horizontal, flip_vertical )
+        self._player_orientation = ( 0, False, False )
         
         self._InitialiseMPVCallbacks()
         
@@ -1991,13 +2057,12 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
             
             self._mpv_mediator.SetPaused( True )
             
-            # the rotation is player-wide in mpv, so it would carry over to the next file. the media container sets the next file's once it knows it
-            if self._rotation != 0:
-                
-                self._mpv_mediator.SetVideoRotation( 0 )
-                
-                self._rotation = 0
-                
+            # the rotation and mirroring are player-wide in mpv, so they would carry over to the next file. the media container sets the next file's once it knows it
+            self._rotation = 0
+            self._mirror_horizontal = False
+            self._mirror_vertical = False
+            
+            self._ApplyOrientation()
             
             # ab-loop points are player-wide in mpv, so they would carry over to the next file
             self._mpv_mediator.SetABLoop( None, None )
@@ -2363,6 +2428,53 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         self._player.mute = mute
         
     
+    def _ApplyOrientation( self ):
+        
+        # mpv flips before it turns, so it may want a different turn to look how we want
+        player_orientation = GetPlayerRotationAndFlips( self._rotation, self._mirror_horizontal, self._mirror_vertical )
+        
+        if player_orientation == self._player_orientation:
+            
+            return
+            
+        
+        ( player_rotation, flip_horizontal, flip_vertical ) = player_orientation
+        ( old_player_rotation, old_flip_horizontal, old_flip_vertical ) = self._player_orientation
+        
+        if player_rotation != old_player_rotation:
+            
+            self._mpv_mediator.SetVideoRotation( player_rotation )
+            
+        
+        if ( flip_horizontal, flip_vertical ) != ( old_flip_horizontal, old_flip_vertical ):
+            
+            self._mpv_mediator.SetVideoFlip( flip_horizontal, flip_vertical )
+            
+        
+        self._player_orientation = player_orientation
+        
+    
+    def SetMirror( self, mirror_horizontal: bool, mirror_vertical: bool ):
+        
+        if self._currently_in_media_load_error_state or ( mirror_horizontal, mirror_vertical ) == ( self._mirror_horizontal, self._mirror_vertical ):
+            
+            return
+            
+        
+        try:
+            
+            self._mirror_horizontal = mirror_horizontal
+            self._mirror_vertical = mirror_vertical
+            
+            self._ApplyOrientation()
+            
+        except mpv.ShutdownError:
+            
+            # libmpv core probably shut down
+            pass
+            
+        
+    
     def SetRotation( self, rotation: int ):
         
         if self._currently_in_media_load_error_state or rotation == self._rotation:
@@ -2372,9 +2484,9 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         
         try:
             
-            self._mpv_mediator.SetVideoRotation( rotation )
-            
             self._rotation = rotation
+            
+            self._ApplyOrientation()
             
         except mpv.ShutdownError:
             

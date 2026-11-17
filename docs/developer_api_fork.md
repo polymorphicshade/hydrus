@@ -6,7 +6,7 @@ title: This Fork's Client API
 
 These endpoints are for the features this fork adds: counters, playlists, virtual paths, snapshots, what the media viewer remembers for each file, tag presets, screen locations, media viewer layouts, and exporting video, audio, and playlists. They work just like hydrus's own [Client API](developer_api.md): the same access keys and session keys, json in and out, and the same errors. The [command line tool](command_line.md) can use all of them.
 
-`/api_version` has a `fork_api_version`, which goes up when these change. It is `8` now.
+`/api_version` has a `fork_api_version`, which goes up when these change. It is `9` now.
 
 ## permissions
 
@@ -206,6 +206,7 @@ Arguments: one file.
 {
   "hash" : "6c37...",
   "rotation" : 90,
+  "mirror" : { "horizontal" : true, "vertical" : false },
   "zoom" : { "zoom" : 2.0, "center" : [ 0.25, 0.75 ] },
   "screen_zooms" : [ { "screen_name" : "\\\\.\\DISPLAY2", "zoom" : 0.5, "center" : null } ],
   "position_timestamps" : [ { "timestamp_ms" : 1000, "zoom" : 1.5, "zoom_is_relative" : true, "center" : null, "rotation" : 90 } ],
@@ -227,6 +228,10 @@ Arguments: one file.
 ### **POST `/manage_file_viewer_data/set_rotation`**
 
 Arguments: files, `rotation`, in degrees clockwise. It is rounded to whole degrees, 0 to 359.
+
+### **POST `/manage_file_viewer_data/set_mirror`**
+
+Arguments: files, and `horizontal` and/or `vertical`. Like the media viewer's _orientation->mirror horizontally_ and _mirror vertically_: flips files left to right, and/or upside down, as you see them, after they are turned. One you do not give stays how each file has it. Picked up the next time a media viewer shows the file, like rotation, and reset with it. Returns `mirrors`, each file's `hash`, `horizontal`, and `vertical` as saved.
 
 ### **POST `/manage_file_viewer_data/set_zoom`**
 
