@@ -6,7 +6,7 @@ title: This Fork's Client API
 
 These endpoints are for the features this fork adds: counters, playlists, virtual paths, snapshots, what the media viewer remembers for each file, tag presets, screen locations, media viewer layouts, and exporting video, audio, and playlists. They work just like hydrus's own [Client API](developer_api.md): the same access keys and session keys, json in and out, and the same errors. The [command line tool](command_line.md) can use all of them.
 
-`/api_version` has a `fork_api_version`, which goes up when these change. It is `7` now.
+`/api_version` has a `fork_api_version`, which goes up when these change. It is `8` now.
 
 ## permissions
 
@@ -370,6 +370,10 @@ Whether the media viewer opened last is highlighted with a background colour of 
 ### **POST `/manage_media_viewers/set_highlight`**
 
 Arguments: `highlight_last_opened` and/or `colour`, like `#FF00FF`. Turns the highlight on or off, or sets its colour, like the options do. Open media viewers change straight away, and it stays set when the client restarts. Returns the same as `get_highlight`.
+
+### **POST `/manage_media_viewers/sync_playback`**
+
+Arguments: `canvas_keys` (optional, a list, default every media viewer that is open, as is an empty list). Like the media viewer's _sync playback with_ menu: the media viewers go back to the start of what they are playing, paused, and a moment later, once they have all got there, play from the start together, so they play at exactly the same time. Media viewers showing a file with no playback are left alone. Returns `num_media_viewers`, how many were synced. A canvas_key for a media viewer that is not open, or is not showing a file with playback, gives a 404.
 
 ### **GET `/manage_media_viewers/get_screens`**
 

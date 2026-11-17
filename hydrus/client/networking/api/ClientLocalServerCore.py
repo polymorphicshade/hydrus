@@ -121,7 +121,8 @@ CLIENT_API_JSON_PARAMS = {
 CLIENT_API_JSON_BYTE_LIST_PARAMS = {
     'file_service_keys',
     'deleted_file_service_keys',
-    'hashes'
+    'hashes',
+    'canvas_keys'
 }
 
 CLIENT_API_JSON_BYTE_DICT_PARAMS = {

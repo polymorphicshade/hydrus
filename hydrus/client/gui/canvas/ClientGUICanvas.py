@@ -34,6 +34,7 @@ from hydrus.client.gui import ClientGUIExceptionHandling
 from hydrus.client.gui import ClientGUIFileReplace
 from hydrus.client.gui import ClientGUIFunctions
 from hydrus.client.gui import ClientGUIMediaViewerHighlight
+from hydrus.client.gui import ClientGUIMediaViewerSync
 from hydrus.client.gui import ClientGUIMenus
 from hydrus.client.gui import ClientGUIPlaylists
 from hydrus.client.gui import ClientGUIRatings
@@ -928,6 +929,73 @@ class Canvas( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         self.update()
         
         self._media_container.update()
+        
+    
+    def CanSyncPlayback( self ) -> bool:
+        
+        return self._current_media is not None and self._media_container.CurrentlyPresentingMediaWithDuration()
+        
+    
+    def PrepareSyncedPlayback( self ):
+        
+        # synced playback: everything goes back to the start, paused, until they all play together
+        self._media_container.Pause()
+        
+        self._media_container.SeekTo( 0 )
+        
+    
+    def StartSyncedPlayback( self ):
+        
+        if self.CanSyncPlayback():
+            
+            self._media_container.Play()
+            
+        
+    
+    def _SyncPlaybackWith( self, other_canvas_windows: list ):
+        
+        ClientGUIMediaViewerSync.SyncMediaViewersPlayback( [ self ] + [ canvas_window for canvas_window in other_canvas_windows if canvas_window is not self ] )
+        
+    
+    def _AppendSyncPlaybackMenu( self, menu: QW.QMenu ):
+        
+        # restart this media viewer and others together, so they play at exactly the same time
+        if not self.CanSyncPlayback():
+            
+            return
+            
+        
+        canvas_windows = ClientGUIMediaViewerSync.GetSyncableMediaViewerCanvases()
+        
+        other_canvas_windows = [ canvas_window for canvas_window in canvas_windows if canvas_window is not self ]
+        
+        sync_menu = ClientGUIMenus.GenerateMenu( menu )
+        
+        if len( other_canvas_windows ) == 0:
+            
+            ClientGUIMenus.AppendMenuLabel( sync_menu, 'no other media viewer is playing anything' )
+            
+        else:
+            
+            for ( index, canvas_window ) in enumerate( canvas_windows ):
+                
+                if canvas_window is self:
+                    
+                    continue
+                    
+                
+                ClientGUIMenus.AppendMenuItem( sync_menu, ClientGUIMediaViewerSync.GetMediaViewerSyncLabel( index, canvas_window ), 'Take this media viewer and that one back to the start, and play them from there together, at exactly the same time.', self._SyncPlaybackWith, [ canvas_window ] )
+                
+            
+            if len( other_canvas_windows ) > 1:
+                
+                ClientGUIMenus.AppendSeparator( sync_menu )
+                
+                ClientGUIMenus.AppendMenuItem( sync_menu, 'all of them', 'Take every media viewer that is playing something back to the start, and play them from there together, at exactly the same time.', self._SyncPlaybackWith, other_canvas_windows )
+                
+            
+        
+        ClientGUIMenus.AppendMenu( menu, sync_menu, 'sync playback with' )
         
     
     def HandleMouseMoveWithoutEvent( self, left_down: bool ):
@@ -6240,6 +6308,8 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
                 ClientGUIMenus.AppendMenu( menu, skips_menu, f'skips ({len( playback_skips )})' if len( playback_skips ) > 0 else 'skips' )
                 
                 self._AppendABLoopsMenu( menu )
+                
+                self._AppendSyncPlaybackMenu( menu )
                 
             
             if self._media_container.SupportsPlaybackFreezes():

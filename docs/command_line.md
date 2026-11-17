@@ -124,6 +124,10 @@ python hydrus_cli.py viewers ping-pong off --viewer <canvas_key>
 python hydrus_cli.py viewers highlight on --colour "#FF00FF"
 python hydrus_cli.py viewers highlight
 
+# start media viewers playing from the start together, so they play at exactly the same time
+python hydrus_cli.py viewers sync
+python hydrus_cli.py viewers sync --viewer <canvas_key> --viewer <canvas_key>
+
 # slideshows. 0 seconds plays each file once through, without looping, and moves on when it is done
 python hydrus_cli.py viewers slideshows
 python hydrus_cli.py viewers slideshow start 0

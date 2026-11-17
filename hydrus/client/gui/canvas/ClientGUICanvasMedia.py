@@ -5151,6 +5151,15 @@ class MediaContainer( QW.QWidget ):
             
         
     
+    def Play( self ):
+        
+        # something else wants it playing, like synced playback. a freeze we are holding is over
+        if self._media is not None and self.CurrentlyPresentingMediaWithDuration() and self.IsPaused():
+            
+            self.PausePlay()
+            
+        
+    
     def PausePlay( self ):
         
         # the user taking over. if this plays, the hold is over. if it pauses, it stays paused

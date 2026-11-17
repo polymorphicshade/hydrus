@@ -1262,6 +1262,51 @@ class TestClientAPIFork( unittest.TestCase ):
         
         self.assertEqual( status, 403 )
         
+        # syncing playback
+        
+        from hydrus.client.gui import ClientGUIMediaViewerSync
+        
+        other_canvas_key = b'\xcd' * 32
+        
+        syncable_canvases = [ mock.Mock(), mock.Mock() ]
+        
+        syncable_canvases[0].GetCanvasKey.return_value = canvas_key
+        syncable_canvases[1].GetCanvasKey.return_value = other_canvas_key
+        
+        with mock.patch.object( ClientGUIMediaViewerSync, 'GetSyncableMediaViewerCanvases', return_value = syncable_canvases ):
+            
+            with mock.patch.object( ClientGUIMediaViewerSync, 'SyncOpenMediaViewersPlayback', return_value = 2 ) as sync_playback:
+                
+                ( status, body ) = api_call( 'POST', '/manage_media_viewers/sync_playback', self.pages_only, {} )
+                
+                self.assertEqual( status, 200 )
+                self.assertEqual( body, { 'num_media_viewers' : 2 } )
+                sync_playback.assert_called_once_with( canvas_keys = None )
+                
+                ( status, body ) = api_call( 'POST', '/manage_media_viewers/sync_playback', self.pages_only, { 'canvas_keys' : [ canvas_key.hex(), other_canvas_key.hex() ] } )
+                
+                self.assertEqual( status, 200 )
+                sync_playback.assert_called_with( canvas_keys = [ canvas_key, other_canvas_key ] )
+                
+                # one that is not open, or not playing anything
+                ( status, body ) = api_call( 'POST', '/manage_media_viewers/sync_playback', self.pages_only, { 'canvas_keys' : [ canvas_key.hex(), ( b'\xef' * 32 ).hex() ] } )
+                
+                self.assertEqual( status, 404 )
+                
+                # an empty list is all of them
+                ( status, body ) = api_call( 'POST', '/manage_media_viewers/sync_playback', self.pages_only, { 'canvas_keys' : [] } )
+                
+                self.assertEqual( status, 200 )
+                sync_playback.assert_called_with( canvas_keys = None )
+                
+                self.assertEqual( sync_playback.call_count, 3 )
+                
+            
+        
+        ( status, body ) = api_call( 'POST', '/manage_media_viewers/sync_playback', self.counters_only, {} )
+        
+        self.assertEqual( status, 403 )
+        
         # slideshows
         
         from hydrus.client.gui import ClientGUIMediaViewerSlideshows
@@ -1471,6 +1516,10 @@ class TestClientAPIForkCommandLine( unittest.TestCase ):
         
         self.assertEqual( self._GetRequest( [ 'replace-file', '12', 'fixed.mp4' ] ), hydrus_cli.APIRequest( 'POST', '/add_files/replace_file', { 'file_ids' : [ 12 ], 'path' : replace_path, 'delete_old_file' : True } ) )
         self.assertEqual( self._GetRequest( [ 'replace-file', hash_hex, 'fixed.mp4', '--keep-old-file' ] ), hydrus_cli.APIRequest( 'POST', '/add_files/replace_file', { 'hashes' : [ hash_hex ], 'path' : replace_path, 'delete_old_file' : False } ) )
+        
+        # syncing playback
+        self.assertEqual( self._GetRequest( [ 'viewers', 'sync' ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/sync_playback', {} ) )
+        self.assertEqual( self._GetRequest( [ 'viewers', 'sync', '--viewer', hash_hex.upper(), '--viewer', 'cd' * 32 ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/sync_playback', { 'canvas_keys' : [ hash_hex, 'cd' * 32 ] } ) )
         
         # a-b repeat
         self.assertEqual( self._GetRequest( [ 'viewers', 'ab-repeat' ] ), hydrus_cli.APIRequest( 'GET', '/manage_media_viewers/get_ab_repeat' ) )
