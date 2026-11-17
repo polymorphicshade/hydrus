@@ -271,6 +271,40 @@ class HydrusResourceClientAPIRestrictedManageMediaViewersSetTextHidden( HydrusRe
         
     
 
+class HydrusResourceClientAPIRestrictedManageMediaViewersGetMPVStatus( HydrusResourceClientAPIRestrictedManageMediaViewers ):
+    
+    def _threadDoGETJob( self, request: HydrusServerRequest.HydrusRequest ):
+        
+        def do_it():
+            
+            from hydrus.client.gui.canvas import ClientGUIMPV
+            
+            return ClientGUIMPV.GetMPVRecoveryStatus()
+            
+        
+        mpv_status = CG.client_controller.CallBlockingToQtTLW( do_it )
+        
+        return ClientLocalServerCore.GenerateJSONResponse( request, dict( mpv_status ) )
+        
+    
+
+class HydrusResourceClientAPIRestrictedManageMediaViewersForgetMPVDamagedFiles( HydrusResourceClientAPIRestrictedManageMediaViewers ):
+    
+    def _threadDoPOSTJob( self, request: HydrusServerRequest.HydrusRequest ):
+        
+        def do_it():
+            
+            from hydrus.client.gui.canvas import ClientGUIMPV
+            
+            return ClientGUIMPV.ForgetDamagedFiles()
+            
+        
+        num_forgotten = CG.client_controller.CallBlockingToQtTLW( do_it )
+        
+        return ClientLocalServerCore.GenerateJSONResponse( request, { 'num_forgotten' : num_forgotten } )
+        
+    
+
 class HydrusResourceClientAPIRestrictedManageMediaViewersGetScreens( HydrusResourceClientAPIRestrictedManageMediaViewers ):
     
     def _threadDoGETJob( self, request: HydrusServerRequest.HydrusRequest ):

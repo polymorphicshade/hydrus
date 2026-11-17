@@ -309,6 +309,8 @@ class HydrusServiceClientAPI( HydrusClientService ):
         manage_media_viewers.putChild( b'sync_playback', ClientLocalServerResourcesManageMediaViewers.HydrusResourceClientAPIRestrictedManageMediaViewersSyncPlayback( self._service, self._client_requests_domain ) )
         manage_media_viewers.putChild( b'get_text_hidden', ClientLocalServerResourcesManageMediaViewers.HydrusResourceClientAPIRestrictedManageMediaViewersGetTextHidden( self._service, self._client_requests_domain ) )
         manage_media_viewers.putChild( b'set_text_hidden', ClientLocalServerResourcesManageMediaViewers.HydrusResourceClientAPIRestrictedManageMediaViewersSetTextHidden( self._service, self._client_requests_domain ) )
+        manage_media_viewers.putChild( b'get_mpv_status', ClientLocalServerResourcesManageMediaViewers.HydrusResourceClientAPIRestrictedManageMediaViewersGetMPVStatus( self._service, self._client_requests_domain ) )
+        manage_media_viewers.putChild( b'forget_mpv_damaged_files', ClientLocalServerResourcesManageMediaViewers.HydrusResourceClientAPIRestrictedManageMediaViewersForgetMPVDamagedFiles( self._service, self._client_requests_domain ) )
         manage_media_viewers.putChild( b'get_screens', ClientLocalServerResourcesManageMediaViewers.HydrusResourceClientAPIRestrictedManageMediaViewersGetScreens( self._service, self._client_requests_domain ) )
         manage_media_viewers.putChild( b'apply_screen_zoom', ClientLocalServerResourcesManageMediaViewers.HydrusResourceClientAPIRestrictedManageMediaViewersApplyScreenZoom( self._service, self._client_requests_domain ) )
         

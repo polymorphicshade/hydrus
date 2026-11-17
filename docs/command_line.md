@@ -138,6 +138,10 @@ python hydrus_cli.py viewers text hidden
 python hydrus_cli.py viewers text shown --viewer <canvas_key>
 python hydrus_cli.py viewers text
 
+# mpv players that stopped working and were replaced, and the files mpv will not play again this boot
+python hydrus_cli.py viewers mpv
+python hydrus_cli.py viewers mpv forget-damaged
+
 # slideshows. 0 seconds plays each file once through, without looping, and moves on when it is done
 python hydrus_cli.py viewers slideshows
 python hydrus_cli.py viewers slideshow start 0

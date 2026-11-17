@@ -8132,6 +8132,14 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
     
     def GetMPVWidget( self, parent ):
         
+        # a player whose mpv died is never used again
+        for mpv_widget in [ mpv_widget for mpv_widget in self._persistent_mpv_widgets if mpv_widget.IsCoreDead() ]:
+            
+            self._persistent_mpv_widgets.remove( mpv_widget )
+            
+            self._SetAsideDeadMPVWidget( mpv_widget )
+            
+        
         if len( self._persistent_mpv_widgets ) == 0:
             
             mpv_widget = ClientGUIMPV.MPVWidget( parent )
@@ -9027,7 +9035,27 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
         
         mpv_widget.setParent( self )
         
+        if mpv_widget.IsCoreDead():
+            
+            self._SetAsideDeadMPVWidget( mpv_widget )
+            
+            return
+            
+        
         self._persistent_mpv_widgets.append( mpv_widget )
+        
+    
+    def _SetAsideDeadMPVWidget( self, mpv_widget: ClientGUIMPV.MPVWidget ):
+        
+        # its mpv core is gone. destroying mpv windows has been crashy, so like the debug 'isolate' command, we just keep it out of the way, hidden, and never use it again
+        mpv_widget.hide()
+        
+        if mpv_widget not in self._isolated_mpv_widgets:
+            
+            self._isolated_mpv_widgets.append( mpv_widget )
+            
+        
+    
         
     
     def _UnloadAndPurgeQtMediaPlayer( self, qt_media_player: ClientGUIQtMediaPlayer.QtMediaPlayer ):

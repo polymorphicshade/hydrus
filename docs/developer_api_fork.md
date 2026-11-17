@@ -6,7 +6,7 @@ title: This Fork's Client API
 
 These endpoints are for the features this fork adds: counters, playlists, virtual paths, snapshots, what the media viewer remembers for each file, tag presets, screen locations, media viewer layouts, and exporting video, audio, and playlists. They work just like hydrus's own [Client API](developer_api.md): the same access keys and session keys, json in and out, and the same errors. The [command line tool](command_line.md) can use all of them.
 
-`/api_version` has a `fork_api_version`, which goes up when these change. It is `12` now.
+`/api_version` has a `fork_api_version`, which goes up when these change. It is `13` now.
 
 ## permissions
 
@@ -412,6 +412,18 @@ Whether each media viewer that is open now has hidden its text, like with ctrl+F
 ### **POST `/manage_media_viewers/set_text_hidden`**
 
 Arguments: `text_hidden`, and `canvas_key` (optional, default every media viewer that is open). Like ctrl+F10, or the media viewer's _hide text_: with true, the media viewer hides the tags on the left, the notes and file info on the right, and the other text it draws, for something more immersive. The top hover's buttons stay. Returns `num_media_viewers`, how many it was set for. A canvas_key for a media viewer that is not open gives a 404.
+
+### **GET `/manage_media_viewers/get_mpv_status`**
+
+When an mpv player stops working while it plays a file--its mpv shuts down when nobody asked it to--the media viewer puts a new mpv player in its place and loads the file again, where it was, so you do not have to restart the client. A file that stops mpv again within a minute of that is not loaded in mpv again this boot, like a file that gives mpv a crashy error. This says how many times a player has been replaced, `num_recoveries`, and the files mpv will not play again this boot, `damaged_hashes`.
+
+```json
+{ "num_recoveries" : 1, "damaged_hashes" : [ "6c37..." ] }
+```
+
+### **POST `/manage_media_viewers/forget_mpv_damaged_files`**
+
+Lets mpv try the files in `damaged_hashes` again. Returns `num_forgotten`, how many there were.
 
 ### **GET `/manage_media_viewers/get_screens`**
 

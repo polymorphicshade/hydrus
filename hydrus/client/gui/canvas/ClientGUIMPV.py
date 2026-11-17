@@ -45,6 +45,60 @@ LOCALE_IS_SET = False
 
 damaged_file_hashes = set()
 
+# when an mpv player's core shuts down out of the blue--it crashed, more or less--its media viewer swaps in a new player and loads the file again, so you do not have to restart the client
+# a file that kills mpv again soon after it was reloaded is not reloaded again. it goes in damaged_file_hashes, like a file that gives a crashy error
+MPV_CORE_DEATH_GIVE_UP_PERIOD_S = 60
+
+mpv_core_death_times_for_files: dict[ bytes, float ] = {}
+
+num_mpv_core_death_recoveries = 0
+
+def NotifyMPVCoreDiedForFile( hash: bytes, now: float | None = None ) -> bool:
+    
+    # returns True if this file has killed mpv twice in a row, so we should give up on it this boot
+    global num_mpv_core_death_recoveries
+    
+    if now is None:
+        
+        now = HydrusTime.GetNowFloat()
+        
+    
+    last_death_time = mpv_core_death_times_for_files.get( hash, None )
+    
+    mpv_core_death_times_for_files[ hash ] = now
+    
+    if last_death_time is not None and now - last_death_time < MPV_CORE_DEATH_GIVE_UP_PERIOD_S:
+        
+        damaged_file_hashes.add( hash )
+        
+        return True
+        
+    
+    num_mpv_core_death_recoveries += 1
+    
+    return False
+    
+
+def GetMPVRecoveryStatus() -> dict:
+    
+    return {
+        'num_recoveries' : num_mpv_core_death_recoveries,
+        'damaged_hashes' : sorted( hash.hex() for hash in damaged_file_hashes )
+    }
+    
+
+def ForgetDamagedFiles() -> int:
+    
+    # the user thinks they are fine after all, so mpv may play them again. returns how many there were
+    num_damaged = len( damaged_file_hashes )
+    
+    damaged_file_hashes.clear()
+    mpv_core_death_times_for_files.clear()
+    
+    return num_damaged
+    
+
+
 def GetAudioDeviceTuples() -> list[ tuple[ str, str ] ]:
     
     if not MPV_IS_AVAILABLE:
@@ -1223,6 +1277,9 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         # what mpv is doing for that now, as ( rotation, flip_horizontal, flip_vertical )
         self._player_orientation = ( 0, False, False )
         
+        # whether our mpv core has shut down when we did not ask it to. a dead player is never used again
+        self._core_is_dead = False
+        
         self._InitialiseMPVCallbacks()
         
         self.destroyed.connect( self._player.terminate )
@@ -1261,10 +1318,11 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
     
     def _ApplyAudioFilterGraph( self ):
         
-        if self._currently_in_media_load_error_state:
+        if self._currently_in_media_load_error_state or self._core_is_dead:
             
             return
             
+        
         
         graph = self._last_set_audio_filter_graph
         
@@ -1357,6 +1415,27 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
             
         
         return time_s
+        
+    
+    def _NotifyCoreDied( self ):
+        
+        # our mpv core shut down out of the blue, which is about as close to a crash as we can catch. the media container swaps in a new player
+        if self._core_is_dead:
+            
+            return
+            
+        
+        self._core_is_dead = True
+        self._currently_in_media_load_error_state = True
+        
+        HydrusData.DebugPrint( 'An mpv player\'s core shut down unexpectedly. Its media viewer will swap in a new player.' )
+        
+        media_container = self.parentWidget()
+        
+        if media_container is not None and hasattr( media_container, 'NotifyMPVCoreDied' ):
+            
+            CG.client_controller.CallAfterQtSafe( media_container, media_container.NotifyMPVCoreDied, self )
+            
         
     
     def _HandleLoadError( self ):
@@ -1520,8 +1599,14 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
                 
                 self.setVisible( False )
                 
-            
+                if self._current_mpv_player_state not in ( MPV_WIDGET_STATE_CLEANING_UP, MPV_WIDGET_STATE_READY_TO_DESTROY ):
+                    
+                    # we did not ask for this
+                    self._NotifyCoreDied()
+                    
         except mpv.ShutdownError:
+            
+            self._NotifyCoreDied()
             
             return True
             
@@ -2034,6 +2119,15 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
             return
             
         
+        if self._core_is_dead:
+            
+            # there is no mpv to load into any more. the media container swaps us out for a new player
+            self._media = None
+            
+            return
+            
+        
+        
         global damaged_file_hashes
         
         if media is not None and media.GetHash() in damaged_file_hashes and not HG.mpv_allow_crashy_files and not HG.mpv_allow_crashy_files_silently and not CG.client_controller.new_options.GetBoolean( 'mpv_allow_crashy_files_silently' ):
@@ -2227,7 +2321,7 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         except mpv.ShutdownError:
             
             # libmpv core probably shut down
-            pass
+            self._NotifyCoreDied()
             
         
     
@@ -2369,6 +2463,11 @@ class MPVWidget( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
             
         
         self._ping_pong_loop_time_hold = ( seek_s, seek_s, HydrusTime.GetNowFloat() + PING_PONG_LOOP_TIME_HOLD_PERIOD_S )
+        
+    
+    def IsCoreDead( self ) -> bool:
+        
+        return self._core_is_dead
         
     
     def StartCleanBeforeDestroy( self ):

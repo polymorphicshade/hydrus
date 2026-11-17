@@ -905,6 +905,15 @@ def BuildRequest( args ) -> APIRequest:
             
             return APIRequest( 'POST', '/manage_media_viewers/set_text_hidden', params )
             
+        elif sub == 'mpv':
+            
+            if args.action == 'forget-damaged':
+                
+                return APIRequest( 'POST', '/manage_media_viewers/forget_mpv_damaged_files' )
+                
+            
+            return APIRequest( 'GET', '/manage_media_viewers/get_mpv_status' )
+            
         elif sub == 'slideshows':
             
             return APIRequest( 'GET', '/manage_media_viewers/get_slideshows' )
@@ -1222,6 +1231,8 @@ def GetArgumentParser() -> argparse.ArgumentParser:
     p = viewers.add_parser( 'text', help = 'hide or show the tags, notes, and file info media viewers show, like ctrl+f10. with neither, says which are hidden' )
     p.add_argument( 'state', nargs = '?', choices = [ 'hidden', 'shown' ] )
     p.add_argument( '--viewer', metavar = 'CANVAS_KEY', help = 'just this media viewer, by its canvas_key from "viewers list". Default is all that are open' )
+    p = viewers.add_parser( 'mpv', help = 'how many times an mpv player stopped working and was replaced, and the files mpv will not play again this boot. "forget-damaged" lets mpv try them again' )
+    p.add_argument( 'action', nargs = '?', choices = [ 'status', 'forget-damaged' ], default = 'status' )
     viewers.add_parser( 'screens', help = 'the screens, and which one each open media viewer is on' )
     p = viewers.add_parser( 'screen-zoom', help = 'zoom and pan the files in media viewers how they are on another screen, and keep them like that on the screen they are on' )
     p.add_argument( 'screen', help = 'the screen\'s name, from "viewers screens"' )

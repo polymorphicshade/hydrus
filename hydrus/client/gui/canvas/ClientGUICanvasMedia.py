@@ -4930,6 +4930,64 @@ class MediaContainer( QW.QWidget ):
         return self._GetCurrentPlaybackTimestampMS()
         
     
+    def NotifyMPVCoreDied( self, mpv_widget: ClientGUIMPV.MPVWidget ):
+        
+        # an mpv player's core shut down out of the blue. rather than leave a dead player up, we put a new one in and load the file again, where it was
+        if mpv_widget is self._standby_mpv_widget:
+            
+            # it had not been shown yet, so it just goes
+            self._ReleaseStandbyMPVWidget()
+            
+            return
+            
+        
+        if mpv_widget is not self._media_window or self._media is None:
+            
+            return
+            
+        
+        media = self._media
+        hash = media.GetHash()
+        
+        try:
+            
+            # the dead player may still know where it got to
+            playback_ms = self._GetCurrentPlaybackTimestampMS()
+            
+        except Exception:
+            
+            playback_ms = None
+            
+        
+        give_up = ClientGUIMPV.NotifyMPVCoreDiedForFile( hash )
+        
+        # the dead player comes out, and the pool keeps it aside so nothing uses it again
+        self._DestroyOrHideThisMediaWindow( mpv_widget )
+        
+        self._media_window = None
+        self._media = None
+        
+        if give_up:
+            
+            message = f'The file "{hash.hex()}" stopped mpv again straight after it was loaded in a new player, so it will not be played in mpv again this boot. The file may be damaged. If you think it is fine, you can let mpv try it again from the Client API with /manage_media_viewers/forget_mpv_damaged_files.'
+            
+        else:
+            
+            message = f'mpv stopped working while it was playing "{hash.hex()}", so a new mpv player has taken over and loaded it again. You do not need to restart the client.'
+            
+        
+        HydrusData.ShowText( message )
+        
+        if playback_ms is not None and playback_ms > 0:
+            
+            self.SetNextMediaStartMS( media, playback_ms )
+            
+        
+        # the same file, how it was. a file we gave up on shows the 'damaged' fallback, rather than going in mpv again
+        self.SetMedia( media, True, True, True, start_paused = False )
+        
+    
+    
     def GetMedia( self ) -> ClientMediaSingle.MediaSingle | None:
         
         # this can be behind the canvas's media for a moment, while a switch waits for the old media to be ready to go

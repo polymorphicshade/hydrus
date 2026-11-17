@@ -1478,6 +1478,33 @@ class TestClientAPIFork( unittest.TestCase ):
         
         self.assertEqual( status, 403 )
         
+        # mpv players that stopped working
+        
+        from hydrus.client.gui.canvas import ClientGUIMPV
+        
+        mpv_status = { 'num_recoveries' : 2, 'damaged_hashes' : [ canvas_key.hex() ] }
+        
+        with mock.patch.object( ClientGUIMPV, 'GetMPVRecoveryStatus', return_value = mpv_status ):
+            
+            ( status, body ) = api_call( 'GET', '/manage_media_viewers/get_mpv_status', self.pages_only )
+            
+        
+        self.assertEqual( status, 200 )
+        self.assertEqual( body, mpv_status )
+        
+        with mock.patch.object( ClientGUIMPV, 'ForgetDamagedFiles', return_value = 1 ) as forget_damaged_files:
+            
+            ( status, body ) = api_call( 'POST', '/manage_media_viewers/forget_mpv_damaged_files', self.pages_only, {} )
+            
+        
+        self.assertEqual( status, 200 )
+        self.assertEqual( body, { 'num_forgotten' : 1 } )
+        forget_damaged_files.assert_called_once_with()
+        
+        ( status, body ) = api_call( 'GET', '/manage_media_viewers/get_mpv_status', self.counters_only )
+        
+        self.assertEqual( status, 403 )
+        
         # slideshows
         
         from hydrus.client.gui import ClientGUIMediaViewerSlideshows
@@ -1717,6 +1744,10 @@ class TestClientAPIForkCommandLine( unittest.TestCase ):
         self.assertEqual( self._GetRequest( [ 'viewers', 'text' ] ), hydrus_cli.APIRequest( 'GET', '/manage_media_viewers/get_text_hidden' ) )
         self.assertEqual( self._GetRequest( [ 'viewers', 'text', 'hidden' ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/set_text_hidden', { 'text_hidden' : True } ) )
         self.assertEqual( self._GetRequest( [ 'viewers', 'text', 'shown', '--viewer', hash_hex.upper() ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/set_text_hidden', { 'text_hidden' : False, 'canvas_key' : hash_hex } ) )
+        
+        # mpv players that stopped working
+        self.assertEqual( self._GetRequest( [ 'viewers', 'mpv' ] ), hydrus_cli.APIRequest( 'GET', '/manage_media_viewers/get_mpv_status' ) )
+        self.assertEqual( self._GetRequest( [ 'viewers', 'mpv', 'forget-damaged' ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/forget_mpv_damaged_files' ) )
         
         # a-b repeat
         self.assertEqual( self._GetRequest( [ 'viewers', 'ab-repeat' ] ), hydrus_cli.APIRequest( 'GET', '/manage_media_viewers/get_ab_repeat' ) )
