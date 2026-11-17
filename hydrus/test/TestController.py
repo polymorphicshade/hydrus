@@ -61,6 +61,7 @@ from hydrus.test import TestClientABLoops
 from hydrus.test import TestClientABRepeatPingPong
 from hydrus.test import TestClientAPIFork
 from hydrus.test import TestClientAudioExport
+from hydrus.test import TestClientFileReplace
 from hydrus.test import TestClientCanvasOverlays
 from hydrus.test import TestClientConstants
 from hydrus.test import TestClientDaemons
@@ -970,6 +971,7 @@ class Controller( object ):
             TestClientAudioExport,
             TestClientCanvasOverlays,
             TestClientFileCounters,
+            TestClientFileReplace,
             TestClientIgnoreSavedPositions,
             TestClientImageOverlays,
             TestClientMediaViewerLayouts,

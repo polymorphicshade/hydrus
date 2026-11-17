@@ -64,6 +64,7 @@ python hydrus_cli.py metadata 1234
 
 # import things
 python hydrus_cli.py add-file "C:\pictures\cat.png"
+python hydrus_cli.py replace-file 1234 "C:\videos\fixed copy.mp4"
 python hydrus_cli.py add-url "https://example.com/post/123"
 
 # counters

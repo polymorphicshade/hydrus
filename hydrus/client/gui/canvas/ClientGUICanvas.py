@@ -31,6 +31,7 @@ from hydrus.client.gui import ClientGUIDialogsManage
 from hydrus.client.gui import ClientGUIDialogsMessage
 from hydrus.client.gui import ClientGUIDialogsQuick
 from hydrus.client.gui import ClientGUIExceptionHandling
+from hydrus.client.gui import ClientGUIFileReplace
 from hydrus.client.gui import ClientGUIFunctions
 from hydrus.client.gui import ClientGUIMediaViewerHighlight
 from hydrus.client.gui import ClientGUIMenus
@@ -4200,6 +4201,72 @@ class CanvasMediaList( CanvasWithHovers ):
         
         CG.client_controller.sub( self, 'ProcessContentUpdatePackage', 'content_updates_gui' )
         CG.client_controller.sub( self, 'ProcessServiceUpdates', 'service_updates_gui' )
+        CG.client_controller.sub( self, 'NotifyFileReplaced', 'notify_file_replaced' )
+        
+    
+    def _AddReplacementMedia( self, old_media: ClientMediaSingle.MediaSingle, new_media_result: ClientMediaResult.MediaResult ) -> ClientMediaSingle.MediaSingle | None:
+        
+        # the new file goes just after the old one, which is deleted soon after
+        new_medias = self._media_list.AddMediaResults( [ new_media_result ] )
+        
+        if len( new_medias ) == 0:
+            
+            # it was here already
+            existing_medias = self._media_list.GetMediaByHashes( { new_media_result.GetHash() } )
+            
+            return existing_medias[0] if len( existing_medias ) > 0 else None
+            
+        
+        new_media = new_medias[0]
+        
+        if self._media_list.HasMedia( old_media ):
+            
+            self._media_list.MoveMedia( [ new_media ], self._media_list.IndexOf( old_media ) + 1 )
+            
+        
+        return new_media
+        
+    
+    def _ReplaceCurrentMediaWithFile( self ):
+        
+        if self._current_media is None:
+            
+            return
+            
+        
+        ClientGUIFileReplace.AskToReplaceFile( self, self._current_media.GetHash() )
+        
+    
+    def _SwapToReplacementMedia( self, old_media: ClientMediaSingle.MediaSingle, new_media: ClientMediaSingle.MediaSingle ):
+        
+        if self._current_media is not None and self._current_media.GetHash() == old_media.GetHash():
+            
+            self.SetMedia( new_media )
+            
+        
+        CG.client_controller.pub( 'canvas_new_index_string', self._canvas_key, self._GetIndexString() )
+        
+    
+    def NotifyFileReplaced( self, old_hash: bytes, new_media_result: ClientMediaResult.MediaResult ):
+        
+        # a file we have was replaced with another. the new one takes its place, and if we were showing the old one, we show the new one
+        old_medias = self._media_list.GetMediaByHashes( { old_hash } )
+        
+        if len( old_medias ) == 0:
+            
+            return
+            
+        
+        old_media = old_medias[0]
+        
+        new_media = self._AddReplacementMedia( old_media, new_media_result )
+        
+        if new_media is None:
+            
+            return
+            
+        
+        self._SwapToReplacementMedia( old_media, new_media )
         
     
     def _TryToShowMediaThatLaunchedUs( self ):
@@ -6355,6 +6422,13 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
             ClientGUIMenus.AppendMenuItem( manage_menu, 'force filetype', 'Force your files to appear as a different filetype.', ClientGUIMediaModalActions.SetFilesForcedFiletypes, self, [ self._current_media ] )
             ClientGUIMenus.AppendMenuItem( manage_menu, 'virtual paths', 'Give this file folder-like paths, like "collections/tv_shows/action", that you can search for with system:path.', ClientGUIMediaModalActions.EditFileVirtualPaths, self, [ self._current_media ] )
             
+            ClientGUIMenus.AppendSeparator( manage_menu )
+            
+            ClientGUIMenus.AppendMenuItem( manage_menu, 'replace with file' + HC.UNICODE_ELLIPSIS, ClientGUIFileReplace.REPLACE_FILE_DESCRIPTION, self._ReplaceCurrentMediaWithFile )
+            
+            ClientGUIMenus.AppendSeparator( manage_menu )
+            
+            
             ClientGUIMediaMenus.AddManageFileViewingStatsMenu( self, manage_menu, [ self._current_media ] )
             
             ClientGUIMenus.AppendMenu( menu, manage_menu, 'manage' )
@@ -7257,6 +7331,27 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         
         # this is just what we are playing--the saved playlist is not touched
         self._RemovePlaylistItemsForMedias( { self._current_media } )
+        
+    
+    def _SwapToReplacementMedia( self, old_media: ClientMediaSingle.MediaSingle, new_media: ClientMediaSingle.MediaSingle ):
+        
+        # the new file takes the old one's places in the playlist, with their spans. the db has done the same for the saved playlist
+        old_hash = old_media.GetHash()
+        
+        ( current_media, current_start_ms, current_end_ms, current_reverse ) = self._playlist_items[ self._playlist_index ]
+        
+        self._playlist_items = [ ( new_media if media is not None and media.GetHash() == old_hash else media, start_ms, end_ms, reverse ) for ( media, start_ms, end_ms, reverse ) in self._playlist_items ]
+        
+        self._playlist_item_preload_done = False
+        
+        if current_media is not None and current_media.GetHash() == old_hash:
+            
+            self._ShowPlaylistItem( self._playlist_index )
+            
+        else:
+            
+            CG.client_controller.pub( 'canvas_new_index_string', self._canvas_key, self._GetIndexString() )
+            
         
     
     def _RemovePlaylistItemsForMedias( self, medias: collections.abc.Collection[ ClientMediaSingle.MediaSingle ] ):

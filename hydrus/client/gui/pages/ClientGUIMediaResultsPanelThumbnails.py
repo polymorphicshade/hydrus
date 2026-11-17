@@ -23,6 +23,7 @@ from hydrus.client.gui import ClientGUIDragDrop
 from hydrus.client.gui import ClientGUICore as CGC
 from hydrus.client.gui import ClientGUIDialogsMessage
 from hydrus.client.gui import ClientGUIExceptionHandling
+from hydrus.client.gui import ClientGUIFileReplace
 from hydrus.client.gui import ClientGUIFunctions
 from hydrus.client.gui import ClientGUIMenus
 from hydrus.client.gui import ClientGUIRatings
@@ -1528,6 +1529,11 @@ class MediaResultsPanelThumbnails( ClientGUIMediaResultsPanel.MediaResultsPanel 
             ClientGUIMenus.AppendMenuItem( manage_menu, 'times', 'Edit the timestamps for your files.', self._ManageTimestamps )
             ClientGUIMenus.AppendMenuItem( manage_menu, 'force filetype', 'Force your files to appear as a different filetype.', ClientGUIMediaModalActions.SetFilesForcedFiletypes, self, self._selected_media )
             ClientGUIMenus.AppendMenuItem( manage_menu, 'virtual paths', 'Give the selected files folder-like paths, like "collections/tv_shows/action", that you can search for with system:path.', ClientGUIMediaModalActions.EditFileVirtualPaths, self, self._selected_media )
+            
+            if self._HasFocusSingleton() and num_selected == 1:
+                
+                ClientGUIMenus.AppendMenuItem( manage_menu, 'replace with file' + HC.UNICODE_ELLIPSIS, ClientGUIFileReplace.REPLACE_FILE_DESCRIPTION, ClientGUIFileReplace.AskToReplaceFile, self, self._GetFocusSingleton().GetHash() )
+                
             
             if self._HasFocusSingleton():
                 

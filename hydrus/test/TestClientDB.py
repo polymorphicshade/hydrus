@@ -1423,6 +1423,60 @@ class TestClientDB( unittest.TestCase ):
         self.assertEqual( self._read( 'file_ab_loops', hash_b ), [ ( 250, 1000 ) ] )
         
     
+    def test_file_replace_move_data( self ):
+        
+        old_hash = os.urandom( 32 )
+        new_hash = os.urandom( 32 )
+        other_hash = os.urandom( 32 )
+        
+        counter_id = os.urandom( 32 )
+        
+        self._write( 'file_ab_loops', old_hash, [ ( 0, 4500 ) ] )
+        self._write( 'file_playback_skips', old_hash, [ ( 1000, 2000 ) ] )
+        self._write( 'file_counter_set', old_hash, counter_id, 5 )
+        self._write( 'file_virtual_paths', { old_hash : [ 'replace_test/old' ] } )
+        
+        # the new file has a rotation of its own, which it keeps
+        self._write( 'file_viewer_rotation', old_hash, 90 )
+        self._write( 'file_viewer_rotation', new_hash, 180 )
+        
+        playlist_id = self._write( 'playlist_new', 'replace test' )
+        
+        self._write( 'playlist_add_item', playlist_id, other_hash, None, None )
+        self._write( 'playlist_add_item', playlist_id, old_hash, 1000, 2000 )
+        self._write( 'playlist_add_item', playlist_id, old_hash, None, None )
+        
+        self._write( 'file_snapshot_add', old_hash, other_hash, 500 )
+        
+        num_moved = self._write( 'file_replace_move_data', old_hash, new_hash )
+        
+        # a loop, a skip, a count, a path, two playlist places, and a snapshot
+        self.assertEqual( num_moved, 7 )
+        
+        self.assertEqual( self._read( 'file_ab_loops', new_hash ), [ ( 0, 4500 ) ] )
+        self.assertEqual( self._read( 'file_ab_loops', old_hash ), [] )
+        self.assertEqual( self._read( 'file_playback_skips', new_hash ), [ ( 1000, 2000 ) ] )
+        self.assertEqual( self._read( 'file_counters', new_hash ), { counter_id : 5 } )
+        self.assertEqual( self._read( 'file_counters', old_hash ), {} )
+        self.assertEqual( self._read( 'file_virtual_paths', [ new_hash ] ).get( new_hash, [] ), [ 'replace_test/old' ] )
+        
+        self.assertEqual( self._read( 'file_viewer_rotation', new_hash ), 180 )
+        self.assertEqual( self._read( 'file_viewer_rotation', old_hash ), 90 )
+        
+        # in its places, with their spans
+        self.assertEqual( self._read( 'playlist_items', playlist_id ), [ ( other_hash, None, None, False ), ( new_hash, 1000, 2000, False ), ( new_hash, None, None, False ) ] )
+        
+        # nothing left to move, and a file onto itself is nothing
+        self.assertEqual( self._write( 'file_replace_move_data', old_hash, new_hash ), 0 )
+        self.assertEqual( self._write( 'file_replace_move_data', new_hash, new_hash ), 0 )
+        
+        # tidy up, for the tests that count everything
+        self._write( 'playlist_delete', playlist_id )
+        self._write( 'file_virtual_paths', { new_hash : [] } )
+        self._write( 'file_viewer_rotation', old_hash, 0 )
+        self._write( 'file_viewer_rotation', new_hash, 0 )
+        
+    
     def test_file_playback_freezes( self ):
         
         hash_a = os.urandom( 32 )

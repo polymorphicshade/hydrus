@@ -6,7 +6,7 @@ title: This Fork's Client API
 
 These endpoints are for the features this fork adds: counters, playlists, virtual paths, snapshots, what the media viewer remembers for each file, tag presets, screen locations, media viewer layouts, and exporting video, audio, and playlists. They work just like hydrus's own [Client API](developer_api.md): the same access keys and session keys, json in and out, and the same errors. The [command line tool](command_line.md) can use all of them.
 
-`/api_version` has a `fork_api_version`, which goes up when these change. It is `6` now.
+`/api_version` has a `fork_api_version`, which goes up when these change. It is `7` now.
 
 ## permissions
 
@@ -179,6 +179,18 @@ Arguments: files. The snapshots taken from each, in the order they come in the f
 Imports an image as a snapshot of a file. Needs 'import and delete files' too, since it imports from a path.
 
 Arguments: one file (the one it was taken from), `path` (the image, on the client's computer), `timestamp_ms` (optional, where in the file it was taken from). Returns the `snapshot_hash`.
+
+## replacing files
+
+### **POST `/add_files/replace_file`**
+
+Like the media viewer's _manage->replace with file_: replaces a file with another, say a better copy of a broken video. Hydrus knows a file by its hash, so the new file is imported, into the same local file domains as the old one, and the two are set as duplicates, the new one better, with your 'this is better' duplicate metadata merge options, so it gets the old file's tags, ratings, notes, and urls. It also takes the old file's places in playlists, and gets its counters, virtual paths, snapshots, and what the media viewer remembers for it. Where the new file has some of its own already, it keeps those. Media viewers and pages showing the old file put the new one in its place. The old file is then deleted. It needs 'import and delete files'.
+
+Arguments: one file (the one to replace), `path` (the new file, on the client's computer), `delete_old_file` (optional, default true). Returns the new file's `hash`, and `num_moved`, how many things it got from the old one, like a playlist place or an A-B loop. A new file that is the same as the old one gives a 422.
+
+```json
+{ "hash" : "0b7a...", "num_moved" : 5 }
+```
 
 ## media viewer data
 

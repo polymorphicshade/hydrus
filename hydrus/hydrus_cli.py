@@ -424,6 +424,11 @@ def BuildRequest( args ) -> APIRequest:
         return APIRequest( 'POST', '/add_files/add_file', { 'path' : os.path.abspath( args.path ) } )
         
     
+    if command == 'replace-file':
+        
+        return APIRequest( 'POST', '/add_files/replace_file', { **ParseFiles( [ args.file ] ), 'path' : os.path.abspath( args.path ), 'delete_old_file' : not args.keep_old_file } )
+        
+    
     if command == 'add-url':
         
         params = { 'url' : args.url }
@@ -899,6 +904,11 @@ def GetArgumentParser() -> argparse.ArgumentParser:
     
     p = commands.add_parser( 'add-file', help = 'import a file from a path on the client\'s computer' )
     p.add_argument( 'path' )
+    
+    p = commands.add_parser( 'replace-file', help = 'replace a file with one from a path on the client\'s computer. the new one gets its tags, ratings, notes, urls, playlist places, counters, virtual paths, and media viewer data, and the old one is deleted' )
+    p.add_argument( 'file', help = 'the file to replace' )
+    p.add_argument( 'path', help = 'the new file, on the client\'s computer' )
+    p.add_argument( '--keep-old-file', action = 'store_true', help = 'do not delete the old file' )
     
     p = commands.add_parser( 'add-url', help = 'send a url to the client to download' )
     p.add_argument( 'url' )

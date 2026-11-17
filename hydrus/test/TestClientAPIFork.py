@@ -11,6 +11,7 @@ from unittest import mock
 from twisted.internet import reactor
 
 from hydrus.core import HydrusConstants as HC
+from hydrus.core import HydrusExceptions
 from hydrus.core import HydrusSerialisable
 from hydrus.core import HydrusStaticDir
 
@@ -534,6 +535,68 @@ class TestClientAPIFork( unittest.TestCase ):
         
         self.assertEqual( status, 422 )
         self.assertIn( 'not an image', body[ 'error' ] )
+        
+    
+    def test_replace_file( self ):
+        
+        from hydrus.client import ClientFileReplace
+        
+        old_hash = os.urandom( 32 )
+        new_hash = os.urandom( 32 )
+        
+        path = HydrusStaticDir.GetStaticPath( 'hydrus.png' )
+        
+        # it imports and deletes files
+        ( status, body ) = api_call( 'POST', '/add_files/replace_file', self.pages_only, { 'hash' : old_hash.hex(), 'path' : path } )
+        
+        self.assertEqual( status, 403 )
+        
+        ( status, body ) = api_call( 'POST', '/add_files/replace_file', self.everything, { 'hash' : old_hash.hex(), 'path' : path + '_missing' } )
+        
+        self.assertEqual( status, 400 )
+        
+        ( status, body ) = api_call( 'POST', '/add_files/replace_file', self.everything, { 'hash' : old_hash.hex(), 'path' : os.path.dirname( path ) } )
+        
+        self.assertEqual( status, 400 )
+        
+        ( status, body ) = api_call( 'POST', '/add_files/replace_file', self.everything, { 'hash' : old_hash.hex() } )
+        
+        self.assertEqual( status, 400 )
+        
+        with mock.patch.object( ClientFileReplace, 'ReplaceFile', return_value = ( new_hash, 4 ) ) as replace_file:
+            
+            ( status, body ) = api_call( 'POST', '/add_files/replace_file', self.everything, { 'hash' : old_hash.hex(), 'path' : path } )
+            
+            self.assertEqual( status, 200 )
+            self.assertEqual( body, { 'hash' : new_hash.hex(), 'num_moved' : 4 } )
+            
+            # it imports a copy
+            ( ( replaced_hash, imported_path ), kwargs ) = replace_file.call_args
+            
+            self.assertEqual( replaced_hash, old_hash )
+            self.assertNotEqual( imported_path, path )
+            self.assertEqual( kwargs, { 'delete_old_file' : True } )
+            
+            ( status, body ) = api_call( 'POST', '/add_files/replace_file', self.everything, { 'hash' : old_hash.hex(), 'path' : path, 'delete_old_file' : False } )
+            
+            self.assertEqual( status, 200 )
+            self.assertEqual( replace_file.call_args.kwargs, { 'delete_old_file' : False } )
+            
+        
+        with mock.patch.object( ClientFileReplace, 'ReplaceFile', side_effect = HydrusExceptions.VetoException( 'That is the same file' ) ):
+            
+            ( status, body ) = api_call( 'POST', '/add_files/replace_file', self.everything, { 'hash' : old_hash.hex(), 'path' : path } )
+            
+        
+        self.assertEqual( status, 422 )
+        self.assertIn( 'same file', body[ 'error' ] )
+        
+        with mock.patch.object( ClientFileReplace, 'ReplaceFile', side_effect = HydrusExceptions.NotFoundException( 'Did not find the file' ) ):
+            
+            ( status, body ) = api_call( 'POST', '/add_files/replace_file', self.everything, { 'hash' : old_hash.hex(), 'path' : path } )
+            
+        
+        self.assertEqual( status, 404 )
         
     
     def test_exports( self ):
@@ -1402,6 +1465,12 @@ class TestClientAPIForkCommandLine( unittest.TestCase ):
         self.assertEqual( self._GetRequest( [ 'viewers', 'highlight', 'on' ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/set_highlight', { 'highlight_last_opened' : True } ) )
         self.assertEqual( self._GetRequest( [ 'viewers', 'highlight', 'off', '--colour', '#00FF00' ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/set_highlight', { 'highlight_last_opened' : False, 'colour' : '#00FF00' } ) )
         self.assertEqual( self._GetRequest( [ 'viewers', 'highlight', '--colour', '#00FF00' ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/set_highlight', { 'colour' : '#00FF00' } ) )
+        
+        # replacing a file
+        replace_path = os.path.abspath( 'fixed.mp4' )
+        
+        self.assertEqual( self._GetRequest( [ 'replace-file', '12', 'fixed.mp4' ] ), hydrus_cli.APIRequest( 'POST', '/add_files/replace_file', { 'file_ids' : [ 12 ], 'path' : replace_path, 'delete_old_file' : True } ) )
+        self.assertEqual( self._GetRequest( [ 'replace-file', hash_hex, 'fixed.mp4', '--keep-old-file' ] ), hydrus_cli.APIRequest( 'POST', '/add_files/replace_file', { 'hashes' : [ hash_hex ], 'path' : replace_path, 'delete_old_file' : False } ) )
         
         # a-b repeat
         self.assertEqual( self._GetRequest( [ 'viewers', 'ab-repeat' ] ), hydrus_cli.APIRequest( 'GET', '/manage_media_viewers/get_ab_repeat' ) )

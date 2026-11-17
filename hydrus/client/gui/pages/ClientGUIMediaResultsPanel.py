@@ -44,6 +44,7 @@ from hydrus.client.media import ClientMedia
 from hydrus.client.media import ClientMediaCollect
 from hydrus.client.media import ClientMediaFileFilter
 from hydrus.client.media import ClientMediaList
+from hydrus.client.media import ClientMediaResult
 from hydrus.client.media import ClientMediaResultPrettyInfo
 from hydrus.client.media import ClientMediaSingle
 from hydrus.client.metadata import ClientContentUpdates
@@ -142,6 +143,7 @@ class MediaResultsPanel( CAC.ApplicationCommandProcessorMixin, ClientMediaList.M
         
         CG.client_controller.sub( self, 'ProcessContentUpdatePackage', 'content_updates_gui' )
         CG.client_controller.sub( self, 'ProcessServiceUpdates', 'service_updates_gui' )
+        CG.client_controller.sub( self, 'NotifyFileReplaced', 'notify_file_replaced' )
         
     
     def __bool__( self ):
@@ -1956,6 +1958,27 @@ class MediaResultsPanel( CAC.ApplicationCommandProcessorMixin, ClientMediaList.M
     def CleanBeforeDestroy( self ):
         
         self.Clear()
+        
+    
+    def NotifyFileReplaced( self, old_hash: bytes, new_media_result: ClientMediaResult.MediaResult ):
+        
+        # a file here was replaced with another, so the new one goes just after it. the old one is deleted soon after
+        if old_hash not in self._hashes_to_singleton_media:
+            
+            return
+            
+        
+        old_media = self._hashes_to_singleton_media[ old_hash ]
+        
+        # the thumbnail panel's version of this does not return what it added, so we find it
+        self.AddMediaResults( self._page_key, [ new_media_result ] )
+        
+        new_media = self._hashes_to_singleton_media.get( new_media_result.GetHash(), None )
+        
+        if new_media is not None and new_media in self._sorted_media and old_media in self._sorted_media:
+            
+            self.MoveMedia( [ new_media ], self._sorted_media.index( old_media ) + 1 )
+            
         
     
     def ClearPageKey( self ):

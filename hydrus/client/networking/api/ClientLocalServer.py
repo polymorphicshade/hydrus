@@ -26,6 +26,7 @@ from hydrus.client.networking.api import ClientLocalServerResourcesManagePlaylis
 from hydrus.client.networking.api import ClientLocalServerResourcesManagePresets
 from hydrus.client.networking.api import ClientLocalServerResourcesManageSnapshots
 from hydrus.client.networking.api import ClientLocalServerResourcesManageVirtualPaths
+from hydrus.client.networking.api import ClientLocalServerResourcesReplaceFiles
 
 class HydrusClientService( HydrusServer.HydrusService ):
     
@@ -70,6 +71,7 @@ class HydrusServiceClientAPI( HydrusClientService ):
         add_files.putChild( b'migrate_files', ClientLocalServerResourcesAddFiles.HydrusResourceClientAPIRestrictedAddFilesMigrateFiles( self._service, self._client_requests_domain ) )
         add_files.putChild( b'archive_files', ClientLocalServerResourcesAddFiles.HydrusResourceClientAPIRestrictedAddFilesArchiveFiles( self._service, self._client_requests_domain ) )
         add_files.putChild( b'unarchive_files', ClientLocalServerResourcesAddFiles.HydrusResourceClientAPIRestrictedAddFilesUnarchiveFiles( self._service, self._client_requests_domain ) )
+        add_files.putChild( b'replace_file', ClientLocalServerResourcesReplaceFiles.HydrusResourceClientAPIRestrictedAddFilesReplaceFile( self._service, self._client_requests_domain ) )
         add_files.putChild( b'generate_hashes', ClientLocalServerResourcesAddFiles.HydrusResourceClientAPIRestrictedAddFilesGenerateHashes( self._service, self._client_requests_domain ) )
         
         edit_ratings = notFound()

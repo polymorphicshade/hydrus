@@ -45,6 +45,7 @@ from hydrus.client.db import ClientDBFilesInbox
 from hydrus.client.db import ClientDBFilesMaintenance
 from hydrus.client.db import ClientDBFilesImageOverlays
 from hydrus.client.db import ClientDBFilesABLoops
+from hydrus.client.db import ClientDBFilesReplace
 from hydrus.client.db import ClientDBFilesMaintenanceQueue
 from hydrus.client.db import ClientDBFilesMetadataBasic
 from hydrus.client.db import ClientDBFilesMetadataRich
@@ -4263,6 +4264,7 @@ class DB( HydrusDB.HydrusDB ):
                 'file_maintenance_cancel_jobs' : self.modules_files_maintenance_queue.CancelJobs,
                 'file_maintenance_clear_jobs' : self.modules_files_maintenance.ClearJobs,
                 'file_ab_loops' : self.modules_files_ab_loops.SetABLoops,
+                'file_replace_move_data' : self.modules_files_replace.MoveFileData,
                 'file_playback_freezes' : self.modules_files_playback_freezes.SetPlaybackFreezes,
                 'file_playback_skips' : self.modules_files_playback_skips.SetPlaybackSkips,
                 'file_scripted_events' : self.modules_files_scripted_events.SetScriptedEvents,
@@ -4449,6 +4451,10 @@ class DB( HydrusDB.HydrusDB ):
         self.modules_files_ab_loops = ClientDBFilesABLoops.ClientDBFilesABLoops( self._c, self.modules_hashes_local_cache )
         
         self._modules.append( self.modules_files_ab_loops )
+        
+        self.modules_files_replace = ClientDBFilesReplace.ClientDBFilesReplace( self._c, self.modules_hashes_local_cache )
+        
+        self._modules.append( self.modules_files_replace )
         
         self.modules_files_scripted_events = ClientDBFilesScriptedEvents.ClientDBFilesScriptedEvents( self._c, self.modules_hashes_local_cache )
         
