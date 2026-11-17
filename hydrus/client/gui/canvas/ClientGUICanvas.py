@@ -32,6 +32,7 @@ from hydrus.client.gui import ClientGUIDialogsMessage
 from hydrus.client.gui import ClientGUIDialogsQuick
 from hydrus.client.gui import ClientGUIExceptionHandling
 from hydrus.client.gui import ClientGUIFunctions
+from hydrus.client.gui import ClientGUIMediaViewerHighlight
 from hydrus.client.gui import ClientGUIMenus
 from hydrus.client.gui import ClientGUIPlaylists
 from hydrus.client.gui import ClientGUIRatings
@@ -244,6 +245,12 @@ class CanvasBackgroundColourGenerator( object ):
         
     
     def GetColour( self ) -> QG.QColor:
+        
+        # the media viewer that was opened last can be highlighted with a colour of its own, under options->media viewer
+        if ClientGUIMediaViewerHighlight.CanvasIsHighlighted( self._my_canvas ):
+            
+            return ClientGUIMediaViewerHighlight.GetHighlightQColour()
+            
         
         return self._GetColourFromOptions()
         
@@ -473,6 +480,7 @@ class Canvas( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         CG.client_controller.sub( self, 'ManageTags', 'canvas_manage_tags' )
         CG.client_controller.sub( self, 'update', 'notify_new_colourset' )
         CG.client_controller.sub( self, 'update', 'notify_new_stylesheet' )
+        CG.client_controller.sub( self, 'NotifyMediaViewerHighlightChanged', 'notify_media_viewer_highlight_changed' )
         CG.client_controller.sub( self, 'NotifyFilesNeedRedraw', 'notify_files_need_redraw' )
         CG.client_controller.sub( self, '_MaintainNeighbourPrefetch', 'notify_image_finished_rendering' )
         
@@ -911,6 +919,14 @@ class Canvas( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
     def GetMedia( self ):
         
         return self._current_media
+        
+    
+    def NotifyMediaViewerHighlightChanged( self ):
+        
+        # a media viewer was opened or closed, or the highlight options changed, so the background may be a different colour now
+        self.update()
+        
+        self._media_container.update()
         
     
     def HandleMouseMoveWithoutEvent( self, left_down: bool ):

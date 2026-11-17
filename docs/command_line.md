@@ -119,6 +119,10 @@ python hydrus_cli.py viewers set-ab-repeat
 python hydrus_cli.py viewers ping-pong on
 python hydrus_cli.py viewers ping-pong off --viewer <canvas_key>
 
+# give the media viewer opened last a background colour of its own, so you can tell which one it is
+python hydrus_cli.py viewers highlight on --colour "#FF00FF"
+python hydrus_cli.py viewers highlight
+
 # slideshows. 0 seconds plays each file once through, without looping, and moves on when it is done
 python hydrus_cli.py viewers slideshows
 python hydrus_cli.py viewers slideshow start 0

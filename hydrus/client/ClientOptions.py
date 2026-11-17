@@ -393,6 +393,7 @@ class ClientOptions( HydrusSerialisable.SerialisableBase ):
             'force_enter_on_radio_buttons_to_do_dialog_ok' : True,
             'make_child_frames_qt_tool' : True,
             'copy_notes_quick_click_only_copies_text' : False,
+            'highlight_last_opened_media_viewer' : False,
         }
         
         #
@@ -739,6 +740,7 @@ class ClientOptions( HydrusSerialisable.SerialisableBase ):
             'last_incremental_tagging_suffix' : '',
             'last_options_window_panel' : 'gui',
             'page_of_pages_decorator' : ' \u2193',
+            'last_opened_media_viewer_highlight_colour' : '#FF00FF',
         }
         
         self._dictionary[ 'string_list' ] = {

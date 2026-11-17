@@ -6,9 +6,11 @@ from hydrus.core import HydrusData
 from hydrus.client import ClientConstants as CC
 from hydrus.client import ClientGlobals as CG
 from hydrus.client.gui import ClientGUIFunctions
+from hydrus.client.gui import ClientGUIMediaViewerHighlight
 from hydrus.client.gui import QtPorting as QP
 from hydrus.client.gui.media import ClientGUIMediaZooms
 from hydrus.client.gui.panels.options import ClientGUIOptionsPanelBase
+from hydrus.client.gui.widgets import ClientGUIColourPicker
 from hydrus.client.gui.widgets import ClientGUICommon
 
 class MediaViewerPanel( ClientGUIOptionsPanelBase.OptionsPagePanel ):
@@ -34,6 +36,18 @@ class MediaViewerPanel( ClientGUIOptionsPanelBase.OptionsPagePanel ):
         
         self._activate_main_gui_on_viewer_close = QW.QCheckBox( focus_panel )
         self._activate_main_gui_on_viewer_close.setToolTip( ClientGUIFunctions.WrapToolTip( 'This will "activate" the Main GUI Window when any Media Viewer closes, which should bring it to the front and give it keyboard focus. Try this if your OS is playing funny games with focus when a media viewer closes.' ) )
+        
+        #
+        
+        highlight_panel = ClientGUICommon.StaticBox( self, 'highlight' )
+        
+        self._highlight_last_opened_media_viewer = QW.QCheckBox( highlight_panel )
+        self._highlight_last_opened_media_viewer.setToolTip( ClientGUIFunctions.WrapToolTip( 'When you have a few media viewers open, give the one you opened last a background of its own colour, so you can tell which one it is. When it closes, the one opened before it gets it.' ) )
+        
+        self._last_opened_media_viewer_highlight_colour = ClientGUIColourPicker.ColourPickerButton( highlight_panel )
+        self._last_opened_media_viewer_highlight_colour.setToolTip( ClientGUIFunctions.WrapToolTip( 'The background colour of the media viewer you opened last. Magenta, #FF00FF, to start with.' ) )
+        
+        self._highlight_last_opened_media_viewer.clicked.connect( self._UpdateHighlightEnabled )
         
         #
         
@@ -103,6 +117,11 @@ class MediaViewerPanel( ClientGUIOptionsPanelBase.OptionsPagePanel ):
         self._activate_main_gui_on_focusing_viewer_close.setChecked( self._new_options.GetBoolean( 'activate_main_gui_on_focusing_viewer_close' ) )
         self._activate_main_gui_on_viewer_close.setChecked( self._new_options.GetBoolean( 'activate_main_gui_on_viewer_close' ) )
         
+        self._highlight_last_opened_media_viewer.setChecked( ClientGUIMediaViewerHighlight.GetHighlightIsOn() )
+        self._last_opened_media_viewer_highlight_colour.SetColour( ClientGUIMediaViewerHighlight.GetHighlightQColour() )
+        
+        self._UpdateHighlightEnabled()
+        
         self._animated_scanbar_height.setValue( self._new_options.GetInteger( 'animated_scanbar_height' ) )
         self._animated_scanbar_nub_width.setValue( self._new_options.GetInteger( 'animated_scanbar_nub_width' ) )
         
@@ -139,6 +158,15 @@ class MediaViewerPanel( ClientGUIOptionsPanelBase.OptionsPagePanel ):
         gridbox = ClientGUICommon.WrapInGrid( focus_panel, rows )
         
         focus_panel.Add( gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
+        
+        rows = []
+        
+        rows.append( ( 'Highlight the media viewer opened last:', self._highlight_last_opened_media_viewer ) )
+        rows.append( ( 'Its background colour:', self._last_opened_media_viewer_highlight_colour ) )
+        
+        highlight_gridbox = ClientGUICommon.WrapInGrid( highlight_panel, rows )
+        
+        highlight_panel.Add( highlight_gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
         
         rows = []
         
@@ -189,6 +217,7 @@ class MediaViewerPanel( ClientGUIOptionsPanelBase.OptionsPagePanel ):
         vbox = QP.VBoxLayout()
         
         QP.AddToLayout( vbox, mouse_panel, CC.FLAGS_EXPAND_PERPENDICULAR )
+        QP.AddToLayout( vbox, highlight_panel, CC.FLAGS_EXPAND_PERPENDICULAR )
         QP.AddToLayout( vbox, seek_bar_panel, CC.FLAGS_EXPAND_PERPENDICULAR )
         QP.AddToLayout( vbox, slideshow_panel, CC.FLAGS_EXPAND_PERPENDICULAR )
         QP.AddToLayout( vbox, saved_zooms_panel, CC.FLAGS_EXPAND_PERPENDICULAR )
@@ -196,6 +225,11 @@ class MediaViewerPanel( ClientGUIOptionsPanelBase.OptionsPagePanel ):
         vbox.addStretch( 0 )
         
         self.setLayout( vbox )
+        
+    
+    def _UpdateHighlightEnabled( self ):
+        
+        self._last_opened_media_viewer_highlight_colour.setEnabled( self._highlight_last_opened_media_viewer.isChecked() )
         
     
     def EventSlideshowChanged( self, text ):
@@ -226,6 +260,12 @@ class MediaViewerPanel( ClientGUIOptionsPanelBase.OptionsPagePanel ):
         self._new_options.SetBoolean( 'focus_media_thumb_on_viewer_close', self._focus_media_thumb_on_viewer_close.isChecked() )
         self._new_options.SetBoolean( 'activate_main_gui_on_focusing_viewer_close', self._activate_main_gui_on_focusing_viewer_close.isChecked() )
         self._new_options.SetBoolean( 'activate_main_gui_on_viewer_close', self._activate_main_gui_on_viewer_close.isChecked() )
+        
+        self._new_options.SetBoolean( 'highlight_last_opened_media_viewer', self._highlight_last_opened_media_viewer.isChecked() )
+        self._new_options.SetString( 'last_opened_media_viewer_highlight_colour', ClientGUIMediaViewerHighlight.ConvertQColourToHighlightColour( self._last_opened_media_viewer_highlight_colour.GetColour() ) )
+        
+        # open media viewers pick it up straight away
+        ClientGUIMediaViewerHighlight.NotifyMediaViewersChanged()
         
         self._new_options.SetBoolean( 'disallow_media_drags_on_duration_media', self._disallow_media_drags_on_duration_media.isChecked() )
         self._new_options.SetBoolean( 'anchor_canvas_drags', self._anchor_canvas_drags.isChecked() )

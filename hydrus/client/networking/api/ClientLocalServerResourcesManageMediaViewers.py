@@ -110,6 +110,56 @@ class HydrusResourceClientAPIRestrictedManageMediaViewersSetABRepeatPingPong( Hy
         
     
 
+class HydrusResourceClientAPIRestrictedManageMediaViewersGetHighlight( HydrusResourceClientAPIRestrictedManageMediaViewers ):
+    
+    def _threadDoGETJob( self, request: HydrusServerRequest.HydrusRequest ):
+        
+        def do_it():
+            
+            from hydrus.client.gui import ClientGUIMediaViewerHighlight
+            
+            return ClientGUIMediaViewerHighlight.GetHighlightAPIInfo()
+            
+        
+        highlight_info = CG.client_controller.CallBlockingToQtTLW( do_it )
+        
+        return ClientLocalServerCore.GenerateJSONResponse( request, dict( highlight_info ) )
+        
+    
+
+class HydrusResourceClientAPIRestrictedManageMediaViewersSetHighlight( HydrusResourceClientAPIRestrictedManageMediaViewers ):
+    
+    def _threadDoPOSTJob( self, request: HydrusServerRequest.HydrusRequest ):
+        
+        # like options->media viewer->highlight. either or both
+        highlight_last_opened = request.parsed_request_args.GetValueOrNone( 'highlight_last_opened', bool )
+        colour = request.parsed_request_args.GetValueOrNone( 'colour', str )
+        
+        if highlight_last_opened is None and colour is None:
+            
+            raise HydrusExceptions.BadRequestException( 'Please give "highlight_last_opened" and/or "colour"!' )
+            
+        
+        from hydrus.client.gui import ClientGUIMediaViewerHighlight
+        
+        if colour is not None and ClientGUIMediaViewerHighlight.NormaliseHighlightColour( colour ) is None:
+            
+            raise HydrusExceptions.BadRequestException( f'"{colour}" is not a colour like #FF00FF!' )
+            
+        
+        def do_it():
+            
+            ClientGUIMediaViewerHighlight.SetHighlight( highlight_is_on = highlight_last_opened, colour = colour )
+            
+            return ClientGUIMediaViewerHighlight.GetHighlightAPIInfo()
+            
+        
+        highlight_info = CG.client_controller.CallBlockingToQtTLW( do_it )
+        
+        return ClientLocalServerCore.GenerateJSONResponse( request, dict( highlight_info ) )
+        
+    
+
 class HydrusResourceClientAPIRestrictedManageMediaViewersGetScreens( HydrusResourceClientAPIRestrictedManageMediaViewers ):
     
     def _threadDoGETJob( self, request: HydrusServerRequest.HydrusRequest ):

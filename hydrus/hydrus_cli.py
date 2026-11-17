@@ -786,6 +786,27 @@ def BuildRequest( args ) -> APIRequest:
             
             return APIRequest( 'POST', '/manage_media_viewers/set_ab_repeat_ping_pong', params )
             
+        elif sub == 'highlight':
+            
+            if args.state is None and args.colour is None:
+                
+                return APIRequest( 'GET', '/manage_media_viewers/get_highlight' )
+                
+            
+            params = {}
+            
+            if args.state is not None:
+                
+                params[ 'highlight_last_opened' ] = args.state == 'on'
+                
+            
+            if args.colour is not None:
+                
+                params[ 'colour' ] = args.colour
+                
+            
+            return APIRequest( 'POST', '/manage_media_viewers/set_highlight', params )
+            
         elif sub == 'slideshows':
             
             return APIRequest( 'GET', '/manage_media_viewers/get_slideshows' )
@@ -1073,6 +1094,9 @@ def GetArgumentParser() -> argparse.ArgumentParser:
     p = viewers.add_parser( 'ping-pong', help = 'make A-B repeat play backwards and forwards, rather than jumping from B back to A' )
     p.add_argument( 'state', choices = [ 'on', 'off' ] )
     p.add_argument( '--viewer', metavar = 'CANVAS_KEY', help = 'just this media viewer, by its canvas_key from "viewers list". Default is all that are open' )
+    p = viewers.add_parser( 'highlight', help = 'give the media viewer opened last a background colour of its own. with neither, says whether it is on, its colour, and which media viewer has it' )
+    p.add_argument( 'state', nargs = '?', choices = [ 'on', 'off' ] )
+    p.add_argument( '--colour', help = 'its background colour, like #FF00FF' )
     viewers.add_parser( 'screens', help = 'the screens, and which one each open media viewer is on' )
     p = viewers.add_parser( 'screen-zoom', help = 'zoom and pan the files in media viewers how they are on another screen, and keep them like that on the screen they are on' )
     p.add_argument( 'screen', help = 'the screen\'s name, from "viewers screens"' )

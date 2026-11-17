@@ -6,7 +6,7 @@ title: This Fork's Client API
 
 These endpoints are for the features this fork adds: counters, playlists, virtual paths, snapshots, what the media viewer remembers for each file, tag presets, screen locations, media viewer layouts, and exporting video, audio, and playlists. They work just like hydrus's own [Client API](developer_api.md): the same access keys and session keys, json in and out, and the same errors. The [command line tool](command_line.md) can use all of them.
 
-`/api_version` has a `fork_api_version`, which goes up when these change. It is `5` now.
+`/api_version` has a `fork_api_version`, which goes up when these change. It is `6` now.
 
 ## permissions
 
@@ -346,6 +346,18 @@ Arguments: `layout`. Opens its media viewers. One whose files can all no longer 
 ### **POST `/manage_media_viewers/open_playlist`**
 
 Needs 'manage playlists' too. Arguments: a playlist. Plays it in a new media viewer. If it is empty, or none of its files can be shown, nothing opens and you get a 409 saying why.
+
+### **GET `/manage_media_viewers/get_highlight`**
+
+Whether the media viewer opened last is highlighted with a background colour of its own, which is under _options->media viewer->highlight_, and that colour. `last_opened_canvas_key` is the media viewer opened last that is still open, which is the one that gets the highlight when it is on, or null with none open.
+
+```json
+{ "highlight_last_opened" : true, "colour" : "#FF00FF", "last_opened_canvas_key" : "a1b2..." }
+```
+
+### **POST `/manage_media_viewers/set_highlight`**
+
+Arguments: `highlight_last_opened` and/or `colour`, like `#FF00FF`. Turns the highlight on or off, or sets its colour, like the options do. Open media viewers change straight away, and it stays set when the client restarts. Returns the same as `get_highlight`.
 
 ### **GET `/manage_media_viewers/get_screens`**
 

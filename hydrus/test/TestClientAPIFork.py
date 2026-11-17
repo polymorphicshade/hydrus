@@ -1154,6 +1154,51 @@ class TestClientAPIFork( unittest.TestCase ):
         
         self.assertEqual( status, 403 )
         
+        # highlighting the media viewer opened last
+        
+        from hydrus.client.gui import ClientGUIMediaViewerHighlight
+        
+        highlight_info = { 'highlight_last_opened' : True, 'colour' : '#FF00FF', 'last_opened_canvas_key' : canvas_key.hex() }
+        
+        with mock.patch.object( ClientGUIMediaViewerHighlight, 'GetHighlightAPIInfo', return_value = highlight_info ):
+            
+            ( status, body ) = api_call( 'GET', '/manage_media_viewers/get_highlight', self.pages_only )
+            
+            self.assertEqual( status, 200 )
+            self.assertEqual( body, highlight_info )
+            
+            with mock.patch.object( ClientGUIMediaViewerHighlight, 'SetHighlight' ) as set_highlight:
+                
+                ( status, body ) = api_call( 'POST', '/manage_media_viewers/set_highlight', self.pages_only, { 'highlight_last_opened' : True } )
+                
+                self.assertEqual( status, 200 )
+                self.assertEqual( body, highlight_info )
+                set_highlight.assert_called_once_with( highlight_is_on = True, colour = None )
+                
+                ( status, body ) = api_call( 'POST', '/manage_media_viewers/set_highlight', self.pages_only, { 'colour' : '#00ff00' } )
+                
+                self.assertEqual( status, 200 )
+                set_highlight.assert_called_with( highlight_is_on = None, colour = '#00ff00' )
+                
+                for bad_params in ( {}, { 'colour' : 'magenta' }, { 'colour' : '#ff00f' }, { 'highlight_last_opened' : 'yes' } ):
+                    
+                    ( status, body ) = api_call( 'POST', '/manage_media_viewers/set_highlight', self.pages_only, bad_params )
+                    
+                    self.assertEqual( status, 400, bad_params )
+                    
+                
+                self.assertEqual( set_highlight.call_count, 2 )
+                
+            
+        
+        ( status, body ) = api_call( 'GET', '/manage_media_viewers/get_highlight', self.counters_only )
+        
+        self.assertEqual( status, 403 )
+        
+        ( status, body ) = api_call( 'POST', '/manage_media_viewers/set_highlight', self.counters_only, { 'highlight_last_opened' : True } )
+        
+        self.assertEqual( status, 403 )
+        
         # slideshows
         
         from hydrus.client.gui import ClientGUIMediaViewerSlideshows
@@ -1351,6 +1396,12 @@ class TestClientAPIForkCommandLine( unittest.TestCase ):
         self.assertEqual( self._GetRequest( [ 'counters', 'set', 'tally', '5', '12' ] ), hydrus_cli.APIRequest( 'POST', '/manage_counters/set_count', { 'counter_name' : 'tally', 'count' : 5, 'file_ids' : [ 12 ] } ) )
         self.assertEqual( self._GetRequest( [ 'counters', 'inc', hash_hex, '12', '--by', '-2' ] ), hydrus_cli.APIRequest( 'POST', '/manage_counters/increment_count', { 'counter_id' : hash_hex, 'delta' : -2, 'file_ids' : [ 12 ] } ) )
         self.assertEqual( self._GetRequest( [ 'playlists', 'play', '3' ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/open_playlist', { 'playlist_id' : 3 } ) )
+        
+        # highlighting the media viewer opened last
+        self.assertEqual( self._GetRequest( [ 'viewers', 'highlight' ] ), hydrus_cli.APIRequest( 'GET', '/manage_media_viewers/get_highlight' ) )
+        self.assertEqual( self._GetRequest( [ 'viewers', 'highlight', 'on' ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/set_highlight', { 'highlight_last_opened' : True } ) )
+        self.assertEqual( self._GetRequest( [ 'viewers', 'highlight', 'off', '--colour', '#00FF00' ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/set_highlight', { 'highlight_last_opened' : False, 'colour' : '#00FF00' } ) )
+        self.assertEqual( self._GetRequest( [ 'viewers', 'highlight', '--colour', '#00FF00' ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/set_highlight', { 'colour' : '#00FF00' } ) )
         
         # a-b repeat
         self.assertEqual( self._GetRequest( [ 'viewers', 'ab-repeat' ] ), hydrus_cli.APIRequest( 'GET', '/manage_media_viewers/get_ab_repeat' ) )

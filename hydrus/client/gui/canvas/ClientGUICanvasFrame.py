@@ -5,6 +5,7 @@ from hydrus.core import HydrusConstants as HC
 from hydrus.client import ClientApplicationCommand as CAC
 from hydrus.client import ClientConstants as CC
 from hydrus.client import ClientGlobals as CG
+from hydrus.client.gui import ClientGUIMediaViewerHighlight
 from hydrus.client.gui import ClientGUIShortcuts
 from hydrus.client.gui import ClientGUITopLevelWindows
 from hydrus.client.gui import QtPorting as QP
@@ -155,6 +156,9 @@ class CanvasFrame( CAC.ApplicationCommandProcessorMixin, ClientGUITopLevelWindow
                 self.hide()
                 
                 self._we_are_hidden_and_cleaning_up_before_destroy = True
+                
+                # we do not count as open any more, so the highlight may go back to another
+                ClientGUIMediaViewerHighlight.NotifyMediaViewersChanged()
                 
                 event.ignore()
                 
@@ -324,6 +328,9 @@ class CanvasFrame( CAC.ApplicationCommandProcessorMixin, ClientGUITopLevelWindow
         
         # just to reinforce, as Qt sometimes sets none focus for this window until it goes off and back on
         self._canvas_window.setFocus( QC.Qt.FocusReason.OtherFocusReason )
+        
+        # this is the media viewer that was opened last now, so it may take the highlight from another
+        ClientGUIMediaViewerHighlight.NotifyMediaViewersChanged()
         
     
     def TakeFocusForUser( self ):

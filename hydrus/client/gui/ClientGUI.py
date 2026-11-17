@@ -8385,7 +8385,17 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
     
     def MaintainCanvasFrameReferences( self ):
         
+        num_canvas_frames = len( self._canvas_frames )
+        
         self._canvas_frames = [ frame for frame in self._canvas_frames if QP.isValid( frame ) ]
+        
+        if len( self._canvas_frames ) != num_canvas_frames:
+            
+            # a media viewer has gone, so the one that was opened last may be a different one
+            from hydrus.client.gui import ClientGUIMediaViewerHighlight
+            
+            ClientGUIMediaViewerHighlight.NotifyMediaViewersChanged()
+            
         
     
     def MaintainMemory( self ):
