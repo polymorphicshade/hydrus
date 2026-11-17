@@ -1682,6 +1682,10 @@ class Controller( HydrusController.HydrusController ):
             shortcut_sets = CG.client_controller.Read( 'serialisable_named', HydrusSerialisable.SERIALISABLE_TYPE_SHORTCUT_SET )
             
             from hydrus.client.gui import ClientGUIShortcuts
+            from hydrus.client.gui import ClientGUIMediaViewerText
+            
+            # an existing client gets the new ctrl+f10 shortcut to hide the media viewer's text, once
+            ClientGUIMediaViewerText.AddDefaultFlipTextShortcutOnce( shortcut_sets )
             
             # initialises singleton
             ClientGUIShortcuts.ShortcutsManager( shortcut_sets = shortcut_sets )

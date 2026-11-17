@@ -86,6 +86,7 @@ from hydrus.test import TestClientMediaViewerHighlight
 from hydrus.test import TestClientMediaViewerMute
 from hydrus.test import TestClientMediaViewerSync
 from hydrus.test import TestClientMirror
+from hydrus.test import TestClientMediaViewerText
 from hydrus.test import TestClientMetadataConditional
 from hydrus.test import TestClientMetadataMigration
 from hydrus.test import TestClientMigration
@@ -989,6 +990,7 @@ class Controller( object ):
             TestClientMediaViewerMute,
             TestClientMediaViewerSync,
             TestClientMirror,
+            TestClientMediaViewerText,
             TestClientPlaylistBlanks,
             TestClientPlaylistItems,
             TestClientPlaylistLooping,

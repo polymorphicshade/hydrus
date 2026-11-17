@@ -133,6 +133,11 @@ python hydrus_cli.py viewers highlight
 python hydrus_cli.py viewers sync
 python hydrus_cli.py viewers sync --viewer <canvas_key> --viewer <canvas_key>
 
+# hide the tags, notes, and file info media viewers show, like ctrl+f10
+python hydrus_cli.py viewers text hidden
+python hydrus_cli.py viewers text shown --viewer <canvas_key>
+python hydrus_cli.py viewers text
+
 # slideshows. 0 seconds plays each file once through, without looping, and moves on when it is done
 python hydrus_cli.py viewers slideshows
 python hydrus_cli.py viewers slideshow start 0

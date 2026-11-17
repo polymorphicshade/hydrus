@@ -444,6 +444,9 @@ class CanvasHoverFrame( QW.QFrame ):
     mediaCleared = QC.Signal()
     mediaChanged = QC.Signal( ClientMediaSingle.MediaSingle )
     
+    # the tags, notes, and file info go when the media viewer hides its text. the top hover's buttons stay
+    HIDES_WITH_MEDIA_VIEWER_TEXT = False
+    
     def __init__( self, parent: QW.QWidget, my_canvas, canvas_key ):
         
         # TODO: Clean up old references to window stuff, decide on lower/hide/show/raise options
@@ -612,6 +615,15 @@ class CanvasHoverFrame( QW.QFrame ):
             
             return
             
+        
+        # the media viewer can hide its text, for something more immersive
+        if self.HIDES_WITH_MEDIA_VIEWER_TEXT and self._my_canvas.IsHidingText():
+            
+            self._LowerHover()
+            
+            return
+            
+        
         
         if not self._position_initialised_since_last_media:
             
@@ -1851,6 +1863,8 @@ class InboxIconClickFilter( QC.QObject ):
 
 class CanvasHoverFrameTopRight( CanvasHoverFrame ):
     
+    HIDES_WITH_MEDIA_VIEWER_TEXT = True
+    
     def __init__( self, parent, my_canvas, top_hover: CanvasHoverFrameTop, canvas_key ):
         
         super().__init__( parent, my_canvas, canvas_key )
@@ -2354,6 +2368,8 @@ class NotePanel( QW.QWidget ):
         
     
 class CanvasHoverFrameRightNotes( CanvasHoverFrame ):
+    
+    HIDES_WITH_MEDIA_VIEWER_TEXT = True
     
     def __init__( self, parent, my_canvas, top_right_hover: CanvasHoverFrameTopRight, canvas_key ):
         
@@ -3116,6 +3132,8 @@ class CanvasHoverFrameRightDuplicates( CanvasHoverFrame ):
         
     
 class CanvasHoverFrameTags( CanvasHoverFrame ):
+    
+    HIDES_WITH_MEDIA_VIEWER_TEXT = True
     
     def __init__( self, parent, my_canvas, top_hover: CanvasHoverFrameTop, canvas_key, location_context: ClientLocation.LocationContext ):
         

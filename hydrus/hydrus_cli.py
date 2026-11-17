@@ -889,6 +889,22 @@ def BuildRequest( args ) -> APIRequest:
             
             return APIRequest( 'POST', '/manage_media_viewers/sync_playback', params )
             
+        elif sub == 'text':
+            
+            if args.state is None:
+                
+                return APIRequest( 'GET', '/manage_media_viewers/get_text_hidden' )
+                
+            
+            params = { 'text_hidden' : args.state == 'hidden' }
+            
+            if args.viewer is not None:
+                
+                params[ 'canvas_key' ] = args.viewer.lower()
+                
+            
+            return APIRequest( 'POST', '/manage_media_viewers/set_text_hidden', params )
+            
         elif sub == 'slideshows':
             
             return APIRequest( 'GET', '/manage_media_viewers/get_slideshows' )
@@ -1203,6 +1219,9 @@ def GetArgumentParser() -> argparse.ArgumentParser:
     p.add_argument( '--colour', help = 'its background colour, like #FF00FF' )
     p = viewers.add_parser( 'sync', help = 'take media viewers back to the start of what they are playing, and play them from there together, at exactly the same time' )
     p.add_argument( '--viewer', metavar = 'CANVAS_KEY', action = 'append', default = [], help = 'a media viewer, by its canvas_key from "viewers list". use it more than once for more. Default is all that are open' )
+    p = viewers.add_parser( 'text', help = 'hide or show the tags, notes, and file info media viewers show, like ctrl+f10. with neither, says which are hidden' )
+    p.add_argument( 'state', nargs = '?', choices = [ 'hidden', 'shown' ] )
+    p.add_argument( '--viewer', metavar = 'CANVAS_KEY', help = 'just this media viewer, by its canvas_key from "viewers list". Default is all that are open' )
     viewers.add_parser( 'screens', help = 'the screens, and which one each open media viewer is on' )
     p = viewers.add_parser( 'screen-zoom', help = 'zoom and pan the files in media viewers how they are on another screen, and keep them like that on the screen they are on' )
     p.add_argument( 'screen', help = 'the screen\'s name, from "viewers screens"' )

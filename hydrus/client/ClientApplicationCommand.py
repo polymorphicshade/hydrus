@@ -227,6 +227,7 @@ SIMPLE_MEDIA_SET_LOOP_POINT_B = 214
 SIMPLE_MEDIA_CLEAR_LOOP_POINTS = 215
 SIMPLE_NEW_QUICK_VIEW_PAGE = 216
 SIMPLE_MEDIA_FLIP_LOOP_PING_PONG = 217
+SIMPLE_MEDIA_VIEWER_FLIP_TEXT = 218
 
 REARRANGE_THUMBNAILS_TYPE_FIXED = 0
 REARRANGE_THUMBNAILS_TYPE_COMMAND = 1
@@ -473,6 +474,7 @@ simple_enum_to_str_lookup = {
     SIMPLE_MEDIA_SET_LOOP_POINT_B : 'a-b loop: mark point B (loop end) at current time',
     SIMPLE_MEDIA_CLEAR_LOOP_POINTS : 'a-b loop: clear points',
     SIMPLE_MEDIA_FLIP_LOOP_PING_PONG : 'a-b loop: flip ping-pong (backwards and forwards) on/off',
+    SIMPLE_MEDIA_VIEWER_FLIP_TEXT : 'media viewer: hide/show the text (tags, notes, and info) flip',
     SIMPLE_GLOBAL_PROFILE_MODE_FLIP : 'profile mode: flip on/off',
     SIMPLE_GLOBAL_FORCE_ANIMATION_SCANBAR_SHOW : 'force the animation scanbar to show: flip on/off',
     SIMPLE_OPEN_COMMAND_PALETTE : 'open the command palette',

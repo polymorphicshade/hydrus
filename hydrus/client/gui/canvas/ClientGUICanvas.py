@@ -437,6 +437,9 @@ class Canvas( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         
         self._background_colour_generator = CanvasBackgroundColourGenerator( self )
         
+        # the tags, notes, and file info can be hidden, for something more immersive
+        self._text_hidden = False
+        
         self._current_media_start_time_ms = HydrusTime.GetNowMS()
         
         self._new_options = CG.client_controller.new_options
@@ -998,6 +1001,29 @@ class Canvas( CAC.ApplicationCommandProcessorMixin, QW.QWidget ):
         
         ClientGUIMenus.AppendMenu( menu, sync_menu, 'sync playback with' )
         
+    
+    def IsHidingText( self ) -> bool:
+        
+        return self._text_hidden
+        
+    
+    def SetTextHidden( self, text_hidden: bool ):
+        
+        self._text_hidden = text_hidden
+        
+        self.update()
+        
+    
+    def FlipTextHidden( self ):
+        
+        self.SetTextHidden( not self._text_hidden )
+        
+    
+    def _AppendHideTextMenuItem( self, menu: QW.QMenu ):
+        
+        ClientGUIMenus.AppendMenuCheckItem( menu, 'hide text', 'Hide the tags, notes, and file info this media viewer shows, for something more immersive. Ctrl+F10 does this too, to start with.', self._text_hidden, self.FlipTextHidden )
+        
+    
     
     def HandleMouseMoveWithoutEvent( self, left_down: bool ):
         
@@ -3204,6 +3230,11 @@ class CanvasWithHovers( Canvas ):
             
             ClientGUIFunctions.DrawText( painter, x, y, text )
             
+        elif self._text_hidden:
+            
+            # for something more immersive
+            pass
+            
         else:
             
             new_options = CG.client_controller.new_options
@@ -4372,6 +4403,10 @@ class CanvasWithHovers( Canvas ):
                 
                 self._TryToCloseWindow()
                 
+            elif action == CAC.SIMPLE_MEDIA_VIEWER_FLIP_TEXT:
+                
+                self.FlipTextHidden()
+                
             elif action == CAC.SIMPLE_CLOSE_MEDIA_VIEWER_AND_FOCUS_TAB:
                 
                 self._TryToShowPageThatLaunchedUs()
@@ -4439,6 +4474,17 @@ class CanvasWithHovers( Canvas ):
     def UserOKToClose( self ):
         
         return True
+        
+    
+    def SetTextHidden( self, text_hidden: bool ):
+        
+        super().SetTextHidden( text_hidden )
+        
+        # the hovers go or come back straight away
+        for hover in self._hovers:
+            
+            hover.DoRegularHideShow()
+            
         
     
     def TIMERUIUpdate( self ):
@@ -6443,6 +6489,8 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
                 ClientGUIMenus.AppendMenuItem( menu, 'go fullscreen', 'Make this media viewer a fullscreen window without borders.', self.ProcessApplicationCommand, CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_SWITCH_BETWEEN_FULLSCREEN_BORDERLESS_AND_REGULAR_FRAMED_WINDOW ) )
                 
             
+            self._AppendHideTextMenuItem( menu )
+            
             screen_menu = ClientGUIMenus.GenerateMenu( menu )
             
             ClientGUIMenus.AppendMenuItem( screen_menu, 'save location' + HC.UNICODE_ELLIPSIS, 'Give where this media viewer is on your screens, and its size, a name, so you can snap back to it later.', ClientGUIScreenLocations.SaveScreenLocationForWindow, self, self.window() )
@@ -7970,6 +8018,8 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
             
             ClientGUIMenus.AppendMenuItem( menu, 'go fullscreen', 'Make this media viewer a fullscreen window without borders.', self.ProcessApplicationCommand, CAC.ApplicationCommand.STATICCreateSimpleCommand( CAC.SIMPLE_SWITCH_BETWEEN_FULLSCREEN_BORDERLESS_AND_REGULAR_FRAMED_WINDOW ) )
             
+        
+        self._AppendHideTextMenuItem( menu )
         
         CGC.core().PopupMenu( self, menu )
         

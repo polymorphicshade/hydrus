@@ -307,6 +307,8 @@ class HydrusServiceClientAPI( HydrusClientService ):
         manage_media_viewers.putChild( b'get_highlight', ClientLocalServerResourcesManageMediaViewers.HydrusResourceClientAPIRestrictedManageMediaViewersGetHighlight( self._service, self._client_requests_domain ) )
         manage_media_viewers.putChild( b'set_highlight', ClientLocalServerResourcesManageMediaViewers.HydrusResourceClientAPIRestrictedManageMediaViewersSetHighlight( self._service, self._client_requests_domain ) )
         manage_media_viewers.putChild( b'sync_playback', ClientLocalServerResourcesManageMediaViewers.HydrusResourceClientAPIRestrictedManageMediaViewersSyncPlayback( self._service, self._client_requests_domain ) )
+        manage_media_viewers.putChild( b'get_text_hidden', ClientLocalServerResourcesManageMediaViewers.HydrusResourceClientAPIRestrictedManageMediaViewersGetTextHidden( self._service, self._client_requests_domain ) )
+        manage_media_viewers.putChild( b'set_text_hidden', ClientLocalServerResourcesManageMediaViewers.HydrusResourceClientAPIRestrictedManageMediaViewersSetTextHidden( self._service, self._client_requests_domain ) )
         manage_media_viewers.putChild( b'get_screens', ClientLocalServerResourcesManageMediaViewers.HydrusResourceClientAPIRestrictedManageMediaViewersGetScreens( self._service, self._client_requests_domain ) )
         manage_media_viewers.putChild( b'apply_screen_zoom', ClientLocalServerResourcesManageMediaViewers.HydrusResourceClientAPIRestrictedManageMediaViewersApplyScreenZoom( self._service, self._client_requests_domain ) )
         

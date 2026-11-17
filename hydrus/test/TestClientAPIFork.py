@@ -1436,6 +1436,48 @@ class TestClientAPIFork( unittest.TestCase ):
         
         self.assertEqual( status, 403 )
         
+        # hiding the text
+        
+        from hydrus.client.gui import ClientGUIMediaViewerText
+        
+        text_hidden = [ { 'canvas_key' : canvas_key.hex(), 'text_hidden' : True } ]
+        
+        with mock.patch.object( ClientGUIMediaViewerText, 'GetOpenMediaViewersTextHidden', return_value = text_hidden ):
+            
+            ( status, body ) = api_call( 'GET', '/manage_media_viewers/get_text_hidden', self.pages_only )
+            
+        
+        self.assertEqual( status, 200 )
+        self.assertEqual( body, { 'media_viewers' : text_hidden } )
+        
+        with mock.patch.object( ClientGUIMediaViewerText, 'SetOpenMediaViewersTextHidden', return_value = 2 ) as set_text_hidden:
+            
+            ( status, body ) = api_call( 'POST', '/manage_media_viewers/set_text_hidden', self.pages_only, { 'text_hidden' : True } )
+            
+            self.assertEqual( status, 200 )
+            self.assertEqual( body, { 'num_media_viewers' : 2 } )
+            set_text_hidden.assert_called_once_with( True, canvas_key = None )
+            
+            ( status, body ) = api_call( 'POST', '/manage_media_viewers/set_text_hidden', self.pages_only, { 'text_hidden' : False, 'canvas_key' : canvas_key.hex() } )
+            
+            set_text_hidden.assert_called_with( False, canvas_key = canvas_key )
+            
+            ( status, body ) = api_call( 'POST', '/manage_media_viewers/set_text_hidden', self.pages_only, {} )
+            
+            self.assertEqual( status, 400 )
+            
+        
+        with mock.patch.object( ClientGUIMediaViewerText, 'SetOpenMediaViewersTextHidden', return_value = 0 ):
+            
+            ( status, body ) = api_call( 'POST', '/manage_media_viewers/set_text_hidden', self.pages_only, { 'text_hidden' : True, 'canvas_key' : canvas_key.hex() } )
+            
+        
+        self.assertEqual( status, 404 )
+        
+        ( status, body ) = api_call( 'POST', '/manage_media_viewers/set_text_hidden', self.counters_only, { 'text_hidden' : True } )
+        
+        self.assertEqual( status, 403 )
+        
         # slideshows
         
         from hydrus.client.gui import ClientGUIMediaViewerSlideshows
@@ -1670,6 +1712,11 @@ class TestClientAPIForkCommandLine( unittest.TestCase ):
             
             self._GetRequest( [ 'crops', 'add', '12' ] )
             
+        
+        # hiding the text
+        self.assertEqual( self._GetRequest( [ 'viewers', 'text' ] ), hydrus_cli.APIRequest( 'GET', '/manage_media_viewers/get_text_hidden' ) )
+        self.assertEqual( self._GetRequest( [ 'viewers', 'text', 'hidden' ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/set_text_hidden', { 'text_hidden' : True } ) )
+        self.assertEqual( self._GetRequest( [ 'viewers', 'text', 'shown', '--viewer', hash_hex.upper() ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/set_text_hidden', { 'text_hidden' : False, 'canvas_key' : hash_hex } ) )
         
         # a-b repeat
         self.assertEqual( self._GetRequest( [ 'viewers', 'ab-repeat' ] ), hydrus_cli.APIRequest( 'GET', '/manage_media_viewers/get_ab_repeat' ) )

@@ -227,6 +227,50 @@ class HydrusResourceClientAPIRestrictedManageMediaViewersSyncPlayback( HydrusRes
         
     
 
+class HydrusResourceClientAPIRestrictedManageMediaViewersGetTextHidden( HydrusResourceClientAPIRestrictedManageMediaViewers ):
+    
+    def _threadDoGETJob( self, request: HydrusServerRequest.HydrusRequest ):
+        
+        def do_it():
+            
+            from hydrus.client.gui import ClientGUIMediaViewerText
+            
+            return ClientGUIMediaViewerText.GetOpenMediaViewersTextHidden()
+            
+        
+        media_viewers = CG.client_controller.CallBlockingToQtTLW( do_it )
+        
+        return ClientLocalServerCore.GenerateJSONResponse( request, { 'media_viewers' : media_viewers } )
+        
+    
+
+class HydrusResourceClientAPIRestrictedManageMediaViewersSetTextHidden( HydrusResourceClientAPIRestrictedManageMediaViewers ):
+    
+    def _threadDoPOSTJob( self, request: HydrusServerRequest.HydrusRequest ):
+        
+        text_hidden = request.parsed_request_args.GetValue( 'text_hidden', bool )
+        
+        # with no canvas_key, it is every media viewer that is open
+        canvas_key = request.parsed_request_args.GetValueOrNone( 'canvas_key', bytes )
+        
+        def do_it():
+            
+            from hydrus.client.gui import ClientGUIMediaViewerText
+            
+            return ClientGUIMediaViewerText.SetOpenMediaViewersTextHidden( text_hidden, canvas_key = canvas_key )
+            
+        
+        num_media_viewers = CG.client_controller.CallBlockingToQtTLW( do_it )
+        
+        if canvas_key is not None and num_media_viewers == 0:
+            
+            raise HydrusExceptions.NotFoundException( f'Did not find a media viewer for "{canvas_key.hex()}"!' )
+            
+        
+        return ClientLocalServerCore.GenerateJSONResponse( request, { 'num_media_viewers' : num_media_viewers } )
+        
+    
+
 class HydrusResourceClientAPIRestrictedManageMediaViewersGetScreens( HydrusResourceClientAPIRestrictedManageMediaViewers ):
     
     def _threadDoGETJob( self, request: HydrusServerRequest.HydrusRequest ):
