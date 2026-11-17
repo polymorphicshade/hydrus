@@ -16,6 +16,13 @@ Any new features added should have an accompanying API access point (if applicab
    - image is added to a separate "crops" collection (like how snapshots work)
 6. Remove the ability to double-click to close a media viewer item (unless there's already a setting for that, in which case just let me know).
 7. In a playlist playback, right click menu somewhere called "save playlist AB" - this acts like the normal "save ab" right-click, but uses the current a..b playback from its playlist entry
+8. Add a hotkey shortcut (enabled by default) that toggles the visibility of the left/right text (tags, notes, etc) in a media view
+   - maybe use CTRL+F10 or something like that
+   - the idea is to make the content more immersive
+9. Make it so when there's an MPV crash, it recovers gracefully, and without having to restart the app.
+10. Change the Notes feature to be a markdown editor and renderer
+    - i.e. notes is a tabbed view: "edit" and "view" (view renders the markdown)
+11. Sometimes an audio playlist will loop even though I told it to just play each file only once. Fix this bug.
 
 # Future TODO
 (ignore this list for now)
