@@ -6954,6 +6954,9 @@ class CanvasMediaListBrowser( CanvasMediaListNavigable ):
 
 # players take a moment to land a seek, so after we send a playlist item to its start we give them this long before checking it got there
 PLAYLIST_SEEK_GRACE_PERIOD_S = 0.5
+
+# how often a playlist checks on the item it is playing. it has a timer of its own, so it keeps going when the client is hidden to the system tray
+PLAYLIST_TICK_MS = 10
 # a player that is still loading can drop a seek, so we try a few times
 PLAYLIST_SEEK_MAX_ATTEMPTS = 5
 
@@ -7013,8 +7016,18 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
         
         CG.client_controller.CallAfterQtSafe( self, self._ShowPlaylistItem, 0 )
         
-        CG.client_controller.gui.RegisterAnimationUpdateWindow( self )
+        # the playlist moves itself along on a timer of its own. the main window's animation timer stops when the client is hidden to the system tray, and drops a window for good if it has an error once
+        # either way, the playlist stopped checking on the item it was playing, and the player just looped it round and round
+        self._playlist_work_error_reported = False
         
+        self._playlist_timer = QC.QTimer( self )
+        
+        self._playlist_timer.setTimerType( QC.Qt.TimerType.PreciseTimer )
+        self._playlist_timer.timeout.connect( self.TIMERAnimationUpdate )
+        
+        self._playlist_timer.start( PLAYLIST_TICK_MS )
+        
+    
     
     def _AdvancePlaylist( self ):
         
@@ -8048,6 +8061,21 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
     
     def TIMERAnimationUpdate( self ):
         
-        self._DoPlaylistWork()
-        
+        try:
+            
+            self._DoPlaylistWork()
+            
+        except Exception as e:
+            
+            # we keep going, so the next item still comes. once is enough to say so
+            if not self._playlist_work_error_reported:
+                
+                self._playlist_work_error_reported = True
+                
+                HydrusData.ShowText( 'The playlist had a problem checking on what it is playing. It will keep going, but here is the error:' )
+                HydrusData.ShowException( e )
+                
+                
+                
+                
     

@@ -1,6 +1,10 @@
+import inspect
 import unittest
 
+from unittest import mock
+
 from hydrus.client.gui.canvas import ClientGUICanvas
+from hydrus.client.media import ClientMediaPlaylists
 from hydrus.client.media import ClientMediaPlaylists as P
 
 from hydrus.test import TestGlobals as TG
@@ -109,3 +113,69 @@ class TestPlaylistItemLooping( unittest.TestCase ):
             
         
     
+
+class TestPlaylistKeepsGoing( unittest.TestCase ):
+    
+    def test_a_bit_short_audio( self ):
+        
+        # the file says it is 3:30, but the player goes round at 3:24
+        self.assertTrue( ClientMediaPlaylists.PlaylistItemIsDone( None, 210000, 40, 204000, False, False ) )
+        
+        # a user seeking back from late in it to a few seconds in is not the end
+        self.assertFalse( ClientMediaPlaylists.PlaylistItemIsDone( None, 210000, 5000, 204000, False, False ) )
+        
+        # or from earlier on to the very start
+        self.assertFalse( ClientMediaPlaylists.PlaylistItemIsDone( None, 210000, 40, 150000, False, False ) )
+        
+        # a short file still gets a second's slack
+        self.assertTrue( ClientMediaPlaylists.PlaylistItemIsDone( None, 5000, 10, 4100, False, False ) )
+        
+        # a span to the end of the file goes round to the start of the file too. how far out the duration can be goes with the file, not the span
+        self.assertTrue( ClientMediaPlaylists.PlaylistItemIsDone( 210000, 210000, 40, 204000, False, False ) )
+        
+    
+    def test_errors_do_not_stop_it( self ):
+        
+        canvas = ClientGUICanvas.CanvasPlaylist.__new__( ClientGUICanvas.CanvasPlaylist )
+        
+        canvas._playlist_work_error_reported = False
+        
+        calls = []
+        
+        def do_playlist_work():
+            
+            calls.append( 'work' )
+            
+            if len( calls ) <= 2:
+                
+                raise Exception( 'player was busy' )
+                
+            
+        
+        with mock.patch.object( canvas, '_DoPlaylistWork', side_effect = do_playlist_work ), mock.patch.object( ClientGUICanvas.HydrusData, 'ShowText' ) as show_text, mock.patch.object( ClientGUICanvas.HydrusData, 'ShowException' ) as show_exception:
+            
+            for i in range( 4 ):
+                
+                canvas.TIMERAnimationUpdate()
+                
+            
+            # it kept going, and said so once
+            self.assertEqual( calls, [ 'work' ] * 4 )
+            
+            show_text.assert_called_once()
+            show_exception.assert_called_once()
+            
+        
+    
+    def test_own_timer( self ):
+        
+        # it does not wait on the main window's animation timer, which stops when the client is hidden to the system tray
+        source = inspect.getsource( ClientGUICanvas.CanvasPlaylist.__init__ )
+        
+        self.assertNotIn( 'RegisterAnimationUpdateWindow', source )
+        self.assertIn( '_playlist_timer', source )
+        
+        self.assertLessEqual( ClientGUICanvas.PLAYLIST_TICK_MS, 20 )
+        
+        
+        

@@ -13,6 +13,10 @@ from hydrus.core import HydrusTime
 # playback that jumps back more than this from near the end of an item has looped round to the start
 PLAYLIST_LOOP_DETECTION_MS = 1000
 
+# a file's duration can be a little out--a variable bitrate mp3's often is--so it can loop round a little before the end we think it has
+# playback that jumps from this close to the end of an item, as a proportion of how far into the file that is, back to the very start of the file has looped round too. a user seeking back to the start is from earlier than this
+PLAYLIST_LOOP_DETECTION_END_PROPORTION = 0.1
+
 # after we send a player to the start of an item, it counts as there if it is no more than a little before, or it has played on a bit from it
 PLAYLIST_SEEK_LANDED_BEFORE_MS = 250
 PLAYLIST_SEEK_LANDED_AFTER_MS = 1000
@@ -332,6 +336,18 @@ def PlaylistItemIsDone(
         if item_end_ms is not None and last_timestamp_ms >= item_end_ms - PLAYLIST_LOOP_DETECTION_MS:
             
             return True
+            
+        
+        # the duration we have can be a little long, so the player can go round before we think it is near the end. it goes back to the very start of the file
+        if item_end_ms is not None and current_timestamp_ms <= PLAYLIST_LOOP_DETECTION_MS:
+            
+            # how far out the duration can be goes with how long the file is
+            slack_ms = max( PLAYLIST_LOOP_DETECTION_MS, item_end_ms * PLAYLIST_LOOP_DETECTION_END_PROPORTION )
+            
+            if last_timestamp_ms >= item_end_ms - slack_ms:
+                
+                return True
+                
             
         
     
