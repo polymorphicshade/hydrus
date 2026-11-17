@@ -49,6 +49,34 @@ def SetOpenMediaViewersABRepeat( a_ms: int | None, b_ms: int | None, canvas_key:
     return len( canvas_windows )
     
 
+def SaveOpenMediaViewersPlaylistABLoops( canvas_key: bytes | None = None ) -> tuple[ int, list[ dict ] ]:
+    
+    # like a playlist's 'save playlist A-B', for one media viewer, or all of them with no canvas_key
+    # returns how many media viewers it looked at, and what was saved: the ones that are not playing a playlist item with playback are left out
+    canvas_windows = GetOpenMediaViewerCanvases()
+    
+    if canvas_key is not None:
+        
+        canvas_windows = [ canvas_window for canvas_window in canvas_windows if canvas_window.GetCanvasKey() == canvas_key ]
+        
+    
+    saved = []
+    
+    for canvas_window in canvas_windows:
+        
+        result = canvas_window.SavePlaylistABLoop()
+        
+        if result is not None:
+            
+            ( hash, ( a_ms, b_ms ) ) = result
+            
+            saved.append( { 'canvas_key' : canvas_window.GetCanvasKey().hex(), 'hash' : hash.hex(), 'a_ms' : a_ms, 'b_ms' : b_ms } )
+            
+        
+    
+    return ( len( canvas_windows ), saved )
+    
+
 def SetOpenMediaViewersABRepeatPingPong( ping_pong: bool, canvas_key: bytes | None = None ) -> int:
     
     # turns ping-pong on or off for one media viewer, or all of them with no canvas_key. returns how many it was set for

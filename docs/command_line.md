@@ -121,6 +121,7 @@ python hydrus_cli.py viewers open-layout @viewers.json
 python hydrus_cli.py viewers ab-repeat
 python hydrus_cli.py viewers set-ab-repeat --a-ms 5250 --b-ms 12000 --viewer <canvas_key>
 python hydrus_cli.py viewers set-ab-repeat
+python hydrus_cli.py viewers save-playlist-ab
 python hydrus_cli.py viewers ping-pong on
 python hydrus_cli.py viewers ping-pong off --viewer <canvas_key>
 

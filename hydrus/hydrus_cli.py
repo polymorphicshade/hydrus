@@ -835,6 +835,17 @@ def BuildRequest( args ) -> APIRequest:
             
             return APIRequest( 'POST', '/manage_media_viewers/set_ab_repeat', params )
             
+        elif sub == 'save-playlist-ab':
+            
+            params = {}
+            
+            if args.viewer is not None:
+                
+                params[ 'canvas_key' ] = args.viewer.lower()
+                
+            
+            return APIRequest( 'POST', '/manage_media_viewers/save_playlist_ab_loop', params )
+            
         elif sub == 'ping-pong':
             
             params = { 'ping_pong' : args.state == 'on' }
@@ -1181,6 +1192,8 @@ def GetArgumentParser() -> argparse.ArgumentParser:
     p = viewers.add_parser( 'set-ab-repeat', help = 'put the A-B repeat points on, like a saved A-B loop. with neither, they are cleared' )
     p.add_argument( '--a-ms', type = int, help = 'where the loop starts. default is the start of the file' )
     p.add_argument( '--b-ms', type = int, help = 'where the loop ends. without it, it is not looping' )
+    p.add_argument( '--viewer', metavar = 'CANVAS_KEY', help = 'just this media viewer, by its canvas_key from "viewers list". Default is all that are open' )
+    p = viewers.add_parser( 'save-playlist-ab', help = 'save the part of the file the playing playlist item plays as an A-B loop on the file, like a playlist\'s A-B->save playlist A-B' )
     p.add_argument( '--viewer', metavar = 'CANVAS_KEY', help = 'just this media viewer, by its canvas_key from "viewers list". Default is all that are open' )
     p = viewers.add_parser( 'ping-pong', help = 'make A-B repeat play backwards and forwards, rather than jumping from B back to A' )
     p.add_argument( 'state', choices = [ 'on', 'off' ] )

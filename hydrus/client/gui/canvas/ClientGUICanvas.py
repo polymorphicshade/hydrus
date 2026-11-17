@@ -2800,6 +2800,15 @@ class CanvasWithHovers( Canvas ):
         
         ClientGUIMenus.AppendMenuItem( ab_loops_menu, 'save current A-B', 'Save the A-B repeat points as they are now on this file, so you can put them back on with a click later.', self._SaveCurrentABLoop )
         
+        # in a playlist, the part of the file this playlist item plays
+        playlist_ab_loop = self.GetPlaylistABLoop()
+        
+        if playlist_ab_loop is not None:
+            
+            ClientGUIMenus.AppendMenuItem( ab_loops_menu, f'save playlist A-B ({ClientGUICanvasMedia.ConvertABLoopToPrettyString( playlist_ab_loop )})', 'Save the part of this file that this playlist item plays as an A-B loop on the file, like \'save current A-B\', so you can put it back on with a click later.', self.SavePlaylistABLoop )
+            
+        
+        
         if len( ab_loops ) > 0:
             
             ClientGUIMenus.AppendSeparator( ab_loops_menu )
@@ -2850,6 +2859,31 @@ class CanvasWithHovers( Canvas ):
         
         # the menu reads them from the db each time, so there is nothing to tell
         CG.client_controller.Write( 'file_ab_loops', hash, ab_loops )
+        
+    
+    def GetPlaylistABLoop( self ) -> ClientMediaABLoops.ABLoop | None:
+        
+        # the part of the file the playlist item plays now. only a playlist has one
+        return None
+        
+    
+    def SavePlaylistABLoop( self ) -> tuple[ bytes, ClientMediaABLoops.ABLoop ] | None:
+        
+        # like 'save current A-B', but from the playlist item. returns the file and the loop that was saved, or None if there is nothing to save
+        playlist_ab_loop = self.GetPlaylistABLoop()
+        
+        if self._current_media is None or playlist_ab_loop is None:
+            
+            return None
+            
+        
+        hash = self._current_media.GetHash()
+        
+        ab_loops = CG.client_controller.Read( 'file_ab_loops', hash )
+        
+        self._SaveABLoops( hash, ClientMediaABLoops.AddABLoop( ab_loops, playlist_ab_loop ) )
+        
+        return ( hash, playlist_ab_loop )
         
     
     def _SaveCurrentABLoop( self ):
@@ -7589,6 +7623,24 @@ class CanvasPlaylist( CanvasMediaListBrowser ):
             
             CG.client_controller.pub( 'canvas_new_index_string', self._canvas_key, self._GetIndexString() )
             
+        
+    
+    def GetPlaylistABLoop( self ) -> ClientMediaABLoops.ABLoop | None:
+        
+        if self._current_media is None or len( self._playlist_items ) == 0:
+            
+            return None
+            
+        
+        ( media, start_ms, end_ms, reverse ) = self._playlist_items[ self._playlist_index ]
+        
+        # a blank, or the media viewer has moved off it
+        if media is None or media.GetHash() != self._current_media.GetHash():
+            
+            return None
+            
+        
+        return ClientMediaABLoops.ConvertPlaylistSpanToABLoop( start_ms, end_ms, media.GetDurationMS() )
         
     
     def _RemovePlaylistItemsForMedias( self, medias: collections.abc.Collection[ ClientMediaSingle.MediaSingle ] ):

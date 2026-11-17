@@ -6,7 +6,7 @@ title: This Fork's Client API
 
 These endpoints are for the features this fork adds: counters, playlists, virtual paths, snapshots, what the media viewer remembers for each file, tag presets, screen locations, media viewer layouts, and exporting video, audio, and playlists. They work just like hydrus's own [Client API](developer_api.md): the same access keys and session keys, json in and out, and the same errors. The [command line tool](command_line.md) can use all of them.
 
-`/api_version` has a `fork_api_version`, which goes up when these change. It is `10` now.
+`/api_version` has a `fork_api_version`, which goes up when these change. It is `11` now.
 
 ## permissions
 
@@ -443,6 +443,14 @@ The A-B repeat of each media viewer that is open now. `canvas_key` is the same o
 ### **POST `/manage_media_viewers/set_ab_repeat`**
 
 Arguments: `a_ms` and `b_ms` (both optional), and `canvas_key` (optional, default every media viewer that is open). Like the A and B buttons, or clicking a saved A-B loop: with a `b_ms`, the media viewer loops from `a_ms` (or the start, with none) to `b_ms`, and playback goes to the start of the loop so it plays straight away. `b_ms` has to be at least 100ms after that. With just an `a_ms`, it is marked and not looping yet, and with neither, the points are cleared. Media viewers showing a file with no playback leave it alone. Returns `num_media_viewers`, how many it was set for. A canvas_key for a media viewer that is not open gives a 404.
+
+### **POST `/manage_media_viewers/save_playlist_ab_loop`**
+
+Arguments: `canvas_key` (optional, default every media viewer that is open). Like a playlist's _A-B->save playlist A-B_: a media viewer playing a playlist saves the part of the file that the playlist item playing now plays, from its start (or the start of the file) to its end (or the end of the file), as an A-B loop on the file, like `/manage_file_viewer_data/set_ab_loops` would add. Media viewers that are not playing a playlist item with playback are left alone. Returns `saved`, what each media viewer saved. A canvas_key for a media viewer that is not open gives a 404.
+
+```json
+{ "saved" : [ { "canvas_key" : "a1b2...", "hash" : "6c37...", "a_ms" : 5250, "b_ms" : 12000 } ] }
+```
 
 ### **POST `/manage_media_viewers/set_ab_repeat_ping_pong`**
 

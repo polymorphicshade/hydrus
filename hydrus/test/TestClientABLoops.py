@@ -274,5 +274,159 @@ class TestOpenMediaViewersABRepeat( unittest.TestCase ):
             
             self.assertEqual( ClientGUIMediaViewerABRepeat.SetOpenMediaViewersABRepeat( 0, 1000, canvas_key = b'\x03' * 32 ), 0 )
             
+        
+    
+
+class TestPlaylistABLoops( unittest.TestCase ):
+    
+    def test_span( self ):
+        
+        self.assertEqual( ClientMediaABLoops.ConvertPlaylistSpanToABLoop( 5250, 12000, 60000 ), ( 5250, 12000 ) )
+        
+        # no start is from the start, and no end is to the end
+        self.assertEqual( ClientMediaABLoops.ConvertPlaylistSpanToABLoop( None, 12000, 60000 ), ( 0, 12000 ) )
+        self.assertEqual( ClientMediaABLoops.ConvertPlaylistSpanToABLoop( 5250, None, 60000 ), ( 5250, 60000 ) )
+        self.assertEqual( ClientMediaABLoops.ConvertPlaylistSpanToABLoop( None, None, 60000 ), ( 0, 60000 ) )
+        
+        # no end and no duration, or too short
+        self.assertIsNone( ClientMediaABLoops.ConvertPlaylistSpanToABLoop( 5250, None, None ) )
+        self.assertIsNone( ClientMediaABLoops.ConvertPlaylistSpanToABLoop( 1000, 1050, 60000 ) )
+        
+    
+    def _GetPlaylistCanvas( self, playlist_items, playlist_index ):
+        
+        canvas = ClientGUICanvas.CanvasPlaylist.__new__( ClientGUICanvas.CanvasPlaylist )
+        
+        canvas._playlist_items = playlist_items
+        canvas._playlist_index = playlist_index
+        
+        canvas._media_container = mock.Mock()
+        canvas._media_container.GetABLoop.return_value = ( None, None )
+        
+        return canvas
+        
+    
+    def _GetMedia( self, hash, duration_ms = 60000 ):
+        
+        media = mock.Mock()
+        
+        media.GetHash.return_value = hash
+        media.GetDurationMS.return_value = duration_ms
+        
+        return media
+        
+    
+    def test_playlist_item( self ):
+        
+        media = self._GetMedia( HASH )
+        other_media = self._GetMedia( OTHER_HASH )
+        
+        playlist_items = [ ( media, 5250, 12000, False ), ( None, None, 3000, False ), ( media, None, None, True ), ( other_media, 1000, 1050, False ) ]
+        
+        canvas = self._GetPlaylistCanvas( playlist_items, 0 )
+        
+        canvas._current_media = media
+        
+        self.assertEqual( canvas.GetPlaylistABLoop(), ( 5250, 12000 ) )
+        
+        # the whole file, and backwards is the same part
+        canvas._playlist_index = 2
+        
+        self.assertEqual( canvas.GetPlaylistABLoop(), ( 0, 60000 ) )
+        
+        # a blank
+        canvas._playlist_index = 1
+        canvas._current_media = None
+        
+        self.assertIsNone( canvas.GetPlaylistABLoop() )
+        
+        # too short
+        canvas._playlist_index = 3
+        canvas._current_media = other_media
+        
+        self.assertIsNone( canvas.GetPlaylistABLoop() )
+        
+        # the media viewer is on another file
+        canvas._playlist_index = 0
+        
+        self.assertIsNone( canvas.GetPlaylistABLoop() )
+        
+        # only a playlist has one
+        browser = ClientGUICanvas.CanvasMediaListBrowser.__new__( ClientGUICanvas.CanvasMediaListBrowser )
+        
+        browser._current_media = media
+        
+        self.assertIsNone( browser.GetPlaylistABLoop() )
+        self.assertIsNone( browser.SavePlaylistABLoop() )
+        
+    
+    def test_save( self ):
+        
+        media = self._GetMedia( HASH )
+        
+        canvas = self._GetPlaylistCanvas( [ ( media, 5250, 12000, False ) ], 0 )
+        
+        canvas._current_media = media
+        
+        with mock.patch.object( CG.client_controller, 'Read', return_value = [ ( 9000, 15000 ) ] ) as read, mock.patch.object( CG.client_controller, 'Write' ) as write:
             
+            self.assertEqual( canvas.SavePlaylistABLoop(), ( HASH, ( 5250, 12000 ) ) )
             
+            read.assert_called_once_with( 'file_ab_loops', HASH )
+            
+            # like 'save current A-B', in order, with what the file had
+            write.assert_called_once_with( 'file_ab_loops', HASH, [ ( 5250, 12000 ), ( 9000, 15000 ) ] )
+            
+        
+    
+    def test_menu( self ):
+        
+        media = self._GetMedia( HASH )
+        
+        canvas = self._GetPlaylistCanvas( [ ( media, 5250, 12000, False ) ], 0 )
+        
+        canvas._current_media = media
+        
+        items = []
+        
+        def append_menu_item( menu, label, description, callable, *args, **kwargs ):
+            
+            items.append( ( label, callable, args ) )
+            
+        
+        menus = ClientGUICanvas.ClientGUIMenus
+        
+        with mock.patch.object( CG.client_controller, 'Read', return_value = [] ), mock.patch.object( menus, 'AppendMenuItem', side_effect = append_menu_item ), mock.patch.object( menus, 'GenerateMenu' ), mock.patch.object( menus, 'AppendMenu' ):
+            
+            canvas._AppendABLoopsMenu( mock.Mock() )
+            
+        
+        self.assertEqual( [ label for ( label, callable, args ) in items ], [ 'save current A-B', 'save playlist A-B (0:05.250 - 0:12.000)' ] )
+        self.assertEqual( items[1][1:], ( canvas.SavePlaylistABLoop, () ) )
+        
+    
+    def test_open_media_viewers( self ):
+        
+        canvas_1 = mock.Mock()
+        canvas_2 = mock.Mock()
+        
+        canvas_1.GetCanvasKey.return_value = b'\x01' * 32
+        canvas_2.GetCanvasKey.return_value = b'\x02' * 32
+        
+        # the first is not playing a playlist
+        canvas_1.SavePlaylistABLoop.return_value = None
+        canvas_2.SavePlaylistABLoop.return_value = ( HASH, ( 5250, 12000 ) )
+        
+        with mock.patch.object( ClientGUIMediaViewerABRepeat, 'GetOpenMediaViewerCanvases', return_value = [ canvas_1, canvas_2 ] ):
+            
+            self.assertEqual( ClientGUIMediaViewerABRepeat.SaveOpenMediaViewersPlaylistABLoops(), ( 2, [ { 'canvas_key' : ( b'\x02' * 32 ).hex(), 'hash' : HASH.hex(), 'a_ms' : 5250, 'b_ms' : 12000 } ] ) )
+            
+            self.assertEqual( ClientGUIMediaViewerABRepeat.SaveOpenMediaViewersPlaylistABLoops( canvas_key = b'\x01' * 32 ), ( 1, [] ) )
+            
+            self.assertEqual( ClientGUIMediaViewerABRepeat.SaveOpenMediaViewersPlaylistABLoops( canvas_key = b'\x03' * 32 ), ( 0, [] ) )
+            
+        
+        self.assertEqual( canvas_1.SavePlaylistABLoop.call_count, 2 )
+        self.assertEqual( canvas_2.SavePlaylistABLoop.call_count, 1 )
+        
+        

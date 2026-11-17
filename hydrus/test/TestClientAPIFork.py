@@ -1286,6 +1286,33 @@ class TestClientAPIFork( unittest.TestCase ):
         
         self.assertEqual( status, 403 )
         
+        # saving a playlist item's part as an A-B loop
+        saved = [ { 'canvas_key' : canvas_key.hex(), 'hash' : ( b'\x01' * 32 ).hex(), 'a_ms' : 5250, 'b_ms' : 12000 } ]
+        
+        with mock.patch.object( ClientGUIMediaViewerABRepeat, 'SaveOpenMediaViewersPlaylistABLoops', return_value = ( 2, saved ) ) as save_playlist_ab_loops:
+            
+            ( status, body ) = api_call( 'POST', '/manage_media_viewers/save_playlist_ab_loop', self.pages_only, {} )
+            
+            self.assertEqual( status, 200 )
+            self.assertEqual( body, { 'saved' : saved } )
+            save_playlist_ab_loops.assert_called_once_with( canvas_key = None )
+            
+            ( status, body ) = api_call( 'POST', '/manage_media_viewers/save_playlist_ab_loop', self.pages_only, { 'canvas_key' : canvas_key.hex() } )
+            
+            save_playlist_ab_loops.assert_called_with( canvas_key = canvas_key )
+            
+        
+        with mock.patch.object( ClientGUIMediaViewerABRepeat, 'SaveOpenMediaViewersPlaylistABLoops', return_value = ( 0, [] ) ):
+            
+            ( status, body ) = api_call( 'POST', '/manage_media_viewers/save_playlist_ab_loop', self.pages_only, { 'canvas_key' : canvas_key.hex() } )
+            
+        
+        self.assertEqual( status, 404 )
+        
+        ( status, body ) = api_call( 'POST', '/manage_media_viewers/save_playlist_ab_loop', self.counters_only, {} )
+        
+        self.assertEqual( status, 403 )
+        
         with mock.patch.object( ClientGUIMediaViewerABRepeat, 'SetOpenMediaViewersABRepeatPingPong', return_value = 3 ) as set_ping_pong:
             
             ( status, body ) = api_call( 'POST', '/manage_media_viewers/set_ab_repeat_ping_pong', self.pages_only, { 'ping_pong' : True } )
@@ -1646,6 +1673,8 @@ class TestClientAPIForkCommandLine( unittest.TestCase ):
         
         # a-b repeat
         self.assertEqual( self._GetRequest( [ 'viewers', 'ab-repeat' ] ), hydrus_cli.APIRequest( 'GET', '/manage_media_viewers/get_ab_repeat' ) )
+        self.assertEqual( self._GetRequest( [ 'viewers', 'save-playlist-ab' ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/save_playlist_ab_loop', {} ) )
+        self.assertEqual( self._GetRequest( [ 'viewers', 'save-playlist-ab', '--viewer', hash_hex.upper() ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/save_playlist_ab_loop', { 'canvas_key' : hash_hex } ) )
         self.assertEqual( self._GetRequest( [ 'viewers', 'ping-pong', 'on' ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/set_ab_repeat_ping_pong', { 'ping_pong' : True } ) )
         self.assertEqual( self._GetRequest( [ 'viewers', 'set-ab-repeat', '--a-ms', '5250', '--b-ms', '12000' ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/set_ab_repeat', { 'a_ms' : 5250, 'b_ms' : 12000 } ) )
         self.assertEqual( self._GetRequest( [ 'viewers', 'set-ab-repeat', '--viewer', hash_hex.upper() ] ), hydrus_cli.APIRequest( 'POST', '/manage_media_viewers/set_ab_repeat', { 'a_ms' : None, 'b_ms' : None, 'canvas_key' : hash_hex } ) )

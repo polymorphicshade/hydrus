@@ -83,6 +83,31 @@ class HydrusResourceClientAPIRestrictedManageMediaViewersSetABRepeat( HydrusReso
         
     
 
+class HydrusResourceClientAPIRestrictedManageMediaViewersSavePlaylistABLoop( HydrusResourceClientAPIRestrictedManageMediaViewers ):
+    
+    def _threadDoPOSTJob( self, request: HydrusServerRequest.HydrusRequest ):
+        
+        # with no canvas_key, it is every media viewer that is open
+        canvas_key = request.parsed_request_args.GetValueOrNone( 'canvas_key', bytes )
+        
+        def do_it():
+            
+            from hydrus.client.gui import ClientGUIMediaViewerABRepeat
+            
+            return ClientGUIMediaViewerABRepeat.SaveOpenMediaViewersPlaylistABLoops( canvas_key = canvas_key )
+            
+        
+        ( num_media_viewers, saved ) = CG.client_controller.CallBlockingToQtTLW( do_it )
+        
+        if canvas_key is not None and num_media_viewers == 0:
+            
+            raise HydrusExceptions.NotFoundException( f'Did not find a media viewer for "{canvas_key.hex()}"!' )
+            
+        
+        return ClientLocalServerCore.GenerateJSONResponse( request, { 'saved' : saved } )
+        
+    
+
 class HydrusResourceClientAPIRestrictedManageMediaViewersSetABRepeatPingPong( HydrusResourceClientAPIRestrictedManageMediaViewers ):
     
     def _threadDoPOSTJob( self, request: HydrusServerRequest.HydrusRequest ):

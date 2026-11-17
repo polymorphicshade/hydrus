@@ -36,6 +36,27 @@ def ConvertABRepeatToABLoop( a_ms: int | None, b_ms: int | None ) -> ABLoop | No
     return ab_loop
     
 
+def ConvertPlaylistSpanToABLoop( start_ms: int | None, end_ms: int | None, duration_ms: int | None ) -> ABLoop | None:
+    
+    # a playlist item plays a part of a file, or all of it. this is that part as an A-B loop. None if it is not long enough, or we cannot tell where it ends
+    a_ms = 0 if start_ms is None else int( start_ms )
+    b_ms = end_ms if end_ms is not None else duration_ms
+    
+    if b_ms is None:
+        
+        return None
+        
+    
+    ab_loop = ( a_ms, int( b_ms ) )
+    
+    if not ABLoopIsValid( ab_loop ):
+        
+        return None
+        
+    
+    return ab_loop
+    
+
 def NormaliseABLoops( ab_loops: list[ ABLoop ] ) -> list[ ABLoop ]:
     
     # in order, and the same loop is only saved once
