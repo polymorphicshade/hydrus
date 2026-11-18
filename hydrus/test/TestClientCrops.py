@@ -183,6 +183,23 @@ class TestCrops( unittest.TestCase ):
             
         
     
+    def test_no_crops_domain_yet( self ):
+        
+        # with the real options, before the first crop is taken, there is no domain and no crops, rather than an error
+        from hydrus.client import ClientOptions
+        
+        new_options = ClientOptions.ClientOptions()
+        
+        self.assertEqual( new_options.GetKeyHex( ClientCrops.CROPS_SERVICE_KEY_OPTION ), '' )
+        
+        with mock.patch.object( CG.client_controller, 'new_options', new_options ):
+            
+            self.assertIsNone( ClientCrops.GetCropsServiceKey( create_if_missing = False ) )
+            self.assertIsNone( ClientCrops.GetCropsLocationContext() )
+            self.assertEqual( ClientCrops.GetCropHashes( HASH ), [] )
+            
+        
+    
     def test_importing( self ):
         
         with mock.patch.object( ClientCrops, 'GetCropsServiceKey', return_value = b'\x09' * 32 ), mock.patch.object( ClientSnapshots, 'ImportFileToOwnLocalFileDomain', return_value = CROP_HASH ) as import_file, mock.patch.object( CG.client_controller, 'WriteSynchronous' ) as write:

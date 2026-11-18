@@ -655,6 +655,7 @@ class ClientOptions( HydrusSerialisable.SerialisableBase ):
             'default_gug_key' : HydrusData.GenerateKey().hex(),
             'options_ratings_panel_template_service_key' : CC.PREVIEW_RATINGS_SERVICE_KEY.hex(),
             'snapshots_file_service_key' : '', # the local file domain the media viewer's snapshots go in. we make it the first time one is taken
+            'crops_file_service_key' : '', # the same for crops
         }
         
         self._dictionary[ 'key_list' ] = {}
